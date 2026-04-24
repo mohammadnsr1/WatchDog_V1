@@ -1,0 +1,35 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb2/inverted_u_brown.usd",
+            "source_hash": "sha-256-flat;1048576;140841197599d39041ae29e27e1c98e7edae0675b14f28d032cd58a598ade37b",
+            "target_url": "./inverted_u_brown.usd",
+            "target_hash": "sha-256-flat;1048576;e734a56aa412ae1b45a26dd94f2c700abccb942df722f2a322bb9d8014825788"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb2/base2.usd",
+            "source_hash": "sha-256-flat;1048576;52adbd480e2f5035dbd473217f9ee0e2dc24128889609059537c2ae66b94ef92",
+            "target_url": "./base2.usd",
+            "target_hash": "sha-256-flat;1048576;ed954d39c2014f11f670ac80530808a296d4f94a659975149d47dabea45e9725"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb2/hex_red.usd",
+            "source_hash": "sha-256-flat;1048576;340bc7221682adda834b86516c9de0b9eb92edf81688ee19778c6b16822cf95b",
+            "target_url": "./hex_red.usd",
+            "target_hash": "sha-256-flat;1048576;b953481b39044849ebc2e45f0c45d18d6e0731664f80ec5c680b5a996e6bd82e"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb2/u_green.usd",
+            "source_hash": "sha-256-flat;1048576;a248b62d7d9eb9779cb0e8d613d5b587856a286024115648c41364e38fc1c01d",
+            "target_url": "./u_green.usd",
+            "target_hash": "sha-256-flat;1048576;12100b1ed9af1bad5bf7a5cdbac6e5a7020f13fca3154e55df9beaf3814a896b"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb2/hex_blue.usd",
+            "source_hash": "sha-256-flat;1048576;1b270e2ffe15d064bebb5016a2e5dc06474537ea1c49148156e7af8216e12509",
+            "target_url": "./hex_blue.usd",
+            "target_hash": "sha-256-flat;1048576;02050d631799e08a6c7e08bdb3a2cd324c49c88854d0cbe0d2b181d422c414fd"
+        }
+    ]
+}

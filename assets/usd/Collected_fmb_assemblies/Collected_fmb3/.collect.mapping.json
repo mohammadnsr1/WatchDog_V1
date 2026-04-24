@@ -1,0 +1,59 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb3/fork_orange.usd",
+            "source_hash": "sha-256-flat;1048576;4938033c058e597752a9f44a0537215b7cc94f688ff90edda777ee62d17a2a75",
+            "target_url": "./fork_orange.usd",
+            "target_hash": "sha-256-flat;1048576;10b5d334dccac6c190aadc5e5195af68828efce2e03c26c86d246bd7fd88834e"
+        },
+        {
+            "source_url": "/home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_fork_orange/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "source_hash": "4bba5b26b1257c11d5c41a07d20311ce8c75b498",
+            "target_url": "./home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_fork_orange/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "target_hash": "sha-256-flat;1048576;42c1468c5dab6548311e4fdb1071bb2c28c2bf0259a5e44e3445787d2cb150c0"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb3/fork_yellow.usd",
+            "source_hash": "sha-256-flat;1048576;a120a7621356169986aad0dbd97a201c8ea80372a728193afd3bdabe53d31411",
+            "target_url": "./fork_yellow.usd",
+            "target_hash": "sha-256-flat;1048576;e25a4d0a4f3a6c90b74095efdf2c8f06c467030af8b44f74f41159a0a62dd6c5"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb3/base3.usd",
+            "source_hash": "sha-256-flat;1048576;c8d3995f43d2ec732be008dc5cf90b9824d574c8d41cdebe6c5c25cd3d988592",
+            "target_url": "./base3.usd",
+            "target_hash": "sha-256-flat;1048576;17195b5bfc5719705a1a5f3091670bc22a8693daeff1a8cfe6277d23af3c7a05"
+        },
+        {
+            "source_url": "/home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_base3/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "source_hash": "09c3242d9ec5bfd7846b84bff46aba3d958328d6",
+            "target_url": "./home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_base3/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "target_hash": "sha-256-flat;1048576;42c1468c5dab6548311e4fdb1071bb2c28c2bf0259a5e44e3445787d2cb150c0"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb3/line_brown.usd",
+            "source_hash": "sha-256-flat;1048576;86b448a1a11e3e5dd5804c486ace2a28d39335aed51cc52deaaa003dd56d02d9",
+            "target_url": "./line_brown.usd",
+            "target_hash": "sha-256-flat;1048576;1ba55ec5d72128a45ca3a761c6903e576a197e9ea70c3ebafb3594d5fc9d9767"
+        },
+        {
+            "source_url": "/home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_brown/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "source_hash": "13378061cad781f4efe18c4c2c12c09ee44dc73d",
+            "target_url": "./home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_brown/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "target_hash": "sha-256-flat;1048576;42c1468c5dab6548311e4fdb1071bb2c28c2bf0259a5e44e3445787d2cb150c0"
+        },
+        {
+            "source_url": "omniverse://localhost/Library/DT demo/fmb3/line_red.usd",
+            "source_hash": "sha-256-flat;1048576;3b9fc6a56abc20a26a77d34bdd028efea359fbf4893f039d85cf461f1de7e4b2",
+            "target_url": "./line_red.usd",
+            "target_hash": "sha-256-flat;1048576;517417eaff0506f54561cbc6adbaa4528ba7f371fb92e99099ff60c2c24d86e7"
+        },
+        {
+            "source_url": "/home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_red/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "source_hash": "4cd10df774bd7ab67033c370d302cc8e1dc63fc4",
+            "target_url": "./home/aaugus11/Projects/aruco-grasp-annotator/data/usd/Collected_line_red/NVIDIA/Materials/Base/Plastics/Plastic.mdl",
+            "target_hash": "sha-256-flat;1048576;42c1468c5dab6548311e4fdb1071bb2c28c2bf0259a5e44e3445787d2cb150c0"
+        }
+    ]
+}
