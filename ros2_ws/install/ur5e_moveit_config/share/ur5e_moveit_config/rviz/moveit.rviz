@@ -1,0 +1,128 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /MotionPlanning1
+      Splitter Ratio: 0.55
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.58
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 1
+      Color: 160; 160; 164
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Frame Timeout: 15
+      Show Arrows: true
+      Show Axes: false
+      Show Names: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+      Enabled: true
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Visual Enabled: true
+    - Class: moveit_rviz_plugin/MotionPlanning
+      Enabled: true
+      Name: MotionPlanning
+      Move Group Namespace: ""
+      MoveIt_Planning_Attempts: 10
+      MoveIt_Planning_Time: 5
+      MoveIt_Allow_Replanning: false
+      MoveIt_Use_Cartesian_Path: false
+      Planning Scene Topic: monitored_planning_scene
+      Robot Description: robot_description
+      Planning Request:
+        Planning Group: ur_manipulator
+        Query Goal State: true
+        Query Start State: false
+        Show Workspace: false
+      Planned Path:
+        Loop Animation: false
+        Robot Alpha: 0.5
+        Show Robot Collision: false
+        Show Robot Visual: true
+        Show Trail: false
+      Scene Geometry:
+        Show Scene Geometry: true
+      Scene Robot:
+        Show Robot Collision: false
+        Show Robot Visual: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Value: /clicked_point
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.2
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.4
+      Name: Current View
+      Pitch: 0.6
+      Target Frame: world
+      Yaw: 0.6
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd00000004000000000000020d0000032bfc0200000008fb000000100044006900730070006c006100790073010000000000000166000000d700fffffffb0000001200530065006c0065006300740069006f006e000000016c0000006a0000005b00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000001dc00000093000000a700fffffffb0000000a005600690065007700730100000273000000b8000000a700ffffff000000010000010f0000032bfc0200000001fb0000000a00480065006c00700000000000000000032b0000006100ffffff000000000000032b00000004000000040000000800000008fc00000000
+  Selection:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1600
+  X: 100
+  Y: 100
