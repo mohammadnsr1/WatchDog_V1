@@ -83,7 +83,7 @@
     <visual>
       <origin rpy="0 0 3.141592653589793" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="file:///home/mohammadnsr1/watchdog/WatchDog_V1/assets/ur_description/meshes/ur5e/visual/shoulder.dae"/>
+        <mesh filename="file:///home/mohammadnsr1/watchdog/WatchDog_V1/assets/ur_assets/ur_description/meshes/ur5e/visual/shoulder.dae"/>
       </geometry>
     </visual>
     <collision>
