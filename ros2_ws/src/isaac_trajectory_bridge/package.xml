@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>isaac_trajectory_bridge</name>
+  <version>0.1.0</version>
+  <description>ROS 2 FollowJointTrajectory bridge from MoveIt to Isaac Sim joint commands.</description>
+  <maintainer email="mohammadnsr1@example.com">mohammadnsr1</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>control_msgs</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>trajectory_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
