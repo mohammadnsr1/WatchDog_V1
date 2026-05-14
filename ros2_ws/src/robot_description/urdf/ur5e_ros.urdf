@@ -480,14 +480,8 @@
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
 
-  <joint name="onrobot_rg2_base_to_bracket_joint" type="fixed">
+  <joint name="onrobot_rg2_base_to_body_joint" type="fixed">
     <parent link="onrobot_rg2_base_link"/>
-    <child link="onrobot_rg2_bracket_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_bracket_to_body_joint" type="fixed">
-    <parent link="onrobot_rg2_bracket_link"/>
     <child link="onrobot_rg2_body_link"/>
     <origin xyz="0 0 0.05" rpy="0 0 0"/>
   </joint>

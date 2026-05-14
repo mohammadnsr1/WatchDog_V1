@@ -6,10 +6,9 @@ Panels:
       Expanded:
         - /Global Options1
         - /TF1
-        - /RobotModel1
         - /MotionPlanning1
       Splitter Ratio: 0.550000011920929
-    Tree Height: 334
+    Tree Height: 276
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -55,6 +54,32 @@ Visualization Manager:
           Value: true
         forearm_link:
           Value: true
+        onrobot_rg2_base_link:
+          Value: true
+        onrobot_rg2_body_link:
+          Value: true
+        onrobot_rg2_finger_1_finger_tip_link:
+          Value: true
+        onrobot_rg2_finger_1_flex_finger_link:
+          Value: true
+        onrobot_rg2_finger_1_moment_arm_link:
+          Value: true
+        onrobot_rg2_finger_1_origin:
+          Value: true
+        onrobot_rg2_finger_1_truss_arm_link:
+          Value: true
+        onrobot_rg2_finger_2_finger_tip_link:
+          Value: true
+        onrobot_rg2_finger_2_flex_finger_link:
+          Value: true
+        onrobot_rg2_finger_2_moment_arm_link:
+          Value: true
+        onrobot_rg2_finger_2_origin:
+          Value: true
+        onrobot_rg2_finger_2_truss_arm_link:
+          Value: true
+        onrobot_rg2_grasp_frame:
+          Value: true
         shoulder_link:
           Value: true
         tcp:
@@ -83,6 +108,24 @@ Visualization Manager:
                   wrist_1_link:
                     wrist_2_link:
                       wrist_3_link:
+                        onrobot_rg2_base_link:
+                          onrobot_rg2_body_link:
+                            onrobot_rg2_finger_1_origin:
+                              onrobot_rg2_finger_1_moment_arm_link:
+                                {}
+                              onrobot_rg2_finger_1_truss_arm_link:
+                                onrobot_rg2_finger_1_finger_tip_link:
+                                  onrobot_rg2_finger_1_flex_finger_link:
+                                    {}
+                            onrobot_rg2_finger_2_origin:
+                              onrobot_rg2_finger_2_moment_arm_link:
+                                {}
+                              onrobot_rg2_finger_2_truss_arm_link:
+                                onrobot_rg2_finger_2_finger_tip_link:
+                                  onrobot_rg2_finger_2_flex_finger_link:
+                                    {}
+                            onrobot_rg2_grasp_frame:
+                              {}
                         tcp:
                           {}
       Update Interval: 0
@@ -115,6 +158,68 @@ Visualization Manager:
           Show Axes: false
           Show Trail: false
           Value: true
+        onrobot_rg2_base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_body_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_1_finger_tip_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_1_flex_finger_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_1_moment_arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_1_origin:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        onrobot_rg2_finger_1_truss_arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_2_finger_tip_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_2_flex_finger_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_2_moment_arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_finger_2_origin:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        onrobot_rg2_finger_2_truss_arm_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        onrobot_rg2_grasp_frame:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
         shoulder_link:
           Alpha: 1
           Show Axes: false
@@ -197,6 +302,68 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          onrobot_rg2_base_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_finger_tip_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_flex_finger_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_moment_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_origin:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          onrobot_rg2_finger_1_truss_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_finger_tip_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_flex_finger_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_moment_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_origin:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          onrobot_rg2_finger_2_truss_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_grasp_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           shoulder_link:
             Alpha: 1
             Show Axes: false
@@ -286,6 +453,68 @@ Visualization Manager:
             Show Axes: false
             Show Trail: false
             Value: true
+          onrobot_rg2_base_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_body_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_finger_tip_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_flex_finger_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_moment_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_1_origin:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          onrobot_rg2_finger_1_truss_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_finger_tip_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_flex_finger_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_moment_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_finger_2_origin:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+          onrobot_rg2_finger_2_truss_arm_link:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
+            Value: true
+          onrobot_rg2_grasp_frame:
+            Alpha: 1
+            Show Axes: false
+            Show Trail: false
           shoulder_link:
             Alpha: 1
             Show Axes: false
@@ -370,16 +599,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.6487085819244385
+      Distance: 3.8771519660949707
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.2650829553604126
-        Y: 0.37006545066833496
-        Z: -0.225221648812294
+        X: 0
+        Y: 0
+        Z: 0.4000000059604645
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -393,20 +622,20 @@ Visualization Manager:
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 2262
+  Height: 1997
   Hide Left Dock: false
   Hide Right Dock: false
   MotionPlanning:
     collapsed: false
   MotionPlanning - Trajectory Slider:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd00000001000000000000046b00000836fc0200000006fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000007e00fffffffb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e0067010000007000000347000002ca00fffffffb000000100044006900730070006c00610079007301000003c3000001c00000018600fffffffb0000001200530065006c0065006300740069006f006e010000058f000000cc000000b200fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000667000000cd000000b200fffffffb0000000a005600690065007700730100000740000001660000013800ffffff00000a050000083600000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000001000000000000046b0000072dfc0200000006fb00000044004d006f00740069006f006e0050006c0061006e006e0069006e00670020002d0020005400720061006a006500630074006f0072007900200053006c00690064006500720000000000ffffffff0000007e00fffffffb0000001c004d006f00740069006f006e0050006c0061006e006e0069006e00670100000070000002db000002ca00fffffffb000000100044006900730070006c0061007900730100000357000001860000018600fffffffb0000001200530065006c0065006300740069006f006e01000004e9000000b2000000b200fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000005a7000000b2000000b200fffffffb0000000a005600690065007700730100000665000001380000013800ffffff000001c90000072d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Tool Properties:
     collapsed: false
   Views:
     collapsed: false
-  Width: 3708
+  Width: 1600
   X: 132
   Y: 64
