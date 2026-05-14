@@ -230,6 +230,8 @@
     </inertial>
   </link>
 
+
+
   <link name="onrobot_rg2_body_link">
     <visual>
       <geometry>

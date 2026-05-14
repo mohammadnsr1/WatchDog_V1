@@ -36,6 +36,8 @@ class FollowJointTrajectoryBridge(Node):
         self.declare_parameter("goal_tolerance", 0.03)
         self.declare_parameter("goal_time_tolerance_sec", 2.0)
         self.declare_parameter("require_joint_state_before_execute", True)
+        self.declare_parameter("publish_full_joint_command", True)
+        self.declare_parameter("log_extra_joints_once", True)
 
         self.joint_names = list(
             self.get_parameter("joint_names").get_parameter_value().string_array_value
@@ -66,6 +68,14 @@ class FollowJointTrajectoryBridge(Node):
             .get_parameter_value()
             .bool_value
         )
+        self.publish_full_joint_command = (
+            self.get_parameter("publish_full_joint_command")
+            .get_parameter_value()
+            .bool_value
+        )
+        self.log_extra_joints_once = (
+            self.get_parameter("log_extra_joints_once").get_parameter_value().bool_value
+        )
 
         if len(self.joint_names) != 6:
             raise ValueError("Parameter 'joint_names' must contain exactly 6 joints.")
@@ -78,6 +88,11 @@ class FollowJointTrajectoryBridge(Node):
 
         self._state_lock = threading.Lock()
         self._latest_joint_state: Optional[Tuple[List[float], List[float]]] = None
+        self._latest_full_joint_names: Optional[List[str]] = None
+        self._latest_full_joint_positions: Optional[List[float]] = None
+        self._latest_full_joint_velocities: Optional[List[float]] = None
+        self._logged_extra_joints = False
+        self._logged_full_joint_state_fallback_warning = False
 
         self._publisher = self.create_publisher(JointState, self.joint_command_topic, 10)
         self._subscription = self.create_subscription(
@@ -99,8 +114,9 @@ class FollowJointTrajectoryBridge(Node):
         )
 
         self.get_logger().info(
-            "Bridge ready on action '%s', publishing commands to '%s' and reading state from '%s'."
-            % (self.action_name, self.joint_command_topic, self.joint_state_topic)
+            f"Bridge ready on action '{self.action_name}', publishing commands to "
+            f"'{self.joint_command_topic}' and reading state from "
+            f"'{self.joint_state_topic}'."
         )
 
     def destroy_node(self) -> bool:
@@ -109,6 +125,27 @@ class FollowJointTrajectoryBridge(Node):
 
     def _joint_state_callback(self, msg: JointState) -> None:
         joint_map = {name: idx for idx, name in enumerate(msg.name)}
+        full_joint_names = list(msg.name)
+        full_joint_positions = list(msg.position)
+        full_joint_velocities = list(msg.velocity) if msg.velocity else []
+        extra_joints = [name for name in msg.name if name not in self.joint_names]
+
+        with self._state_lock:
+            self._latest_full_joint_names = full_joint_names
+            self._latest_full_joint_positions = full_joint_positions
+            self._latest_full_joint_velocities = full_joint_velocities
+
+            if (
+                extra_joints
+                and self.log_extra_joints_once
+                and not self._logged_extra_joints
+            ):
+                self.get_logger().info(
+                    f"Ignoring/preserving extra joints from {self.joint_state_topic}: "
+                    f"{extra_joints}"
+                )
+                self._logged_extra_joints = True
+
         if not all(name in joint_map for name in self.joint_names):
             return
 
@@ -300,6 +337,25 @@ class FollowJointTrajectoryBridge(Node):
     def _publish_joint_command(
         self, positions: Sequence[float], velocities: Sequence[float]
     ) -> None:
+        if not self.publish_full_joint_command:
+            self._publish_arm_only_joint_command(positions, velocities)
+            return
+
+        if self._publish_full_joint_command(positions, velocities):
+            return
+
+        if not self._logged_full_joint_state_fallback_warning:
+            self.get_logger().warn(
+                f"No full joint state available from {self.joint_state_topic}; "
+                "falling back to arm-only /joint_command publishing."
+            )
+            self._logged_full_joint_state_fallback_warning = True
+
+        self._publish_arm_only_joint_command(positions, velocities)
+
+    def _publish_arm_only_joint_command(
+        self, positions: Sequence[float], velocities: Sequence[float]
+    ) -> None:
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.joint_names)
@@ -307,6 +363,35 @@ class FollowJointTrajectoryBridge(Node):
         if velocities:
             msg.velocity = list(velocities)
         self._publisher.publish(msg)
+
+    def _publish_full_joint_command(
+        self, positions: Sequence[float], velocities: Sequence[float]
+    ) -> bool:
+        latest_full_joint_state = self._get_latest_full_joint_state_locked()
+        if latest_full_joint_state is None:
+            return False
+
+        joint_names, joint_positions, joint_velocities = latest_full_joint_state
+        joint_map = {name: idx for idx, name in enumerate(joint_names)}
+
+        for arm_index, joint_name in enumerate(self.joint_names):
+            joint_positions[joint_map[joint_name]] = positions[arm_index]
+
+        preserved_velocities: List[float] = []
+        if joint_velocities is not None:
+            preserved_velocities = list(joint_velocities)
+            if velocities:
+                for arm_index, joint_name in enumerate(self.joint_names):
+                    preserved_velocities[joint_map[joint_name]] = velocities[arm_index]
+
+        msg = JointState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = joint_names
+        msg.position = joint_positions
+        if preserved_velocities:
+            msg.velocity = preserved_velocities
+        self._publisher.publish(msg)
+        return True
 
     def _publish_feedback(
         self,
@@ -364,6 +449,32 @@ class FollowJointTrajectoryBridge(Node):
                 return list(default_positions), [0.0] * len(default_positions)
             positions, velocities = self._latest_joint_state
             return list(positions), list(velocities)
+
+    def _get_latest_full_joint_state_locked(
+        self,
+    ) -> Optional[Tuple[List[str], List[float], Optional[List[float]]]]:
+        with self._state_lock:
+            if (
+                self._latest_full_joint_names is None
+                or self._latest_full_joint_positions is None
+            ):
+                return None
+
+            joint_names = list(self._latest_full_joint_names)
+            joint_positions = list(self._latest_full_joint_positions)
+            if len(joint_positions) != len(joint_names):
+                return None
+            if not all(name in joint_names for name in self.joint_names):
+                return None
+
+            joint_velocities: Optional[List[float]] = None
+            if (
+                self._latest_full_joint_velocities is not None
+                and len(self._latest_full_joint_velocities) == len(joint_names)
+            ):
+                joint_velocities = list(self._latest_full_joint_velocities)
+
+            return joint_names, joint_positions, joint_velocities
 
     def _wait_for_joint_state(self, timeout_sec: float) -> bool:
         deadline = time.monotonic() + timeout_sec

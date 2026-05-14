@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration("use_sim_time")
+    publish_full_joint_command = LaunchConfiguration("publish_full_joint_command")
 
     return LaunchDescription(
         [
@@ -13,6 +14,14 @@ def generate_launch_description() -> LaunchDescription:
                 "use_sim_time",
                 default_value="false",
                 description="Use simulation time if Isaac publishes /clock.",
+            ),
+            DeclareLaunchArgument(
+                "publish_full_joint_command",
+                default_value="true",
+                description=(
+                    "Publish all joints seen in /joint_states to /joint_command while "
+                    "overwriting only the 6 arm joints from MoveIt."
+                ),
             ),
             Node(
                 package="isaac_trajectory_bridge",
@@ -36,6 +45,7 @@ def generate_launch_description() -> LaunchDescription:
                         "goal_tolerance": 0.03,
                         "goal_time_tolerance_sec": 2.0,
                         "require_joint_state_before_execute": True,
+                        "publish_full_joint_command": publish_full_joint_command,
                         "use_sim_time": use_sim_time,
                     }
                 ],
