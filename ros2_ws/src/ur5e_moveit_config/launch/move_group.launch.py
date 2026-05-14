@@ -15,7 +15,13 @@ def _load_planning_context_module():
     return module
 
 
-def generate_launch_description():
+def _load_yaml(relative_path: str):
+    path = Path(__file__).resolve().parent.parent / relative_path
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _launch_setup(context):
     planning_context = _load_planning_context_module()
     moveit_parameters = planning_context.get_moveit_parameters()
 
@@ -36,6 +42,26 @@ def generate_launch_description():
         "use_sim_time": use_sim_time,
     }
 
+    parameters = [
+        moveit_parameters,
+        planning_scene_monitor_parameters,
+        move_group_capabilities,
+    ]
+
+    if use_octomap.perform(context).lower() in {"true", "1", "yes", "on"}:
+        parameters.append(_load_yaml("config/sensors_3d.yaml"))
+
+    return [
+        Node(
+            package="moveit_ros_move_group",
+            executable="move_group",
+            output="screen",
+            parameters=parameters,
+        )
+    ]
+
+
+def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -43,15 +69,11 @@ def generate_launch_description():
                 default_value="false",
                 description="Use simulation time if Isaac publishes /clock.",
             ),
-            Node(
-                package="moveit_ros_move_group",
-                executable="move_group",
-                output="screen",
-                parameters=[
-                    moveit_parameters,
-                    planning_scene_monitor_parameters,
-                    move_group_capabilities,
-                ],
+            DeclareLaunchArgument(
+                "use_octomap",
+                default_value="true",
+                description="Enable occupancy map updates from config/sensors_3d.yaml.",
             ),
+            OpaqueFunction(function=_launch_setup),
         ]
     )
