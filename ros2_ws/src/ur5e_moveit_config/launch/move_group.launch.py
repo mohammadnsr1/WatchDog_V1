@@ -22,6 +22,32 @@ def _load_yaml(relative_path: str):
         return yaml.safe_load(handle)
 
 
+def _load_octomap_config(context):
+    octomap_config = _load_yaml("config/sensors_3d.yaml")
+    octomap_config["octomap_resolution"] = float(
+        LaunchConfiguration("octomap_resolution").perform(context)
+    )
+    octomap_config["max_update_rate"] = float(
+        LaunchConfiguration("max_update_rate").perform(context)
+    )
+
+    sensor_names = octomap_config.get("sensors", [])
+    if sensor_names:
+        updater_name = sensor_names[0]
+        updater_config = octomap_config.setdefault(updater_name, {})
+        updater_config["point_cloud_topic"] = LaunchConfiguration("pointcloud_topic").perform(
+            context
+        )
+        updater_config["max_range"] = float(
+            LaunchConfiguration("octomap_max_range").perform(context)
+        )
+        updater_config["filtered_cloud_topic"] = LaunchConfiguration(
+            "filtered_cloud_topic"
+        ).perform(context)
+
+    return octomap_config
+
+
 def _launch_setup(context):
     planning_context = _load_planning_context_module()
     moveit_parameters = planning_context.get_moveit_parameters()
@@ -51,7 +77,7 @@ def _launch_setup(context):
     ]
 
     if use_octomap.perform(context).lower() in {"true", "1", "yes", "on"}:
-        parameters.append(_load_yaml("config/sensors_3d.yaml"))
+        parameters.append(_load_octomap_config(context))
 
     return [
         Node(
@@ -75,6 +101,31 @@ def generate_launch_description():
                 "use_octomap",
                 default_value="true",
                 description="Enable occupancy map updates from config/sensors_3d.yaml.",
+            ),
+            DeclareLaunchArgument(
+                "pointcloud_topic",
+                default_value="/camera/depth/points_filtered",
+                description="Point cloud topic consumed by MoveIt occupancy updates.",
+            ),
+            DeclareLaunchArgument(
+                "octomap_resolution",
+                default_value="0.05",
+                description="MoveIt octomap resolution in meters.",
+            ),
+            DeclareLaunchArgument(
+                "max_update_rate",
+                default_value="2.0",
+                description="Maximum MoveIt octomap update rate in Hz.",
+            ),
+            DeclareLaunchArgument(
+                "octomap_max_range",
+                default_value="2.0",
+                description="Maximum point cloud range used by MoveIt octomap updates.",
+            ),
+            DeclareLaunchArgument(
+                "filtered_cloud_topic",
+                default_value="/moveit/filtered_cloud",
+                description="MoveIt debug topic for the occupancy updater's filtered cloud.",
             ),
             OpaqueFunction(function=_launch_setup),
         ]

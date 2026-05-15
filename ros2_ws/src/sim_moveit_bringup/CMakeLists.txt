@@ -14,6 +14,17 @@ install(
 )
 
 install(
+  PROGRAMS sim_moveit_bringup/pointcloud_workspace_filter.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  PROGRAMS sim_moveit_bringup/pointcloud_workspace_filter.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME pointcloud_workspace_filter
+)
+
+install(
   FILES README.md
   DESTINATION share/${PROJECT_NAME}
 )

@@ -1,72 +1,139 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, LogInfo
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import SetRemap
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
-def generate_launch_description():
+def _is_truthy(value: str) -> bool:
+    return value.lower() in {"true", "1", "yes", "on"}
+
+
+def _launch_setup(context):
     use_sim_time = LaunchConfiguration("use_sim_time")
     launch_rviz = LaunchConfiguration("launch_rviz")
     use_octomap = LaunchConfiguration("use_octomap")
     pointcloud_topic = LaunchConfiguration("pointcloud_topic")
     publish_camera_tf = LaunchConfiguration("publish_camera_tf")
     camera_config = LaunchConfiguration("camera_config")
+    filter_pointcloud = LaunchConfiguration("filter_pointcloud")
+    raw_pointcloud_topic = LaunchConfiguration("raw_pointcloud_topic")
+    filtered_pointcloud_topic = LaunchConfiguration("filtered_pointcloud_topic")
+    pointcloud_filter_rate = LaunchConfiguration("pointcloud_filter_rate")
+    voxel_leaf_size = LaunchConfiguration("voxel_leaf_size")
+    crop_min_x = LaunchConfiguration("crop_min_x")
+    crop_max_x = LaunchConfiguration("crop_max_x")
+    crop_min_y = LaunchConfiguration("crop_min_y")
+    crop_max_y = LaunchConfiguration("crop_max_y")
+    crop_min_z = LaunchConfiguration("crop_min_z")
+    crop_max_z = LaunchConfiguration("crop_max_z")
+    target_frame = LaunchConfiguration("target_frame")
 
     ur5e_launch_dir = PathJoinSubstitution([FindPackageShare("ur5e_moveit_config"), "launch"])
     bridge_launch_dir = PathJoinSubstitution([FindPackageShare("isaac_trajectory_bridge"), "launch"])
     sim_bringup_launch_dir = PathJoinSubstitution([FindPackageShare("sim_moveit_bringup"), "launch"])
+
+    filter_enabled = _is_truthy(filter_pointcloud.perform(context))
+    raw_topic_value = raw_pointcloud_topic.perform(context)
+    filtered_topic_value = filtered_pointcloud_topic.perform(context)
+    direct_topic_value = pointcloud_topic.perform(context)
+    moveit_pointcloud_topic = filtered_topic_value if filter_enabled else direct_topic_value
+
+    actions = [
+        LogInfo(msg="Isaac Sim must already be running and simulation must be playing."),
+        LogInfo(msg=["Raw point cloud topic: ", raw_pointcloud_topic]),
+        LogInfo(msg=["MoveIt point cloud topic: ", moveit_pointcloud_topic]),
+        LogInfo(msg=["Camera TF config: ", camera_config]),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([ur5e_launch_dir, "rsp.launch.py"])),
+            launch_arguments={"use_sim_time": use_sim_time}.items(),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([ur5e_launch_dir, "move_group.launch.py"])),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "use_octomap": use_octomap,
+                "pointcloud_topic": moveit_pointcloud_topic,
+                "octomap_resolution": "0.05",
+                "max_update_rate": "2.0",
+                "octomap_max_range": "2.0",
+                "filtered_cloud_topic": "/moveit/filtered_cloud",
+            }.items(),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([ur5e_launch_dir, "moveit_rviz.launch.py"])
+            ),
+            launch_arguments={"use_sim_time": use_sim_time}.items(),
+            condition=IfCondition(launch_rviz),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([bridge_launch_dir, "trajectory_bridge.launch.py"])
+            ),
+            launch_arguments={
+                "use_sim_time": use_sim_time,
+                "publish_full_joint_command": "true",
+            }.items(),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([sim_bringup_launch_dir, "camera_tf.launch.py"])
+            ),
+            launch_arguments={
+                "camera_config": camera_config,
+                "use_sim_time": use_sim_time,
+            }.items(),
+            condition=IfCondition(publish_camera_tf),
+        ),
+        LogInfo(
+            msg=(
+                "The bringup launch passes publish_full_joint_command:=true to the "
+                "trajectory bridge because that argument is supported today."
+            )
+        ),
+    ]
+
+    if filter_enabled:
+        actions.insert(
+            4,
+            Node(
+                package="sim_moveit_bringup",
+                executable="pointcloud_workspace_filter",
+                name="pointcloud_workspace_filter",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "input_topic": raw_topic_value,
+                        "output_topic": filtered_topic_value,
+                        "target_frame": target_frame.perform(context),
+                        "max_publish_rate": float(pointcloud_filter_rate.perform(context)),
+                        "use_crop_box": True,
+                        "crop_min_x": float(crop_min_x.perform(context)),
+                        "crop_max_x": float(crop_max_x.perform(context)),
+                        "crop_min_y": float(crop_min_y.perform(context)),
+                        "crop_max_y": float(crop_max_y.perform(context)),
+                        "crop_min_z": float(crop_min_z.perform(context)),
+                        "crop_max_z": float(crop_max_z.perform(context)),
+                        "use_voxel_filter": True,
+                        "voxel_leaf_size": float(voxel_leaf_size.perform(context)),
+                    }
+                ],
+            ),
+        )
+        actions.insert(4, LogInfo(msg=["Point cloud filtering enabled. Publishing filtered cloud on: ", filtered_pointcloud_topic]))
+    else:
+        actions.insert(4, LogInfo(msg="Point cloud filtering disabled. MoveIt will consume the configured pointcloud_topic directly."))
+
+    return actions
+
+
+def generate_launch_description():
     default_camera_config = PathJoinSubstitution(
         [FindPackageShare("sim_moveit_bringup"), "config", "cameras.yaml"]
-    )
-
-    rsp_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(PathJoinSubstitution([ur5e_launch_dir, "rsp.launch.py"])),
-        launch_arguments={"use_sim_time": use_sim_time}.items(),
-    )
-
-    move_group_launch = GroupAction(
-        [
-            SetRemap("/camera/depth/points", pointcloud_topic),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([ur5e_launch_dir, "move_group.launch.py"])
-                ),
-                launch_arguments={
-                    "use_sim_time": use_sim_time,
-                    "use_octomap": use_octomap,
-                }.items(),
-            ),
-        ]
-    )
-
-    moveit_rviz_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(PathJoinSubstitution([ur5e_launch_dir, "moveit_rviz.launch.py"])),
-        launch_arguments={"use_sim_time": use_sim_time}.items(),
-        condition=IfCondition(launch_rviz),
-    )
-
-    trajectory_bridge_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([bridge_launch_dir, "trajectory_bridge.launch.py"])
-        ),
-        launch_arguments={
-            "use_sim_time": use_sim_time,
-            "publish_full_joint_command": "true",
-        }.items(),
-    )
-
-    camera_tf_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([sim_bringup_launch_dir, "camera_tf.launch.py"])
-        ),
-        launch_arguments={
-            "camera_config": camera_config,
-            "use_sim_time": use_sim_time,
-        }.items(),
-        condition=IfCondition(publish_camera_tf),
     )
 
     return LaunchDescription(
@@ -89,7 +156,7 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "pointcloud_topic",
                 default_value="/camera/depth/points",
-                description="Point cloud topic published by Isaac for occupancy updates.",
+                description="Point cloud topic consumed directly by MoveIt when filtering is disabled.",
             ),
             DeclareLaunchArgument(
                 "publish_camera_tf",
@@ -101,19 +168,42 @@ def generate_launch_description():
                 default_value=default_camera_config,
                 description="Path to the YAML file describing fixed camera extrinsics.",
             ),
-            LogInfo(msg="Isaac Sim must already be running and simulation must be playing."),
-            LogInfo(msg=["Expected topics: /joint_states, /clock, ", pointcloud_topic]),
-            LogInfo(msg=["Camera TF config: ", camera_config]),
-            LogInfo(
-                msg=(
-                    "The bringup launch passes publish_full_joint_command:=true to the "
-                    "trajectory bridge because that argument is supported today."
-                )
+            DeclareLaunchArgument(
+                "filter_pointcloud",
+                default_value="false",
+                description="Launch the workspace point cloud filter and feed MoveIt the filtered cloud.",
             ),
-            rsp_launch,
-            move_group_launch,
-            moveit_rviz_launch,
-            trajectory_bridge_launch,
-            camera_tf_launch,
+            DeclareLaunchArgument(
+                "raw_pointcloud_topic",
+                default_value="/camera/depth/points",
+                description="Raw Isaac point cloud topic consumed by the workspace filter.",
+            ),
+            DeclareLaunchArgument(
+                "filtered_pointcloud_topic",
+                default_value="/camera/depth/points_filtered",
+                description="Filtered point cloud topic published for MoveIt occupancy updates.",
+            ),
+            DeclareLaunchArgument(
+                "pointcloud_filter_rate",
+                default_value="2.0",
+                description="Maximum publish rate for the filtered point cloud in Hz.",
+            ),
+            DeclareLaunchArgument(
+                "voxel_leaf_size",
+                default_value="0.03",
+                description="Voxel leaf size in meters for the workspace point cloud filter.",
+            ),
+            DeclareLaunchArgument("crop_min_x", default_value="-0.2", description="Workspace crop minimum X in meters."),
+            DeclareLaunchArgument("crop_max_x", default_value="1.3", description="Workspace crop maximum X in meters."),
+            DeclareLaunchArgument("crop_min_y", default_value="-0.6", description="Workspace crop minimum Y in meters."),
+            DeclareLaunchArgument("crop_max_y", default_value="0.8", description="Workspace crop maximum Y in meters."),
+            DeclareLaunchArgument("crop_min_z", default_value="0.0", description="Workspace crop minimum Z in meters."),
+            DeclareLaunchArgument("crop_max_z", default_value="1.4", description="Workspace crop maximum Z in meters."),
+            DeclareLaunchArgument(
+                "target_frame",
+                default_value="world",
+                description="Target frame used by the workspace point cloud filter.",
+            ),
+            OpaqueFunction(function=_launch_setup),
         ]
     )
