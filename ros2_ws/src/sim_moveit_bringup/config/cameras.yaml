@@ -1,10 +1,7 @@
 cameras:
-  scene_camera:
-    enabled: true
+  - name: camera_depth
     parent_frame: world
     child_frame: camera_depth_optical_frame
-    xyz: [0.974810780855903, -0.10159851487290794, 1.2598771872469468]
-    rpy: [-0.168192, -0.628436, -1.488964]
+    xyz: [1.520321011543274, 0.3461496829986572, 0.7962052226066589]
+    quat_xyzw: [0.4098938748749688, 0.7966759888787043, -0.3599909583699326, -0.26019394684738445]
     pointcloud_topic: /camera/depth/points
-    rgb_topic: /camera/depth/rgb
-    notes: "Fixed Isaac scene camera /World/Scene_publisher. RPY may need final optical-frame verification."
