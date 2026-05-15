@@ -83,7 +83,7 @@
   <joint name="world_to_base_link" type="fixed">
     <parent link="world"/>
     <child link="base_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="0 -0.7 0" rpy="0 0 0"/>
   </joint>
   <link name="shoulder_link">
     <visual>
@@ -478,12 +478,6 @@
     <child link="onrobot_rg2_base_link"/>
     <!-- TODO: tune this mount transform to exactly match Isaac Sim Gripper_joint. -->
     <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-
-  <joint name="world_to_base_link" type="fixed">
-    <parent link="world"/>
-    <child link="base_link"/>
-    <origin xyz="0 -0.7 0" rpy="0 0 0"/>
   </joint>
 
   <joint name="onrobot_rg2_base_to_body_joint" type="fixed">

@@ -1,8 +1,9 @@
 import importlib.util
 from pathlib import Path
 
+import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -26,6 +27,7 @@ def _launch_setup(context):
     moveit_parameters = planning_context.get_moveit_parameters()
 
     use_sim_time = LaunchConfiguration("use_sim_time")
+    use_octomap = LaunchConfiguration("use_octomap")
 
     planning_scene_monitor_parameters = {
         "publish_planning_scene": True,

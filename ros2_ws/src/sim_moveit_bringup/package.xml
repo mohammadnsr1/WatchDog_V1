@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>sim_moveit_bringup</name>
+  <version>0.0.1</version>
+  <description>Bringup package for UR5e MoveIt with Isaac trajectory bridging and point-cloud occupancy updates.</description>
+
+  <maintainer email="mohammadnsr1@example.com">mohammadnsr1</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>ur5e_moveit_config</exec_depend>
+  <exec_depend>isaac_trajectory_bridge</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
