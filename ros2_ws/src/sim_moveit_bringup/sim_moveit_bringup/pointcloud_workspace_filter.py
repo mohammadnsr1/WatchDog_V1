@@ -5,7 +5,7 @@ from typing import Dict, Tuple
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
@@ -30,6 +30,7 @@ class PointCloudWorkspaceFilter(Node):
         self.declare_parameter("crop_max_z", 1.4)
         self.declare_parameter("use_voxel_filter", True)
         self.declare_parameter("voxel_leaf_size", 0.03)
+        self.declare_parameter("reliable_output_qos", False)
 
         self.input_topic = self.get_parameter("input_topic").value
         self.output_topic = self.get_parameter("output_topic").value
@@ -44,20 +45,38 @@ class PointCloudWorkspaceFilter(Node):
         self.crop_max_z = float(self.get_parameter("crop_max_z").value)
         self.use_voxel_filter = bool(self.get_parameter("use_voxel_filter").value)
         self.voxel_leaf_size = float(self.get_parameter("voxel_leaf_size").value)
+        self.reliable_output_qos = bool(self.get_parameter("reliable_output_qos").value)
 
         if self.use_crop_box:
             self._validate_crop_bounds()
         if self.use_voxel_filter and self.voxel_leaf_size <= 0.0:
             raise ValueError("voxel_leaf_size must be > 0 when use_voxel_filter is true.")
 
+        sensor_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5,
+        )
+        output_qos = QoSProfile(
+            reliability=(
+                ReliabilityPolicy.RELIABLE
+                if self.reliable_output_qos
+                else ReliabilityPolicy.BEST_EFFORT
+            ),
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=5,
+        )
+
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.publisher = self.create_publisher(PointCloud2, self.output_topic, qos_profile_sensor_data)
+        self.publisher = self.create_publisher(PointCloud2, self.output_topic, output_qos)
         self.subscription = self.create_subscription(
             PointCloud2,
             self.input_topic,
             self._pointcloud_callback,
-            qos_profile_sensor_data,
+            sensor_qos,
         )
 
         self._last_publish_time_sec = 0.0
@@ -90,6 +109,10 @@ class PointCloudWorkspaceFilter(Node):
             f"Point cloud filter voxel leaf size: {self.voxel_leaf_size} enabled={self.use_voxel_filter}"
         )
         self.get_logger().info(f"Point cloud filter max publish rate: {self.max_publish_rate} Hz")
+        self.get_logger().info(
+            "Point cloud filter output reliability: "
+            f"{'RELIABLE' if self.reliable_output_qos else 'BEST_EFFORT'}"
+        )
 
     def _pointcloud_callback(self, msg: PointCloud2):
         now_sec = self.get_clock().now().nanoseconds / 1e9
