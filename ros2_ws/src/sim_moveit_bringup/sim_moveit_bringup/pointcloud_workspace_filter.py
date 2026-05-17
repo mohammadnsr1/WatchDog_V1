@@ -30,7 +30,7 @@ class PointCloudWorkspaceFilter(Node):
         self.declare_parameter("crop_max_z", 1.4)
         self.declare_parameter("use_voxel_filter", True)
         self.declare_parameter("voxel_leaf_size", 0.03)
-        self.declare_parameter("reliable_output_qos", False)
+        self.declare_parameter("reliable_output_qos", True)
 
         self.input_topic = self.get_parameter("input_topic").value
         self.output_topic = self.get_parameter("output_topic").value
@@ -51,6 +51,10 @@ class PointCloudWorkspaceFilter(Node):
             self._validate_crop_bounds()
         if self.use_voxel_filter and self.voxel_leaf_size <= 0.0:
             raise ValueError("voxel_leaf_size must be > 0 when use_voxel_filter is true.")
+
+        self._min_publish_period_sec = (
+            1.0 / self.max_publish_rate if self.max_publish_rate > 0.0 else 0.0
+        )
 
         sensor_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -79,7 +83,7 @@ class PointCloudWorkspaceFilter(Node):
             sensor_qos,
         )
 
-        self._last_publish_time_sec = 0.0
+        self._last_publish_time_sec = float("-inf")
         self._last_log_times: Dict[str, float] = {}
 
         self._log_startup_configuration()
@@ -116,9 +120,9 @@ class PointCloudWorkspaceFilter(Node):
 
     def _pointcloud_callback(self, msg: PointCloud2):
         now_sec = self.get_clock().now().nanoseconds / 1e9
-        if self.max_publish_rate > 0.0:
-            min_period = 1.0 / self.max_publish_rate
-            if now_sec - self._last_publish_time_sec < min_period:
+        if self._min_publish_period_sec > 0.0:
+            elapsed = now_sec - self._last_publish_time_sec
+            if elapsed < self._min_publish_period_sec:
                 return
 
         if not msg.header.frame_id:
@@ -266,9 +270,12 @@ def main():
     node = PointCloudWorkspaceFilter()
     try:
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

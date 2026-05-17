@@ -1,11 +1,9 @@
 # MoveIt 3D perception configuration for occupancy-map updates from Isaac.
-# The point_cloud_topic below is the default filtered topic. sim_moveit_bringup launch
-# can override it dynamically when routing raw or filtered clouds into MoveIt.
+# sim_moveit_bringup can override the point cloud topic and update rate dynamically.
 # TF must connect the cloud frame to the MoveIt planning frame for updates to work.
 
 octomap_frame: world
 octomap_resolution: 0.05
-max_update_rate: 2.0
 sensors:
   - isaac_point_cloud
 
@@ -16,4 +14,5 @@ isaac_point_cloud:
   point_subsample: 1
   padding_offset: 0.03
   padding_scale: 1.0
+  max_update_rate: 2.0
   filtered_cloud_topic: /moveit/filtered_cloud

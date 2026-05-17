@@ -24,11 +24,9 @@ def _load_yaml(relative_path: str):
 
 def _load_octomap_config(context):
     octomap_config = _load_yaml("config/sensors_3d.yaml")
+    octomap_config["octomap_frame"] = LaunchConfiguration("octomap_frame").perform(context)
     octomap_config["octomap_resolution"] = float(
         LaunchConfiguration("octomap_resolution").perform(context)
-    )
-    octomap_config["max_update_rate"] = float(
-        LaunchConfiguration("max_update_rate").perform(context)
     )
 
     sensor_names = octomap_config.get("sensors", [])
@@ -40,6 +38,9 @@ def _load_octomap_config(context):
         )
         updater_config["max_range"] = float(
             LaunchConfiguration("octomap_max_range").perform(context)
+        )
+        updater_config["max_update_rate"] = float(
+            LaunchConfiguration("max_update_rate").perform(context)
         )
         updater_config["filtered_cloud_topic"] = LaunchConfiguration(
             "filtered_cloud_topic"
@@ -106,6 +107,11 @@ def generate_launch_description():
                 "pointcloud_topic",
                 default_value="/camera/depth/points_filtered",
                 description="Point cloud topic consumed by MoveIt occupancy updates.",
+            ),
+            DeclareLaunchArgument(
+                "octomap_frame",
+                default_value="world",
+                description="Frame used for MoveIt octomap updates.",
             ),
             DeclareLaunchArgument(
                 "octomap_resolution",

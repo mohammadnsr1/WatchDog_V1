@@ -23,6 +23,9 @@ def _launch_setup(context):
     filtered_pointcloud_topic = LaunchConfiguration("filtered_pointcloud_topic")
     pointcloud_filter_rate = LaunchConfiguration("pointcloud_filter_rate")
     voxel_leaf_size = LaunchConfiguration("voxel_leaf_size")
+    use_crop_box = LaunchConfiguration("use_crop_box")
+    use_voxel_filter = LaunchConfiguration("use_voxel_filter")
+    reliable_output_qos = LaunchConfiguration("reliable_output_qos")
     crop_min_x = LaunchConfiguration("crop_min_x")
     crop_max_x = LaunchConfiguration("crop_max_x")
     crop_min_y = LaunchConfiguration("crop_min_y")
@@ -57,9 +60,10 @@ def _launch_setup(context):
                 "use_octomap": use_octomap,
                 "pointcloud_topic": moveit_pointcloud_topic,
                 "octomap_resolution": "0.05",
-                "max_update_rate": "2.0",
+                "max_update_rate": pointcloud_filter_rate,
                 "octomap_max_range": "2.0",
                 "filtered_cloud_topic": "/moveit/filtered_cloud",
+                "octomap_frame": target_frame,
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -111,22 +115,29 @@ def _launch_setup(context):
                         "output_topic": filtered_topic_value,
                         "target_frame": target_frame.perform(context),
                         "max_publish_rate": float(pointcloud_filter_rate.perform(context)),
-                        "use_crop_box": True,
+                        "use_crop_box": _is_truthy(use_crop_box.perform(context)),
                         "crop_min_x": float(crop_min_x.perform(context)),
                         "crop_max_x": float(crop_max_x.perform(context)),
                         "crop_min_y": float(crop_min_y.perform(context)),
                         "crop_max_y": float(crop_max_y.perform(context)),
                         "crop_min_z": float(crop_min_z.perform(context)),
                         "crop_max_z": float(crop_max_z.perform(context)),
-                        "use_voxel_filter": True,
+                        "use_voxel_filter": _is_truthy(use_voxel_filter.perform(context)),
                         "voxel_leaf_size": float(voxel_leaf_size.perform(context)),
+                        "reliable_output_qos": _is_truthy(reliable_output_qos.perform(context)),
                     }
                 ],
             ),
         )
-        actions.insert(4, LogInfo(msg=["Point cloud filtering enabled. Publishing filtered cloud on: ", filtered_pointcloud_topic]))
+        actions.insert(
+            4,
+            LogInfo(msg=["Point cloud filtering enabled. Publishing filtered cloud on: ", filtered_pointcloud_topic]),
+        )
     else:
-        actions.insert(4, LogInfo(msg="Point cloud filtering disabled. MoveIt will consume the configured pointcloud_topic directly."))
+        actions.insert(
+            4,
+            LogInfo(msg="Point cloud filtering disabled. MoveIt will consume the configured pointcloud_topic directly."),
+        )
 
     return actions
 
@@ -155,7 +166,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "pointcloud_topic",
-                default_value="/camera/depth/points",
+                default_value="/camera/depth/points_filtered",
                 description="Point cloud topic consumed directly by MoveIt when filtering is disabled.",
             ),
             DeclareLaunchArgument(
@@ -170,7 +181,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "filter_pointcloud",
-                default_value="false",
+                default_value="true",
                 description="Launch the workspace point cloud filter and feed MoveIt the filtered cloud.",
             ),
             DeclareLaunchArgument(
@@ -190,8 +201,23 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "voxel_leaf_size",
-                default_value="0.03",
+                default_value="0.01",
                 description="Voxel leaf size in meters for the workspace point cloud filter.",
+            ),
+            DeclareLaunchArgument(
+                "use_crop_box",
+                default_value="true",
+                description="Enable workspace crop-box filtering.",
+            ),
+            DeclareLaunchArgument(
+                "use_voxel_filter",
+                default_value="true",
+                description="Enable voxel-grid downsampling for the filtered cloud.",
+            ),
+            DeclareLaunchArgument(
+                "reliable_output_qos",
+                default_value="true",
+                description="Publish the filtered cloud with RELIABLE QoS instead of BEST_EFFORT.",
             ),
             DeclareLaunchArgument("crop_min_x", default_value="-0.2", description="Workspace crop minimum X in meters."),
             DeclareLaunchArgument("crop_max_x", default_value="1.3", description="Workspace crop maximum X in meters."),
