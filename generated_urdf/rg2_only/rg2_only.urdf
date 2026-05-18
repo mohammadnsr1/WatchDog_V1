@@ -582,140 +582,105 @@
   
   
   <joint name="onrobot_rg2_base_to_body_joint" type="fixed">
-    
-    
     <parent link="onrobot_rg2_base_link"/>
-    
-    
     <child link="onrobot_rg2_body_link"/>
-    
-    
-    <origin xyz="0 0 0.05" rpy="0 0 0"/>
-    
-  
+    <origin xyz="0.0 0.0 0.05" rpy="0.0 0.0 0.0"/>
   </joint>
   
   
-  <joint name="onrobot_rg2_body_to_finger_1_origin_joint" type="revolute">
+  <joint name="onrobot_rg2_body_to_finger_1_origin_joint" type="fixed">
     <parent link="onrobot_rg2_body_link"/>
     <child link="onrobot_rg2_finger_1_origin"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="0.0" upper="1.18" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
   </joint>
   
   
-  <joint name="onrobot_rg2_body_to_finger_2_origin_joint" type="revolute">
+  <joint name="onrobot_rg2_body_to_finger_2_origin_joint" type="fixed">
     <parent link="onrobot_rg2_body_link"/>
     <child link="onrobot_rg2_finger_2_origin"/>
     <origin xyz="0 0 0" rpy="0 0 3.141592653589793"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="1" offset="0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_body_to_grasp_frame_joint" type="fixed">
-    
-    
     <parent link="onrobot_rg2_body_link"/>
-    
-    
     <child link="onrobot_rg2_grasp_frame"/>
-    
-    
-    <origin xyz="0 0 0.14" rpy="0 0 0"/>
-    
-  
+    <origin xyz="0.0 0.0 0.14" rpy="0.0 0.0 0.0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_1_finger_tip_to_flex_finger_joint" type="fixed">
     <parent link="onrobot_rg2_finger_1_finger_tip_link"/>
     <child link="onrobot_rg2_finger_1_flex_finger_link"/>
-    <origin xyz="0.03059 0 0.0172" rpy="0 0 0"/>
+    <origin xyz="0.03059 0.0 0.0172" rpy="0.0 0.0 0.0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_1_origin_to_moment_arm_joint" type="revolute">
     <parent link="onrobot_rg2_finger_1_origin"/>
     <child link="onrobot_rg2_finger_1_moment_arm_link"/>
-    <origin xyz="-0.017 0 0.055" rpy="0 -0.772 0"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 1 0"/>
+    <origin xyz="-0.017 0.0 0.055" rpy="0.0 -0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <dynamics damping="0.17"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_1_origin_to_truss_arm_joint" type="revolute">
     <parent link="onrobot_rg2_finger_1_origin"/>
     <child link="onrobot_rg2_finger_1_truss_arm_link"/>
-    <origin xyz="-0.0075 0 0.0715" rpy="0 -0.772 0"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 1 0"/>
+    <origin xyz="-0.0075 0.0 0.0715" rpy="0.0 -0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_1_truss_arm_to_finger_tip_joint" type="revolute">
     <parent link="onrobot_rg2_finger_1_truss_arm_link"/>
     <child link="onrobot_rg2_finger_1_finger_tip_link"/>
-    <origin xyz="-0.0256 0 0.04868" rpy="0 0.772 0"/>
-    <axis xyz="0.0 -0.999949 0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 -1 0"/>
+    <origin xyz="-0.0256 0.0 0.04868" rpy="0.0 0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_2_finger_tip_to_flex_finger_joint" type="fixed">
     <parent link="onrobot_rg2_finger_2_finger_tip_link"/>
     <child link="onrobot_rg2_finger_2_flex_finger_link"/>
-    <origin xyz="0.03059 0 0.0172" rpy="0 0 0"/>
+    <origin xyz="0.03059 0.0 0.0172" rpy="0.0 0.0 0.0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_2_origin_to_moment_arm_joint" type="revolute">
     <parent link="onrobot_rg2_finger_2_origin"/>
     <child link="onrobot_rg2_finger_2_moment_arm_link"/>
-    <origin xyz="-0.017 0 0.055" rpy="0 -0.772 0"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 1 0"/>
+    <origin xyz="-0.017 0.0 0.055" rpy="0.0 -0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <dynamics damping="0.17"/>
+    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_2_origin_to_truss_arm_joint" type="revolute">
     <parent link="onrobot_rg2_finger_2_origin"/>
     <child link="onrobot_rg2_finger_2_truss_arm_link"/>
-    <origin xyz="-0.0075 0 0.0715" rpy="0 -0.772 0"/>
-    <axis xyz="-0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 1 0"/>
+    <origin xyz="-0.0075 0.0 0.0715" rpy="0.0 -0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
   </joint>
   
   
   <joint name="onrobot_rg2_finger_2_truss_arm_to_finger_tip_joint" type="revolute">
     <parent link="onrobot_rg2_finger_2_truss_arm_link"/>
     <child link="onrobot_rg2_finger_2_finger_tip_link"/>
-    <origin xyz="-0.0256 0 0.04868" rpy="0 0.772 0"/>
-    <axis xyz="0.0 0.999949 -0.010122"/>
-    <limit lower="-1.19" upper="1.19" effort="50.0" velocity="2.0"/>
-    <dynamics damping="0.1" friction="0.0"/>
-    <!-- Upstream RG2FT mimic mapping; tune only if local visual import proves the linkage sign is wrong. -->
-    <mimic joint="onrobot_rg2_body_to_finger_1_origin_joint" multiplier="-1" offset="0"/>
+    <axis xyz="0 -1 0"/>
+    <origin xyz="-0.0256 0.0 0.04868" rpy="0.0 0.772 0.0"/>
+    <limit lower="0.0" upper="1.3" effort="10.0" velocity="50.0"/>
+    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
   </joint>
   
 
