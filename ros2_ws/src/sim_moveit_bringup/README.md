@@ -86,3 +86,35 @@ Verify MoveIt receives planning scene updates:
 Known limitation:
 - point clouds provide occupancy and collision geometry, not object identity
 - later, object-specific perception such as FoundationPose can publish `CollisionObject` or attached-object updates on top of this
+
+
+## RG2 Gripper Bridge
+
+MoveIt remains arm-only. The RG2 gripper is controlled separately through a simple width command topic.
+
+Default command topic:
+
+```bash
+/rg2/command_width
+```
+
+Publish test commands:
+
+```bash
+ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.085}"
+ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.0}"
+ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.04}"
+```
+
+Expected:
+- `0.085` opens the gripper
+- `0.0` closes the gripper
+- `0.04` half-opens the gripper
+
+If the motion is reversed, launch with:
+
+```bash
+ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py invert_gripper_command:=true
+```
+
+The bridge preserves non-gripper joints from `/joint_states` and only updates whichever RG2 joints Isaac exposes.
