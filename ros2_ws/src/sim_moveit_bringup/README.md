@@ -90,7 +90,7 @@ Known limitation:
 
 ## RG2 Gripper Bridge
 
-MoveIt remains arm-only. The RG2 gripper is controlled separately through a simple width command topic.
+MoveIt remains arm-only. The RG2 gripper is controlled separately through a simple width command topic, and the bridge drives all available RG2 linkage joints directly through `/joint_command`.
 
 Default command topic:
 
@@ -98,12 +98,34 @@ Default command topic:
 /rg2/command_width
 ```
 
+Default width-to-q mapping:
+
+```text
+open_width_m = 0.085
+closed_width_m = 0.0
+max_q = 1.18
+q = (open_width_m - width_m) / open_width_m * max_q
+```
+
+Default multiplier preset: `preset_2_mirrored_signs`
+
+```text
+onrobot_rg2_body_to_finger_1_origin_joint:  1.0
+onrobot_rg2_body_to_finger_2_origin_joint: -1.0
+onrobot_rg2_finger_1_origin_to_moment_arm_joint: -1.0
+onrobot_rg2_finger_1_origin_to_truss_arm_joint: -1.0
+onrobot_rg2_finger_1_truss_arm_to_finger_tip_joint: -1.0
+onrobot_rg2_finger_2_origin_to_moment_arm_joint:  1.0
+onrobot_rg2_finger_2_origin_to_truss_arm_joint:  1.0
+onrobot_rg2_finger_2_truss_arm_to_finger_tip_joint:  1.0
+```
+
 Publish test commands:
 
 ```bash
 ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.085}"
-ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.0}"
 ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.04}"
+ros2 topic pub --once /rg2/command_width std_msgs/msg/Float64 "{data: 0.0}"
 ```
 
 Expected:
@@ -111,10 +133,17 @@ Expected:
 - `0.0` closes the gripper
 - `0.04` half-opens the gripper
 
-If the motion is reversed, launch with:
+Tune behavior:
+- set `invert_gripper_command:=true` if open and close are reversed
+- change `gripper_multiplier_preset` or edit `config/rg2_gripper_bridge.yaml` if one linkage bends the wrong way
+- set `gripper_smooth_motion:=false` to disable the default `0.5` second interpolation
+
+Example launch overrides:
 
 ```bash
 ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py invert_gripper_command:=true
+ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py gripper_multiplier_preset:=preset_3_all_same_sign
+ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py gripper_articulation_path:=/World/ur5e
 ```
 
-The bridge preserves non-gripper joints from `/joint_states` and only updates whichever RG2 joints Isaac exposes.
+The bridge preserves non-gripper joints from `/joint_states`, logs all discovered DOF names on startup, reports RG2 joints found and missing, and only commands the RG2 joints Isaac actually exposes.
