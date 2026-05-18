@@ -201,7 +201,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "voxel_leaf_size",
-                default_value="0.01",
+                default_value="0.03",
                 description="Voxel leaf size in meters for the workspace point cloud filter.",
             ),
             DeclareLaunchArgument(
@@ -219,12 +219,12 @@ def generate_launch_description():
                 default_value="true",
                 description="Publish the filtered cloud with RELIABLE QoS instead of BEST_EFFORT.",
             ),
-            DeclareLaunchArgument("crop_min_x", default_value="-0.2", description="Workspace crop minimum X in meters."),
-            DeclareLaunchArgument("crop_max_x", default_value="1.3", description="Workspace crop maximum X in meters."),
-            DeclareLaunchArgument("crop_min_y", default_value="-0.6", description="Workspace crop minimum Y in meters."),
-            DeclareLaunchArgument("crop_max_y", default_value="0.8", description="Workspace crop maximum Y in meters."),
-            DeclareLaunchArgument("crop_min_z", default_value="0.0", description="Workspace crop minimum Z in meters."),
-            DeclareLaunchArgument("crop_max_z", default_value="1.4", description="Workspace crop maximum Z in meters."),
+            DeclareLaunchArgument("crop_min_x", default_value="-1.0", description="Workspace crop minimum X in meters."),
+            DeclareLaunchArgument("crop_max_x", default_value="2.0", description="Workspace crop maximum X in meters."),
+            DeclareLaunchArgument("crop_min_y", default_value="-1.5", description="Workspace crop minimum Y in meters."),
+            DeclareLaunchArgument("crop_max_y", default_value="1.5", description="Workspace crop maximum Y in meters."),
+            DeclareLaunchArgument("crop_min_z", default_value="-0.1", description="Workspace crop minimum Z in meters."),
+            DeclareLaunchArgument("crop_max_z", default_value="1.8", description="Workspace crop maximum Z in meters."),
             DeclareLaunchArgument(
                 "target_frame",
                 default_value="world",
