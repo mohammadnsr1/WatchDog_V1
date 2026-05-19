@@ -5,4 +5,4 @@ initial_positions:
   wrist_1_joint: -1.5708
   wrist_2_joint: -1.5708
   wrist_3_joint: 0.0
-
+  finger_joint: 0.0

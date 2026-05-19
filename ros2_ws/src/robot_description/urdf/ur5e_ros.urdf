@@ -209,216 +209,172 @@
     </inertial>
   </link>
 
-
-
-
-
   <link name="onrobot_rg2_base_link">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.7"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
+    </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://robot_description/meshes/onrobot_rg2ft/visual/angle_bracket.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/base_link.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://robot_description/meshes/onrobot_rg2ft/collision/angle_bracket.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/base_link.stl"/>
       </geometry>
+      <sdf resolution="512"/>
     </collision>
-    <inertial>
-      <mass value="0.09"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
   </link>
 
-  <link name="onrobot_rg2_body_link">
+  <link name="onrobot_rg2_left_outer_knuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
+    </inertial>
     <visual>
-      <origin xyz="0 0 0.0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/body.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/outer_knuckle.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
     </visual>
     <collision>
-      <origin xyz="0 0 0.0" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/body.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/outer_knuckle.stl"/>
       </geometry>
+      <sdf resolution="512"/>
     </collision>
-    <inertial>
-      <mass value="0.65"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
   </link>
 
-  <link name="onrobot_rg2_grasp_frame">
+  <link name="onrobot_rg2_left_inner_knuckle">
     <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1e-6"/>
-      <inertia ixx="1e-9" ixy="0" ixz="0" iyy="1e-9" iyz="0" izz="1e-9"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
     </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_1_origin">
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0.0" rpy="0 0 0"/>
-      <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001"/>
-    </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_1_moment_arm_link">
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/moment_arm.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/inner_knuckle.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
     </visual>
     <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/moment_arm.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
+      <geometry>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/inner_knuckle.stl"/>
+      </geometry>
+      <sdf resolution="512"/>
+    </collision>
   </link>
 
-  <link name="onrobot_rg2_finger_1_truss_arm_link">
+  <link name="onrobot_rg2_left_inner_finger">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
+    </inertial>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/truss_arm.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/inner_finger.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
     </visual>
     <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/truss_arm.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
+      <geometry>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/inner_finger.stl"/>
+      </geometry>
+      <sdf resolution="512"/>
+    </collision>
   </link>
 
-  <link name="onrobot_rg2_finger_1_finger_tip_link">
+  <link name="onrobot_rg2_right_outer_knuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
+    </inertial>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/finger_tip.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/outer_knuckle.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
     </visual>
     <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/finger_tip_1.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
+      <geometry>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/outer_knuckle.stl"/>
+      </geometry>
+      <sdf resolution="512"/>
+    </collision>
   </link>
 
-  <link name="onrobot_rg2_finger_1_flex_finger_link">
+  <link name="onrobot_rg2_right_inner_knuckle">
+    <inertial>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
+    </inertial>
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/flex_finger.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/inner_knuckle.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.8 0.8 0.8 1"/>
+      </material>
     </visual>
     <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/flex_finger.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/inner_knuckle.stl"/>
       </geometry>
+      <sdf resolution="512"/>
     </collision>
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
   </link>
 
-  <link name="onrobot_rg2_finger_2_origin">
+  <link name="onrobot_rg2_right_inner_finger">
     <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001"/>
+      <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.0E-03" ixy="1.0E-06" ixz="1.0E-06" iyy="1.0E-03" iyz="1.0E-06" izz="1.0E-03"/>
     </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_2_moment_arm_link">
     <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/moment_arm.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/visual/inner_finger.stl"/>
       </geometry>
+      <material name="">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
     </visual>
     <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/moment_arm.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_2_truss_arm_link">
-    <visual>
       <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/truss_arm.stl"/>
+        <mesh filename="package://onrobot_rg_description/meshes/rg2/collision/inner_finger.stl"/>
       </geometry>
-    </visual>
-    <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/truss_arm.stl"/>
-      </geometry>
+      <sdf resolution="512"/>
     </collision>
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_2_finger_tip_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/finger_tip.stl"/>
-      </geometry>
-    </visual>
-    <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/finger_tip_2.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
-  </link>
-
-  <link name="onrobot_rg2_finger_2_flex_finger_link">
-    <visual>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/visual/flex_finger.stl"/>
-      </geometry>
-    </visual>
-    <collision>
-      <geometry>
-        <mesh filename="package://onrobot_description/meshes/rg2_v1/collision/flex_finger.stl"/>
-      </geometry>
-    </collision>
-    <inertial>
-      <mass value="0.001"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
-    </inertial>
   </link>
 
   <joint name="shoulder_pan_joint" type="revolute">
@@ -479,97 +435,59 @@
   <joint name="Gripper_joint" type="fixed">
     <parent link="wrist_3_link"/>
     <child link="onrobot_rg2_base_link"/>
-    <origin xyz="0 0 0.0" rpy="0 0 0"/>
+    <origin xyz="0 0 0.0" rpy="0 0 -1.5707963267948966"/>
   </joint>
 
-  <joint name="onrobot_rg2_base_to_body_joint" type="fixed">
+  <joint name="finger_joint" type="revolute">
+    <origin xyz="0 -0.017178 0.125797" rpy="0 0 0"/>
     <parent link="onrobot_rg2_base_link"/>
-    <child link="onrobot_rg2_body_link"/>
-    <origin xyz="0.0 0.0 0.05" rpy="0.0 0.0 0.0"/>
+    <child link="onrobot_rg2_left_outer_knuckle"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="-0.558505" upper="0.785398" velocity="100.0" effort="1000"/>
   </joint>
 
-  <joint name="onrobot_rg2_body_to_grasp_frame_joint" type="fixed">
-    <parent link="onrobot_rg2_body_link"/>
-    <child link="onrobot_rg2_grasp_frame"/>
-    <origin xyz="0.0 0.0 0.14" rpy="0.0 0.0 0.0"/>
+  <joint name="left_inner_knuckle_joint" type="revolute">
+    <origin xyz="0 -0.007678 0.1422970" rpy="0 0 0"/>
+    <parent link="onrobot_rg2_base_link"/>
+    <child link="onrobot_rg2_left_inner_knuckle"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.785398" upper="0.785398" velocity="100.0" effort="1000"/>
+    <mimic joint="finger_joint" multiplier="-1" offset="0"/>
   </joint>
 
-  <joint name="onrobot_rg2_body_to_finger_1_origin_joint" type="fixed">
-    <parent link="onrobot_rg2_body_link"/>
-    <child link="onrobot_rg2_finger_1_origin"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+  <joint name="left_inner_finger_joint" type="revolute">
+    <origin xyz="0 -0.039592 0.038177" rpy="0 0 0"/>
+    <parent link="onrobot_rg2_left_outer_knuckle"/>
+    <child link="onrobot_rg2_left_inner_finger"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.872665" upper="0.872665" velocity="100.0" effort="1000"/>
+    <mimic joint="finger_joint" multiplier="1" offset="0"/>
   </joint>
 
-  <joint name="onrobot_rg2_finger_1_origin_to_moment_arm_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_1_origin"/>
-    <child link="onrobot_rg2_finger_1_moment_arm_link"/>
-    <axis xyz="0 1 0"/>
-    <origin xyz="-0.017 0.0 0.055" rpy="0.0 -0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <dynamics damping="0.17"/>
+  <joint name="right_outer_knuckle_joint" type="revolute">
+    <origin xyz="0 0.017178 0.125797" rpy="0 0 3.141592653589793"/>
+    <parent link="onrobot_rg2_base_link"/>
+    <child link="onrobot_rg2_right_outer_knuckle"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.785398" upper="0.785398" velocity="100.0" effort="1000"/>
+    <mimic joint="finger_joint" multiplier="-1" offset="0"/>
   </joint>
 
-  <joint name="onrobot_rg2_finger_1_origin_to_truss_arm_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_1_origin"/>
-    <child link="onrobot_rg2_finger_1_truss_arm_link"/>
-    <axis xyz="0 1 0"/>
-    <origin xyz="-0.0075 0.0 0.0715" rpy="0.0 -0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
+  <joint name="right_inner_knuckle_joint" type="revolute">
+    <origin xyz="0 0.007678 0.1422970" rpy="0 0 -3.141592653589793"/>
+    <parent link="onrobot_rg2_base_link"/>
+    <child link="onrobot_rg2_right_inner_knuckle"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.785398" upper="0.785398" velocity="100.0" effort="1000"/>
+    <mimic joint="finger_joint" multiplier="-1" offset="0"/>
   </joint>
 
-  <joint name="onrobot_rg2_finger_1_truss_arm_to_finger_tip_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_1_truss_arm_link"/>
-    <child link="onrobot_rg2_finger_1_finger_tip_link"/>
-    <axis xyz="0 -1 0"/>
-    <origin xyz="-0.0256 0.0 0.04868" rpy="0.0 0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_finger_1_finger_tip_to_flex_finger_joint" type="fixed">
-    <parent link="onrobot_rg2_finger_1_finger_tip_link"/>
-    <child link="onrobot_rg2_finger_1_flex_finger_link"/>
-    <origin xyz="0.03059 0.0 0.0172" rpy="0.0 0.0 0.0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_body_to_finger_2_origin_joint" type="fixed">
-    <parent link="onrobot_rg2_body_link"/>
-    <child link="onrobot_rg2_finger_2_origin"/>
-    <origin xyz="0 0 0" rpy="0 0 -3.141592653589793"/>
-  </joint>
-
-  <joint name="onrobot_rg2_finger_2_origin_to_moment_arm_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_2_origin"/>
-    <child link="onrobot_rg2_finger_2_moment_arm_link"/>
-    <axis xyz="0 1 0"/>
-    <origin xyz="-0.017 0.0 0.055" rpy="0.0 -0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <dynamics damping="0.17"/>
-    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_finger_2_origin_to_truss_arm_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_2_origin"/>
-    <child link="onrobot_rg2_finger_2_truss_arm_link"/>
-    <axis xyz="0 1 0"/>
-    <origin xyz="-0.0075 0.0 0.0715" rpy="0.0 -0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_finger_2_truss_arm_to_finger_tip_joint" type="revolute">
-    <parent link="onrobot_rg2_finger_2_truss_arm_link"/>
-    <child link="onrobot_rg2_finger_2_finger_tip_link"/>
-    <axis xyz="0 -1 0"/>
-    <origin xyz="-0.0256 0.0 0.04868" rpy="0.0 0.772 0.0"/>
-    <limit lower="0.0" upper="1.218" effort="10.0" velocity="50.0"/>
-    <mimic joint="onrobot_rg2_finger_1_origin_to_moment_arm_joint" multiplier="1" offset="0"/>
-  </joint>
-
-  <joint name="onrobot_rg2_finger_2_finger_tip_to_flex_finger_joint" type="fixed">
-    <parent link="onrobot_rg2_finger_2_finger_tip_link"/>
-    <child link="onrobot_rg2_finger_2_flex_finger_link"/>
-    <origin xyz="0.03059 0.0 0.0172" rpy="0.0 0.0 0.0"/>
+  <joint name="right_inner_finger_joint" type="revolute">
+    <origin xyz="0 -0.039592 0.038177" rpy="0 0 0"/>
+    <parent link="onrobot_rg2_right_outer_knuckle"/>
+    <child link="onrobot_rg2_right_inner_finger"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-0.872665" upper="0.872665" velocity="100.0" effort="1000"/>
+    <mimic joint="finger_joint" multiplier="1" offset="0"/>
   </joint>
 </robot>
