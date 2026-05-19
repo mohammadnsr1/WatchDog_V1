@@ -29,11 +29,5 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(
-  PROGRAMS sim_moveit_bringup/rg2_gripper_bridge.py
-  DESTINATION lib/${PROJECT_NAME}
-  RENAME rg2_gripper_bridge
-)
-
 ament_package()
 
