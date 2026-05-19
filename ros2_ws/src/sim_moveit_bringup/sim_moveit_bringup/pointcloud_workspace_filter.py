@@ -20,6 +20,7 @@ class PointCloudWorkspaceFilter(Node):
         self.declare_parameter("input_topic", "/camera/depth/points")
         self.declare_parameter("output_topic", "/camera/depth/points_filtered")
         self.declare_parameter("target_frame", "world")
+        self.declare_parameter("output_stamp_mode", "now")
         self.declare_parameter("max_publish_rate", 2.0)
         self.declare_parameter("use_crop_box", True)
         self.declare_parameter("crop_min_x", -0.2)
@@ -34,7 +35,8 @@ class PointCloudWorkspaceFilter(Node):
 
         self.input_topic = self.get_parameter("input_topic").value
         self.output_topic = self.get_parameter("output_topic").value
-        self.target_frame = self.get_parameter("target_frame").value
+        self.target_frame = str(self.get_parameter("target_frame").value).strip()
+        self.output_stamp_mode = str(self.get_parameter("output_stamp_mode").value).strip().lower()
         self.max_publish_rate = float(self.get_parameter("max_publish_rate").value)
         self.use_crop_box = bool(self.get_parameter("use_crop_box").value)
         self.crop_min_x = float(self.get_parameter("crop_min_x").value)
@@ -46,6 +48,9 @@ class PointCloudWorkspaceFilter(Node):
         self.use_voxel_filter = bool(self.get_parameter("use_voxel_filter").value)
         self.voxel_leaf_size = float(self.get_parameter("voxel_leaf_size").value)
         self.reliable_output_qos = bool(self.get_parameter("reliable_output_qos").value)
+
+        if self.output_stamp_mode not in {"now", "input"}:
+            raise ValueError("output_stamp_mode must be one of: now, input.")
 
         if self.use_crop_box:
             self._validate_crop_bounds()
@@ -102,6 +107,7 @@ class PointCloudWorkspaceFilter(Node):
         self.get_logger().info(f"Point cloud filter input topic: {self.input_topic}")
         self.get_logger().info(f"Point cloud filter output topic: {self.output_topic}")
         self.get_logger().info(f"Point cloud filter target frame: {self.target_frame}")
+        self.get_logger().info(f"Point cloud filter output stamp mode: {self.output_stamp_mode}")
         self.get_logger().info(
             "Point cloud filter crop limits: "
             f"x=[{self.crop_min_x}, {self.crop_max_x}] "
@@ -181,8 +187,8 @@ class PointCloudWorkspaceFilter(Node):
             ]
 
         output_header = Header()
-        output_header.frame_id = self.target_frame
-        if msg.header.stamp.sec == 0 and msg.header.stamp.nanosec == 0:
+        output_header.frame_id = self.target_frame.strip()
+        if self.output_stamp_mode == "now":
             output_header.stamp = self.get_clock().now().to_msg()
         else:
             output_header.stamp = msg.header.stamp
@@ -190,6 +196,16 @@ class PointCloudWorkspaceFilter(Node):
         filtered_cloud = point_cloud2.create_cloud_xyz32(output_header, filtered_points)
         self.publisher.publish(filtered_cloud)
         self._last_publish_time_sec = now_sec
+
+        if self._should_log("stamp_mode", 2.0):
+            self.get_logger().info(
+                "Point cloud filter stamps: "
+                f"input_stamp={self._format_stamp(msg.header.stamp)} "
+                f"output_stamp={self._format_stamp(filtered_cloud.header.stamp)} "
+                f"input_frame={msg.header.frame_id!r} "
+                f"output_frame={filtered_cloud.header.frame_id!r} "
+                f"output_stamp_mode={self.output_stamp_mode}"
+            )
 
         if self._should_log("stats", 10.0):
             self.get_logger().info(
@@ -244,6 +260,10 @@ class PointCloudWorkspaceFilter(Node):
             rot_y + translation.y,
             rot_z + translation.z,
         )
+
+    @staticmethod
+    def _format_stamp(stamp) -> str:
+        return f"{stamp.sec}.{stamp.nanosec:09d}"
 
     def _point_in_crop_box(self, x: float, y: float, z: float) -> bool:
         return (

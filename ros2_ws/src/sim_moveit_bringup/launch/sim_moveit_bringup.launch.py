@@ -42,12 +42,14 @@ def _launch_setup(context):
     raw_topic_value = raw_pointcloud_topic.perform(context)
     filtered_topic_value = filtered_pointcloud_topic.perform(context)
     direct_topic_value = pointcloud_topic.perform(context)
+    target_frame_value = target_frame.perform(context).strip()
     moveit_pointcloud_topic = filtered_topic_value if filter_enabled else direct_topic_value
     actions = [
         LogInfo(msg="Isaac Sim must already be running and simulation must be playing."),
         LogInfo(msg=["Raw point cloud topic: ", raw_pointcloud_topic]),
         LogInfo(msg=["MoveIt point cloud topic: ", moveit_pointcloud_topic]),
         LogInfo(msg=["Camera TF config: ", camera_config]),
+        LogInfo(msg=f"MoveIt octomap_frame: '{target_frame_value}'"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(PathJoinSubstitution([ur5e_launch_dir, "rsp.launch.py"])),
             launch_arguments={"use_sim_time": use_sim_time}.items(),
@@ -62,7 +64,7 @@ def _launch_setup(context):
                 "max_update_rate": pointcloud_filter_rate,
                 "octomap_max_range": "2.0",
                 "filtered_cloud_topic": "/moveit/filtered_cloud",
-                "octomap_frame": target_frame,
+                "octomap_frame": target_frame_value,
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -112,7 +114,8 @@ def _launch_setup(context):
                         "use_sim_time": use_sim_time,
                         "input_topic": raw_topic_value,
                         "output_topic": filtered_topic_value,
-                        "target_frame": target_frame.perform(context),
+                        "target_frame": target_frame_value,
+                        "output_stamp_mode": "now",
                         "max_publish_rate": float(pointcloud_filter_rate.perform(context)),
                         "use_crop_box": _is_truthy(use_crop_box.perform(context)),
                         "crop_min_x": float(crop_min_x.perform(context)),

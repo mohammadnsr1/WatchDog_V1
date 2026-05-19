@@ -25,6 +25,12 @@ install(
 )
 
 install(
+  PROGRAMS sim_moveit_bringup/print_current_collisions.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME print_current_collisions
+)
+
+install(
   FILES README.md
   DESTINATION share/${PROJECT_NAME}
 )

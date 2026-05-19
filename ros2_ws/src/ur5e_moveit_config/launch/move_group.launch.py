@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -24,7 +24,8 @@ def _load_yaml(relative_path: str):
 
 def _load_octomap_config(context):
     octomap_config = _load_yaml("config/sensors_3d.yaml")
-    octomap_config["octomap_frame"] = LaunchConfiguration("octomap_frame").perform(context)
+    octomap_frame = LaunchConfiguration("octomap_frame").perform(context).strip()
+    octomap_config["octomap_frame"] = octomap_frame
     octomap_config["octomap_resolution"] = float(
         LaunchConfiguration("octomap_resolution").perform(context)
     )
@@ -79,6 +80,16 @@ def _launch_setup(context):
 
     if use_octomap.perform(context).lower() in {"true", "1", "yes", "on"}:
         parameters.append(_load_octomap_config(context))
+        octomap_frame = parameters[-1]["octomap_frame"]
+        return [
+            LogInfo(msg=f"MoveIt octomap_frame: '{octomap_frame}'"),
+            Node(
+                package="moveit_ros_move_group",
+                executable="move_group",
+                output="screen",
+                parameters=parameters,
+            )
+        ]
 
     return [
         Node(
