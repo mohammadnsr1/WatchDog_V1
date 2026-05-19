@@ -5,3 +5,4 @@ initial_positions:
   wrist_1_joint: -1.5708
   wrist_2_joint: -1.5708
   wrist_3_joint: 0.0
+  onrobot_rg2_finger_1_origin_to_moment_arm_joint: 0.113
