@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import sys
+from collections import Counter
 from typing import Optional
 
 import rclpy
@@ -69,9 +70,40 @@ def main() -> None:
     try:
         response = node.check_current_state()
         print(f"valid: {response.valid}")
+
+        joint_state = node._latest_joint_state
+        rg2_joint_names = [
+            "onrobot_rg2_finger_1_origin_to_moment_arm_joint",
+            "onrobot_rg2_finger_1_origin_to_truss_arm_joint",
+            "onrobot_rg2_finger_1_truss_arm_to_finger_tip_joint",
+            "onrobot_rg2_finger_2_origin_to_moment_arm_joint",
+            "onrobot_rg2_finger_2_origin_to_truss_arm_joint",
+            "onrobot_rg2_finger_2_truss_arm_to_finger_tip_joint",
+        ]
+        print("rg2_joints:")
+        if joint_state is None:
+            print("- unavailable")
+        else:
+            joint_map = dict(zip(joint_state.name, joint_state.position))
+            for joint_name in rg2_joint_names:
+                value = joint_map.get(joint_name)
+                if value is None:
+                    print(f"- {joint_name}: <missing>")
+                else:
+                    print(f"- {joint_name}: {value:.6f}")
+
         if not response.contacts:
             print("contacts: none")
             return
+
+        pair_counts = Counter()
+        for contact in response.contacts:
+            pair = tuple(sorted((contact.contact_body_1, contact.contact_body_2)))
+            pair_counts[pair] += 1
+
+        print("contact_pair_counts:")
+        for (body_1, body_2), count in sorted(pair_counts.items()):
+            print(f"- {body_1} <-> {body_2}: {count}")
 
         print("contacts:")
         for contact in response.contacts:
