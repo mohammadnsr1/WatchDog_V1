@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import math
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import rclpy
 from rclpy.duration import Duration
@@ -20,7 +20,7 @@ class PointCloudWorkspaceFilter(Node):
         self.declare_parameter("input_topic", "/camera/depth/points")
         self.declare_parameter("output_topic", "/camera/depth/points_filtered")
         self.declare_parameter("target_frame", "world")
-        self.declare_parameter("output_stamp_mode", "now")
+        self.declare_parameter("output_stamp_mode", "input")
         self.declare_parameter("max_publish_rate", 2.0)
         self.declare_parameter("use_crop_box", True)
         self.declare_parameter("crop_min_x", -0.2)
@@ -50,7 +50,7 @@ class PointCloudWorkspaceFilter(Node):
         self.reliable_output_qos = bool(self.get_parameter("reliable_output_qos").value)
 
         if self.output_stamp_mode not in {"now", "input"}:
-            raise ValueError("output_stamp_mode must be one of: now, input.")
+            raise ValueError("output_stamp_mode must be one of: input, now. Use now only as an emergency/debug workaround.")
 
         if self.use_crop_box:
             self._validate_crop_bounds()
@@ -107,7 +107,10 @@ class PointCloudWorkspaceFilter(Node):
         self.get_logger().info(f"Point cloud filter input topic: {self.input_topic}")
         self.get_logger().info(f"Point cloud filter output topic: {self.output_topic}")
         self.get_logger().info(f"Point cloud filter target frame: {self.target_frame}")
-        self.get_logger().info(f"Point cloud filter output stamp mode: {self.output_stamp_mode}")
+        self.get_logger().info(
+            f"Point cloud filter output stamp mode: {self.output_stamp_mode} "
+            "(default: input; now is an emergency/debug workaround that can create robot ghost points from stale clouds during motion)."
+        )
         self.get_logger().info(
             "Point cloud filter crop limits: "
             f"x=[{self.crop_min_x}, {self.crop_max_x}] "
@@ -197,19 +200,17 @@ class PointCloudWorkspaceFilter(Node):
         self.publisher.publish(filtered_cloud)
         self._last_publish_time_sec = now_sec
 
-        if self._should_log("stamp_mode", 2.0):
-            self.get_logger().info(
-                "Point cloud filter stamps: "
-                f"input_stamp={self._format_stamp(msg.header.stamp)} "
-                f"output_stamp={self._format_stamp(filtered_cloud.header.stamp)} "
-                f"input_frame={msg.header.frame_id!r} "
-                f"output_frame={filtered_cloud.header.frame_id!r} "
-                f"output_stamp_mode={self.output_stamp_mode}"
-            )
-
         if self._should_log("stats", 10.0):
+            node_now = self.get_clock().now()
             self.get_logger().info(
                 "Point cloud filter stats: "
+                f"input_stamp={self._format_stamp(msg.header.stamp)} "
+                f"output_stamp={self._format_stamp(filtered_cloud.header.stamp)} "
+                f"node_now={self._format_stamp(node_now.to_msg())} "
+                f"input_age_sec={self._format_age_sec(node_now, msg.header.stamp)} "
+                f"output_age_sec={self._format_age_sec(node_now, filtered_cloud.header.stamp)} "
+                f"output_stamp_mode={self.output_stamp_mode} "
+                "(expected: input_age_sec should stay small after Isaac simulation time is reset; large input_age_sec usually means Isaac time was not reset or camera stamps are out of sync with /clock) "
                 f"raw={raw_count} cropped={cropped_count} filtered={len(filtered_points)}"
             )
 
@@ -260,10 +261,24 @@ class PointCloudWorkspaceFilter(Node):
             rot_y + translation.y,
             rot_z + translation.z,
         )
-
+    
+    
     @staticmethod
     def _format_stamp(stamp) -> str:
         return f"{stamp.sec}.{stamp.nanosec:09d}"
+    
+    
+    @staticmethod
+    def _stamp_to_sec(stamp) -> Optional[float]:
+        if stamp.sec == 0 and stamp.nanosec == 0:
+            return None
+        return stamp.sec + (stamp.nanosec / 1e9)
+
+    def _format_age_sec(self, now: Time, stamp) -> str:
+        stamp_sec = self._stamp_to_sec(stamp)
+        if stamp_sec is None:
+            return "n/a"
+        return f"{(now.nanoseconds / 1e9) - stamp_sec:.3f}"
 
     def _point_in_crop_box(self, x: float, y: float, z: float) -> bool:
         return (

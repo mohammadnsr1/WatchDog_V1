@@ -34,6 +34,7 @@ def _launch_setup(context):
     crop_min_z = LaunchConfiguration("crop_min_z")
     crop_max_z = LaunchConfiguration("crop_max_z")
     target_frame = LaunchConfiguration("target_frame")
+    output_stamp_mode = LaunchConfiguration("output_stamp_mode")
 
     ur5e_launch_dir = PathJoinSubstitution([FindPackageShare("ur5e_moveit_config"), "launch"])
     bridge_launch_dir = PathJoinSubstitution([FindPackageShare("isaac_trajectory_bridge"), "launch"])
@@ -46,6 +47,13 @@ def _launch_setup(context):
     moveit_pointcloud_topic = filtered_topic_value if filter_enabled else direct_topic_value
     actions = [
         LogInfo(msg="Isaac Sim must already be running and simulation must be playing."),
+        LogInfo(
+            msg=(
+                "Reset Isaac Sim simulation time before starting this bringup. "
+                "/clock, /joint_states, TF, and camera point cloud stamps must share the same simulation-time base. "
+                "The bringup uses point cloud input stamps by default."
+            )
+        ),
         LogInfo(msg=["Raw point cloud topic: ", raw_pointcloud_topic]),
         LogInfo(msg=["MoveIt point cloud topic: ", moveit_pointcloud_topic]),
         LogInfo(msg=["Camera TF config: ", camera_config]),
@@ -116,7 +124,7 @@ def _launch_setup(context):
                         "input_topic": raw_topic_value,
                         "output_topic": filtered_topic_value,
                         "target_frame": target_frame_value,
-                        "output_stamp_mode": "now",
+                        "output_stamp_mode": output_stamp_mode,
                         "max_publish_rate": float(pointcloud_filter_rate.perform(context)),
                         "use_crop_box": _is_truthy(use_crop_box.perform(context)),
                         "crop_min_x": float(crop_min_x.perform(context)),
@@ -201,6 +209,16 @@ def generate_launch_description():
                 "pointcloud_filter_rate",
                 default_value="2.0",
                 description="Maximum publish rate for the filtered point cloud in Hz.",
+            ),
+            DeclareLaunchArgument(
+                "output_stamp_mode",
+                default_value="input",
+                description=(
+                    "Point cloud output stamp mode: use input by default after resetting Isaac simulation time "
+                    "so cloud, TF, and robot state stay time-consistent; use now only as an emergency/debug "
+                    "workaround for stale sensor stamps, because restamping old clouds as now can create "
+                    "robot ghost points in the MoveIt octomap during motion."
+                ),
             ),
             DeclareLaunchArgument(
                 "voxel_leaf_size",

@@ -1,6 +1,7 @@
 # MoveIt 3D perception configuration for occupancy-map updates from Isaac.
 # sim_moveit_bringup can override the point cloud topic and update rate dynamically.
 # TF must connect the cloud frame to the MoveIt planning frame for updates to work.
+# The MoveIt octomap updater expects time-consistent point clouds; do not restamp old sensor data as now.
 
 octomap_frame: world
 octomap_resolution: 0.05
@@ -13,7 +14,8 @@ isaac_point_cloud:
   point_cloud_topic: /camera/depth/points_filtered
   max_range: 2.0
   point_subsample: 1
-  padding_offset: 0.06
+  # Diagnostic padding increase to test whether self-filter leakage is primarily collision-geometry/padding related.
+  padding_offset: 0.10
   padding_scale: 1.0
   max_update_rate: 2.0
   # /moveit/filtered_cloud is the MoveIt robot-self-filtered diagnostic output.
