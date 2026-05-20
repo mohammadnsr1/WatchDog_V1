@@ -6,6 +6,8 @@ It connects the stack like this:
 
 `MoveIt -> /arm_controller/follow_joint_trajectory -> isaac_trajectory_bridge -> /joint_command -> Isaac`
 
+It also includes a separate gripper-only RG2 controller documented in `README_RG2_CONTROLLER.md`, with `SetGripperPosition` provided by the `isaac_trajectory_bridge_interfaces` package.
+
 The bridge:
 
 - accepts `control_msgs/action/FollowJointTrajectory` goals

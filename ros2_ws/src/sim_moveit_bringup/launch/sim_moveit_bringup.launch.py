@@ -35,6 +35,11 @@ def _launch_setup(context):
     crop_max_z = LaunchConfiguration("crop_max_z")
     target_frame = LaunchConfiguration("target_frame")
     output_stamp_mode = LaunchConfiguration("output_stamp_mode")
+    start_rg2_controller = LaunchConfiguration("start_rg2_controller")
+    rg2_open_position = LaunchConfiguration("rg2_open_position")
+    rg2_close_position = LaunchConfiguration("rg2_close_position")
+    rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
+    rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
 
     ur5e_launch_dir = PathJoinSubstitution([FindPackageShare("ur5e_moveit_config"), "launch"])
     bridge_launch_dir = PathJoinSubstitution([FindPackageShare("isaac_trajectory_bridge"), "launch"])
@@ -90,6 +95,25 @@ def _launch_setup(context):
                 "use_sim_time": use_sim_time,
                 "publish_full_joint_command": "false",
             }.items(),
+        ),
+        Node(
+            package="isaac_trajectory_bridge",
+            executable="rg2_controller",
+            name="rg2_controller",
+            output="screen",
+            condition=IfCondition(start_rg2_controller),
+            parameters=[
+                {
+                    "use_sim_time": use_sim_time,
+                    "joint_state_topic": "/joint_states",
+                    "joint_command_topic": "/joint_command",
+                    "service_namespace": "/rg2_controller",
+                    "open_position": float(rg2_open_position.perform(context)),
+                    "close_position": float(rg2_close_position.perform(context)),
+                    "command_duration_sec": float(rg2_command_duration_sec.perform(context)),
+                    "command_rate_hz": float(rg2_command_rate_hz.perform(context)),
+                }
+            ],
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -219,6 +243,31 @@ def generate_launch_description():
                     "workaround for stale sensor stamps, because restamping old clouds as now can create "
                     "robot ghost points in the MoveIt octomap during motion."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "start_rg2_controller",
+                default_value="true",
+                description="Start the gripper-only RG2 controller node.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_open_position",
+                default_value="0.785398",
+                description="Default RG2 open target in master joint radians for finger_joint.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_close_position",
+                default_value="-0.558505",
+                description="Default RG2 close target in master joint radians for finger_joint.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_command_duration_sec",
+                default_value="1.0",
+                description="Duration in seconds for RG2 gripper interpolation commands.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_command_rate_hz",
+                default_value="50.0",
+                description="Publish rate in Hz for RG2 gripper interpolation commands.",
             ),
             DeclareLaunchArgument(
                 "voxel_leaf_size",

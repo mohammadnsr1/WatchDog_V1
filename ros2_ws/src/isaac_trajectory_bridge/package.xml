@@ -2,17 +2,19 @@
 <package format="3">
   <name>isaac_trajectory_bridge</name>
   <version>0.1.0</version>
-  <description>ROS 2 FollowJointTrajectory bridge from MoveIt to Isaac Sim joint commands.</description>
+  <description>ROS 2 trajectory bridge and RG2 gripper controller for Isaac Sim joint commands.</description>
   <maintainer email="mohammadnsr1@example.com">mohammadnsr1</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>control_msgs</depend>
+  <depend>isaac_trajectory_bridge_interfaces</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
   <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>trajectory_msgs</depend>
 
   <export>

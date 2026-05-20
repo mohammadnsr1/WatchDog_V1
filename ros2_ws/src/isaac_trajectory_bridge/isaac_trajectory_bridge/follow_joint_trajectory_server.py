@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import threading
 import time
 from typing import List, Optional, Sequence, Tuple
