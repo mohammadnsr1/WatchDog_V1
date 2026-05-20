@@ -80,7 +80,7 @@ def _launch_setup(context):
             ),
             launch_arguments={
                 "use_sim_time": use_sim_time,
-                "publish_full_joint_command": "true",
+                "publish_full_joint_command": "false",
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -95,8 +95,9 @@ def _launch_setup(context):
         ),
         LogInfo(
             msg=(
-                "The bringup launch passes publish_full_joint_command:=true to the "
-                "trajectory bridge because that argument is supported today."
+                "The bringup launch uses arm-only /joint_command publishing by "
+                "default to avoid commanding RG2 gripper joints during MoveIt arm "
+                "execution."
             )
         ),
     ]

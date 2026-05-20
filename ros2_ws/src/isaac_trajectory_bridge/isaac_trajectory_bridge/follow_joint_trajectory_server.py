@@ -77,6 +77,15 @@ class FollowJointTrajectoryBridge(Node):
             self.get_parameter("log_extra_joints_once").get_parameter_value().bool_value
         )
 
+        command_mode = (
+            "full joint command mode"
+            if self.publish_full_joint_command
+            else "arm-only command mode"
+        )
+        self.get_logger().info(
+            f"Bridge configured for {command_mode}."
+        )
+
         if len(self.joint_names) != 6:
             raise ValueError("Parameter 'joint_names' must contain exactly 6 joints.")
         if self.goal_tolerance <= 0.0:

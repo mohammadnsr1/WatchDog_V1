@@ -17,10 +17,13 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "publish_full_joint_command",
-                default_value="true",
+                default_value="false",
                 description=(
-                    "Publish all joints seen in /joint_states to /joint_command while "
-                    "overwriting only the 6 arm joints from MoveIt."
+                    "false = publish only the configured arm joints to "
+                    "/joint_command; true = publish all joints from /joint_states "
+                    "while overwriting the arm joints, which should only be used if "
+                    "Isaac requires full-articulation commands and gripper "
+                    "preservation is known safe."
                 ),
             ),
             Node(
