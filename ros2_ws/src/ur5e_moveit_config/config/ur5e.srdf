@@ -35,5 +35,9 @@
   <disable_collisions link1="onrobot_rg2_base_link" link2="onrobot_rg2_right_outer_knuckle" reason="Adjacent"/>
   <disable_collisions link1="onrobot_rg2_base_link" link2="onrobot_rg2_right_inner_knuckle" reason="Adjacent"/>
   <disable_collisions link1="onrobot_rg2_left_outer_knuckle" link2="onrobot_rg2_left_inner_finger" reason="Adjacent"/>
+  <disable_collisions link1="onrobot_rg2_left_inner_finger" link2="onrobot_rg2_left_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="onrobot_rg2_left_inner_knuckle" link2="onrobot_rg2_left_outer_knuckle" reason="Adjacent"/>
   <disable_collisions link1="onrobot_rg2_right_outer_knuckle" link2="onrobot_rg2_right_inner_finger" reason="Adjacent"/>
+  <disable_collisions link1="onrobot_rg2_right_inner_finger" link2="onrobot_rg2_right_inner_knuckle" reason="Adjacent"/>
+  <disable_collisions link1="onrobot_rg2_right_inner_knuckle" link2="onrobot_rg2_right_outer_knuckle" reason="Adjacent"/>
 </robot>

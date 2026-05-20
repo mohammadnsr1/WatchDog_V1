@@ -73,12 +73,12 @@ def main() -> None:
 
         joint_state = node._latest_joint_state
         rg2_joint_names = [
-            "onrobot_rg2_finger_1_origin_to_moment_arm_joint",
-            "onrobot_rg2_finger_1_origin_to_truss_arm_joint",
-            "onrobot_rg2_finger_1_truss_arm_to_finger_tip_joint",
-            "onrobot_rg2_finger_2_origin_to_moment_arm_joint",
-            "onrobot_rg2_finger_2_origin_to_truss_arm_joint",
-            "onrobot_rg2_finger_2_truss_arm_to_finger_tip_joint",
+            "finger_joint",
+            "left_inner_knuckle_joint",
+            "right_inner_knuckle_joint",
+            "right_outer_knuckle_joint",
+            "left_inner_finger_joint",
+            "right_inner_finger_joint",
         ]
         print("rg2_joints:")
         if joint_state is None:
