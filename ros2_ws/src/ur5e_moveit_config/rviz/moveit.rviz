@@ -10,7 +10,6 @@ Panels:
         - /MotionPlanning1/Scene Robot1
         - /MotionPlanning1/Planning Request1
         - /MotionPlanning1/Planning Metrics1
-        - /PointCloud21
       Splitter Ratio: 0.550000011920929
     Tree Height: 338
   - Class: rviz_common/Selection
@@ -223,7 +222,7 @@ Visualization Manager:
       Update Interval: 0
       Value: true
       Visual Enabled: true
-    - Alpha: 0.35
+    - Alpha: 0.3499999940395355
       Class: rviz_default_plugins/RobotModel
       Collision Enabled: true
       Description File: ""
@@ -499,7 +498,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -519,7 +518,7 @@ Visualization Manager:
         Value: /moveit/filtered_cloud
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
