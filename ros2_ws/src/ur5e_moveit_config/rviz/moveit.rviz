@@ -252,14 +252,14 @@ Visualization Manager:
       Class: moveit_rviz_plugin/MotionPlanning
       Enabled: true
       Move Group Namespace: ""
-      MoveIt_Allow_Approximate_IK: false
+      MoveIt_Allow_Approximate_IK: true
       MoveIt_Allow_External_Program: false
       MoveIt_Allow_Replanning: false
       MoveIt_Allow_Sensor_Positioning: false
       MoveIt_Planning_Attempts: 10
       MoveIt_Planning_Time: 5
       MoveIt_Use_Cartesian_Path: false
-      MoveIt_Use_Constraint_Aware_IK: false
+      MoveIt_Use_Constraint_Aware_IK: true
       MoveIt_Workspace:
         Center:
           X: 0
@@ -598,25 +598,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.1951942443847656
+      Distance: 2.8683388233184814
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.16577155888080597
-        Y: -0.19108536839485168
-        Z: 0.20500914752483368
+        X: -0.006268884055316448
+        Y: 0.1953154057264328
+        Z: 0.3848879039287567
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.784999668598175
+      Pitch: 0.7499997019767761
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 6.263181209564209
+      Yaw: 2.0299952030181885
     Saved: ~
 Window Geometry:
   Displays:
