@@ -251,12 +251,12 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "rg2_open_position",
-                default_value="0.785398",
+                default_value="-0.558505",
                 description="Default RG2 open target in master joint radians for finger_joint.",
             ),
             DeclareLaunchArgument(
                 "rg2_close_position",
-                default_value="-0.558505",
+                default_value="0.785398",
                 description="Default RG2 close target in master joint radians for finger_joint.",
             ),
             DeclareLaunchArgument(

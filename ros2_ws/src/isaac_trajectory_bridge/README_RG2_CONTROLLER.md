@@ -34,8 +34,8 @@ The default joint multipliers and offsets match the current RG2 URDF mimic relat
 - `master_joint_name`: default `finger_joint`
 - `master_joint_min_position`: default `-0.558505`
 - `master_joint_max_position`: default `0.785398`
-- `open_position`: default `0.785398`
-- `close_position`: default `-0.558505`
+- `open_position`: default `-0.558505`
+- `close_position`: default `0.785398`
 - `command_duration_sec`: default `1.0`
 - `command_rate_hz`: default `50.0`
 - `wait_for_joint_state_timeout_sec`: default `2.0`
