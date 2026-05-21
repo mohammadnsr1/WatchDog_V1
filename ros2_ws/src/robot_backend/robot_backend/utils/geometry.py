@@ -28,20 +28,15 @@ def make_pose(
 
 
 def invert_pose(pose: PoseDict) -> PoseDict:
-    """Invert a dictionary pose.
-
-    The pose representation is:
-    {
-        "frame_id": "world",
-        "position": {"x": ..., "y": ..., "z": ...},
-        "orientation": {"x": ..., "y": ..., "z": ..., "w": ...},
-    }
-    """
+    """Invert a dictionary pose representation."""
 
     q = normalize_quaternion(dict(pose["orientation"]))
     q_inv = invert_quaternion(q)
     p = pose["position"]
-    rotated = rotate_vector({"x": -p["x"], "y": -p["y"], "z": -p["z"]}, q_inv)
+    rotated = rotate_vector(
+        {"x": -p["x"], "y": -p["y"], "z": -p["z"]},
+        q_inv,
+    )
     return make_pose(rotated, q_inv, frame_id=pose.get("frame_id"))
 
 
@@ -85,28 +80,52 @@ def invert_quaternion(quaternion: Quaternion) -> Quaternion:
     """Return the inverse of a normalized quaternion."""
 
     q = normalize_quaternion(quaternion)
-    return {"x": -q["x"], "y": -q["y"], "z": -q["z"], "w": q["w"]}
+    return {
+        "x": -q["x"],
+        "y": -q["y"],
+        "z": -q["z"],
+        "w": q["w"],
+    }
 
 
 def multiply_quaternions(left: Quaternion, right: Quaternion) -> Quaternion:
     """Multiply two quaternions."""
 
-    x1, y1, z1, w1 = left["x"], left["y"], left["z"], left["w"]
-    x2, y2, z2, w2 = right["x"], right["y"], right["z"], right["w"]
-    return normalize_quaternion(
-        {
-            "x": w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-            "y": w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-            "z": w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-            "w": w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-        }
-    )
+    return normalize_quaternion(_multiply_quaternions_raw(left, right))
 
 
 def rotate_vector(vector: Vector3, quaternion: Quaternion) -> Vector3:
     """Rotate a vector by a quaternion."""
 
     q = normalize_quaternion(quaternion)
-    v_quat = {"x": vector["x"], "y": vector["y"], "z": vector["z"], "w": 0.0}
-    rotated = multiply_quaternions(multiply_quaternions(q, v_quat), invert_quaternion(q))
-    return {"x": rotated["x"], "y": rotated["y"], "z": rotated["z"]}
+    v_quat = {
+        "x": vector["x"],
+        "y": vector["y"],
+        "z": vector["z"],
+        "w": 0.0,
+    }
+    rotated = _multiply_quaternions_raw(
+        _multiply_quaternions_raw(q, v_quat),
+        invert_quaternion(q),
+    )
+    return {
+        "x": rotated["x"],
+        "y": rotated["y"],
+        "z": rotated["z"],
+    }
+
+
+def _multiply_quaternions_raw(
+    left: dict[str, float],
+    right: dict[str, float],
+) -> dict[str, float]:
+    """Multiply two quaternions without normalization."""
+
+    x1, y1, z1, w1 = left["x"], left["y"], left["z"], left["w"]
+    x2, y2, z2, w2 = right["x"], right["y"], right["z"], right["w"]
+    return {
+        "x": w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        "y": w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        "z": w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        "w": w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    }

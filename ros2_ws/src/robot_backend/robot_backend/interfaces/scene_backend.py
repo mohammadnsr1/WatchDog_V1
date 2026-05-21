@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from abc import ABC
+from abc import abstractmethod
+from typing import Any
+from typing import Sequence
 
 
 class SceneBackend(ABC):

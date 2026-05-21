@@ -1,12 +1,14 @@
 """Backend-agnostic pick/place skill skeletons.
 
-These skills intentionally avoid direct ROS, topic, service, action, or MoveIt
-API calls. They only coordinate behavior through the backend interfaces.
+These skills intentionally avoid direct ROS, topic, service, action,
+or MoveIt API calls. They only coordinate behavior through the backend
+interfaces.
 """
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
 from robot_backend.interfaces.robot_backend import RobotBackend
 from robot_backend.utils.grasp_offsets import compute_tcp_pose_from_grasp_center
@@ -27,13 +29,17 @@ def pick_object(
     touch_links: Sequence[str] | None = None,
     retreat_pose: Any | None = None,
 ) -> dict[str, Any]:
-    """Skeleton pick sequence using backend methods only."""
+    """Run the intended backend-only pick sequence skeleton."""
 
     if object_pose is not None and object_shape is not None:
         backend.scene.add_collision_object(object_id, object_pose, object_shape)
 
     effective_grasp_pose = grasp_pose
-    if effective_grasp_pose is None and grasp_center_pose is not None and tcp_offset is not None:
+    if (
+        effective_grasp_pose is None
+        and grasp_center_pose is not None
+        and tcp_offset is not None
+    ):
         effective_grasp_pose = compute_tcp_pose_from_grasp_center(
             grasp_center_pose,
             tcp_offset,
@@ -54,7 +60,11 @@ def pick_object(
         backend.motion.move_to_pose(effective_grasp_pose)
 
     backend.gripper.close()
-    backend.scene.attach_object(object_id, attach_link_name, touch_links=touch_links)
+    backend.scene.attach_object(
+        object_id,
+        attach_link_name,
+        touch_links=touch_links,
+    )
 
     if retreat_pose is not None:
         backend.motion.move_to_pose(retreat_pose)
@@ -78,10 +88,14 @@ def place_object(
     place_pose: Any | None = None,
     retreat_pose: Any | None = None,
 ) -> dict[str, Any]:
-    """Skeleton place sequence using backend methods only."""
+    """Run the intended backend-only place sequence skeleton."""
 
     effective_place_pose = place_pose
-    if effective_place_pose is None and place_grasp_center_pose is not None and tcp_offset is not None:
+    if (
+        effective_place_pose is None
+        and place_grasp_center_pose is not None
+        and tcp_offset is not None
+    ):
         effective_place_pose = compute_tcp_pose_from_grasp_center(
             place_grasp_center_pose,
             tcp_offset,
@@ -97,12 +111,19 @@ def place_object(
     backend.gripper.open()
 
     if place_object_pose is not None and object_shape is not None:
-        backend.scene.add_collision_object(object_id, place_object_pose, object_shape)
+        backend.scene.add_collision_object(
+            object_id,
+            place_object_pose,
+            object_shape,
+        )
 
     if retreat_pose is not None:
         backend.motion.move_to_pose(retreat_pose)
 
-    return {"status": "place_sequence_requested", "object_id": object_id}
+    return {
+        "status": "place_sequence_requested",
+        "object_id": object_id,
+    }
 
 
 def pick_and_place(
@@ -115,4 +136,7 @@ def pick_and_place(
 
     pick_result = pick_object(backend, **pick_kwargs)
     place_result = place_object(backend, **place_kwargs)
-    return {"pick": pick_result, "place": place_result}
+    return {
+        "pick": pick_result,
+        "place": place_result,
+    }

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any
+from typing import Sequence
 
 import rclpy
 from rclpy.node import Node
@@ -54,14 +55,21 @@ class ROSMoveItSceneBackend(SceneBackend):
             "Planning scene object removal is not implemented yet."
         )
 
-    def allow_touch(self, object_id: str, link_names: Sequence[str]) -> dict[str, Any]:
+    def allow_touch(
+        self,
+        object_id: str,
+        link_names: Sequence[str],
+    ) -> dict[str, Any]:
         """Temporarily allow contact between an object and selected links.
 
         TODO: Depending on the repo's existing MoveIt pattern, this may map to
         touch links on attached objects or an allowed collision matrix update.
         """
 
-        return {"object_id": object_id, "touch_links": list(link_names)}
+        return {
+            "object_id": object_id,
+            "touch_links": list(link_names),
+        }
 
     def attach_object(
         self,

@@ -1,4 +1,5 @@
-from setuptools import find_packages, setup
+from setuptools import find_packages
+from setuptools import setup
 
 
 package_name = "robot_backend"
@@ -9,9 +10,15 @@ setup(
     version="0.1.0",
     packages=find_packages(),
     data_files=[
-        ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
+        (
+            "share/ament_index/resource_index/packages",
+            [f"resource/{package_name}"],
+        ),
         (f"share/{package_name}", ["package.xml"]),
-        (f"share/{package_name}/nodes", ["robot_backend/nodes/README.md"]),
+        (
+            f"share/{package_name}/nodes",
+            ["robot_backend/nodes/README.md"],
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

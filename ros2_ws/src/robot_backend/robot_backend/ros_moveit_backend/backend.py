@@ -16,4 +16,8 @@ def create_ros_moveit_backend(node: Node | None = None) -> RobotBackend:
     motion = ROSMoveItMotionBackend(node=node)
     gripper = ROSGripperBackend(node=node)
     scene = ROSMoveItSceneBackend(node=node)
-    return RobotBackend(motion=motion, gripper=gripper, scene=scene)
+    return RobotBackend(
+        motion=motion,
+        gripper=gripper,
+        scene=scene,
+    )

@@ -1,13 +1,15 @@
 """Helpers for converting logical grasp-center poses to fixed-TCP poses.
 
-MoveIt uses a fixed tcp frame. Width-dependent grasp geometry should be handled
-here by converting a logical grasp-center pose into a fixed tcp target pose.
-The URDF tcp should not be dynamically changed based on gripper width.
+MoveIt uses a fixed tcp frame. Width-dependent grasp geometry should be
+handled here by converting a logical grasp-center pose into a fixed tcp target
+pose. The URDF tcp should not be dynamically changed based on gripper width.
 """
 
 from __future__ import annotations
 
-from .geometry import PoseDict, compose_poses, invert_pose
+from .geometry import PoseDict
+from .geometry import compose_poses
+from .geometry import invert_pose
 
 
 def compute_tcp_pose_from_grasp_center(

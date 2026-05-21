@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any
+from typing import Mapping
 
 import rclpy
 from rclpy.node import Node
 
-from robot_backend.interfaces.motion_backend import MotionBackend, PoseLike
+from robot_backend.interfaces.motion_backend import MotionBackend
+from robot_backend.interfaces.motion_backend import PoseLike
 
 
 class ROSMoveItMotionBackend(MotionBackend):
@@ -72,7 +74,10 @@ class ROSMoveItMotionBackend(MotionBackend):
         access pattern in the repo is confirmed.
         """
 
-        return {"planning_group_default": "ur_manipulator", "tcp_frame_default": "tcp"}
+        return {
+            "planning_group_default": "ur_manipulator",
+            "tcp_frame_default": "tcp",
+        }
 
     def _create_node(self) -> Node:
         """Create an internal helper node if one was not supplied."""

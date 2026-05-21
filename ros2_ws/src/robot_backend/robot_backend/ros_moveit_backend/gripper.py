@@ -9,7 +9,8 @@ resolved service classes and request builders once they are confirmed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from typing import Callable
 
 import rclpy
 from rclpy.node import Node
@@ -22,7 +23,7 @@ RequestBuilder = Callable[..., Any]
 
 @dataclass(frozen=True)
 class ServiceBinding:
-    """Describes one RG2 service endpoint and how to build its request."""
+    """Describe one RG2 service endpoint and how to build its request."""
 
     name: str
     srv_type: type | None = None
@@ -47,10 +48,14 @@ class ROSGripperBackend(GripperBackend):
     ) -> None:
         self._owns_node = node is None
         self._node = node or self._create_node()
-        self._open_binding = open_binding or ServiceBinding(name="/rg2_controller/open")
-        self._close_binding = close_binding or ServiceBinding(name="/rg2_controller/close")
+        self._open_binding = open_binding or ServiceBinding(
+            name="/rg2_controller/open",
+        )
+        self._close_binding = close_binding or ServiceBinding(
+            name="/rg2_controller/close",
+        )
         self._set_position_binding = set_position_binding or ServiceBinding(
-            name="/rg2_controller/set_position"
+            name="/rg2_controller/set_position",
         )
 
     @property
@@ -86,7 +91,7 @@ class ROSGripperBackend(GripperBackend):
                 "open": self._open_binding.name,
                 "close": self._close_binding.name,
                 "set_position": self._set_position_binding.name,
-            }
+            },
         }
 
     def _create_node(self) -> Node:
@@ -116,7 +121,11 @@ class ROSGripperBackend(GripperBackend):
 
         request = binding.request_builder(**kwargs)
         future = client.call_async(request)
-        rclpy.spin_until_future_complete(self._node, future, timeout_sec=10.0)
+        rclpy.spin_until_future_complete(
+            self._node,
+            future,
+            timeout_sec=10.0,
+        )
         if not future.done():
             raise TimeoutError(f"Timed out waiting for service {binding.name}.")
         return future.result()
