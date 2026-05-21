@@ -94,26 +94,12 @@ def _launch_setup(context):
             launch_arguments={
                 "use_sim_time": use_sim_time,
                 "publish_full_joint_command": "false",
+                "start_rg2_controller": start_rg2_controller,
+                "rg2_open_position": rg2_open_position,
+                "rg2_close_position": rg2_close_position,
+                "rg2_command_duration_sec": rg2_command_duration_sec,
+                "rg2_command_rate_hz": rg2_command_rate_hz,
             }.items(),
-        ),
-        Node(
-            package="isaac_trajectory_bridge",
-            executable="rg2_controller",
-            name="rg2_controller",
-            output="screen",
-            condition=IfCondition(start_rg2_controller),
-            parameters=[
-                {
-                    "use_sim_time": use_sim_time,
-                    "joint_state_topic": "/joint_states",
-                    "joint_command_topic": "/joint_command",
-                    "service_namespace": "/rg2_controller",
-                    "open_position": float(rg2_open_position.perform(context)),
-                    "close_position": float(rg2_close_position.perform(context)),
-                    "command_duration_sec": float(rg2_command_duration_sec.perform(context)),
-                    "command_rate_hz": float(rg2_command_rate_hz.perform(context)),
-                }
-            ],
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(

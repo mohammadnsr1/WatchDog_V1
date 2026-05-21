@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -7,6 +8,11 @@ from launch_ros.actions import Node
 def generate_launch_description() -> LaunchDescription:
     use_sim_time = LaunchConfiguration("use_sim_time")
     publish_full_joint_command = LaunchConfiguration("publish_full_joint_command")
+    start_rg2_controller = LaunchConfiguration("start_rg2_controller")
+    rg2_open_position = LaunchConfiguration("rg2_open_position")
+    rg2_close_position = LaunchConfiguration("rg2_close_position")
+    rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
+    rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
 
     return LaunchDescription(
         [
@@ -25,6 +31,31 @@ def generate_launch_description() -> LaunchDescription:
                     "Isaac requires full-articulation commands and gripper "
                     "preservation is known safe."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "start_rg2_controller",
+                default_value="true",
+                description="Start the gripper-only RG2 controller node.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_open_position",
+                default_value="-0.558505",
+                description="Default RG2 open target in master joint radians for finger_joint.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_close_position",
+                default_value="0.785398",
+                description="Default RG2 close target in master joint radians for finger_joint.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_command_duration_sec",
+                default_value="1.0",
+                description="Duration in seconds for RG2 gripper interpolation commands.",
+            ),
+            DeclareLaunchArgument(
+                "rg2_command_rate_hz",
+                default_value="50.0",
+                description="Publish rate in Hz for RG2 gripper interpolation commands.",
             ),
             Node(
                 package="isaac_trajectory_bridge",
@@ -52,6 +83,25 @@ def generate_launch_description() -> LaunchDescription:
                         "use_sim_time": use_sim_time,
                     }
                 ],
-            )
+            ),
+            Node(
+                package="isaac_trajectory_bridge",
+                executable="rg2_controller",
+                name="rg2_controller",
+                output="screen",
+                condition=IfCondition(start_rg2_controller),
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "joint_state_topic": "/joint_states",
+                        "joint_command_topic": "/joint_command",
+                        "service_namespace": "/rg2_controller",
+                        "open_position": rg2_open_position,
+                        "close_position": rg2_close_position,
+                        "command_duration_sec": rg2_command_duration_sec,
+                        "command_rate_hz": rg2_command_rate_hz,
+                    }
+                ],
+            ),
         ]
     )

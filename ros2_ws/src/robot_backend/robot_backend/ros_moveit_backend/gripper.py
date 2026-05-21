@@ -19,6 +19,9 @@ from std_srvs.srv import Trigger
 
 from isaac_trajectory_bridge_interfaces.srv import SetGripperPosition
 from robot_backend.interfaces.gripper_backend import GripperBackend
+from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
+from robot_backend.utils.rg2_geometry import RG2Calibration
+from robot_backend.utils.rg2_geometry import width_to_joint_position
 
 
 RequestBuilder = Callable[..., Any]
@@ -44,12 +47,14 @@ class ROSGripperBackend(GripperBackend):
         self,
         node: Node | None = None,
         *,
+        calibration: RG2Calibration = DEFAULT_RG2_CALIBRATION,
         open_binding: ServiceBinding | None = None,
         close_binding: ServiceBinding | None = None,
         set_position_binding: ServiceBinding | None = None,
     ) -> None:
         self._owns_node = node is None
         self._node = node or self._create_node()
+        self._calibration = calibration
         self._open_binding = open_binding or ServiceBinding(
             name="/rg2_controller/open",
             srv_type=Trigger,
@@ -83,27 +88,30 @@ class ROSGripperBackend(GripperBackend):
         return self._call_service(self._close_binding)
 
     def set_width(self, width_m: float) -> SetGripperPosition.Response:
-        """Call the RG2 set-position service.
+        """Command a physical RG2 opening width in meters.
 
-        The backend interface expresses gripper width in meters, but the
-        currently available RG2 controller service accepts a `position` field
-        interpreted by the controller as the RG2 master joint target in
-        radians. Until a confirmed width-to-joint mapping is defined in this
-        workspace, this backend forwards the numeric argument into that
-        `position` request field.
-
-        TODO: Replace this pass-through with a confirmed width-to-master-joint
-        conversion once the project defines the desired RG2 width convention.
+        This converts the requested physical width to the RG2 master joint
+        target in radians using the configured calibration, then calls the
+        controller's `/rg2_controller/set_position` service.
         """
 
-        return self._call_service(self._set_position_binding, width_m=width_m)
+        position_rad = width_to_joint_position(width_m, self._calibration)
+        return self.set_joint_position(position_rad)
+
+    def set_joint_position(self, position_rad: float) -> SetGripperPosition.Response:
+        """Command the raw RG2 master joint target in radians.
+
+        This is backend-specific and bypasses the higher-level physical width
+        semantics exposed by `GripperBackend.set_width(width_m)`.
+        """
+
+        return self._call_service(
+            self._set_position_binding,
+            position_rad=position_rad,
+        )
 
     def get_state(self) -> dict[str, Any]:
-        """Return lightweight backend state for now.
-
-        TODO: If the repo later exposes a gripper state topic or service,
-        wrap it here with a stable backend-facing representation.
-        """
+        """Return backend metadata and the active RG2 calibration."""
 
         return {
             "service_names": {
@@ -118,6 +126,14 @@ class ROSGripperBackend(GripperBackend):
                     "isaac_trajectory_bridge_interfaces/srv/"
                     "SetGripperPosition"
                 ),
+            },
+            "calibration": {
+                "width_open_m": self._calibration.width_open_m,
+                "width_closed_m": self._calibration.width_closed_m,
+                "position_open_rad": self._calibration.position_open_rad,
+                "position_closed_rad": self._calibration.position_closed_rad,
+                "tcp_to_grasp_center_open": self._calibration.tcp_to_grasp_center_open,
+                "tcp_to_grasp_center_closed": self._calibration.tcp_to_grasp_center_closed,
             },
         }
 
@@ -178,14 +194,11 @@ class ROSGripperBackend(GripperBackend):
         return Trigger.Request()
 
     @staticmethod
-    def _build_set_position_request(width_m: float) -> SetGripperPosition.Request:
-        """Build the RG2 set-position request.
-
-        The service request field is named `position` in the interface package.
-        See `isaac_trajectory_bridge/README_RG2_CONTROLLER.md` for the current
-        controller-side interpretation.
-        """
+    def _build_set_position_request(
+        position_rad: float,
+    ) -> SetGripperPosition.Request:
+        """Build the RG2 set-position request using joint radians."""
 
         request = SetGripperPosition.Request()
-        request.position = float(width_m)
+        request.position = float(position_rad)
         return request

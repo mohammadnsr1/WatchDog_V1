@@ -12,6 +12,7 @@ from typing import Sequence
 
 from robot_backend.interfaces.robot_backend import RobotBackend
 from robot_backend.utils.grasp_offsets import compute_tcp_pose_from_grasp_center
+from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
 
 def pick_object(
@@ -21,6 +22,7 @@ def pick_object(
     object_pose: Any | None = None,
     object_shape: Any | None = None,
     grasp_center_pose: Any | None = None,
+    grasp_width_m: float | None = None,
     tcp_offset: Any | None = None,
     pregrasp_pose: Any | None = None,
     grasp_pose: Any | None = None,
@@ -29,21 +31,30 @@ def pick_object(
     touch_links: Sequence[str] | None = None,
     retreat_pose: Any | None = None,
 ) -> dict[str, Any]:
-    """Run the intended backend-only pick sequence skeleton."""
+    """Run the intended backend-only pick sequence skeleton.
+
+    `grasp_center_pose` is the desired logical grasp center in the planning or
+    world frame. If `grasp_pose` is not provided, the fixed TCP target sent to
+    IK or MoveIt can be computed either from `grasp_width_m` using the RG2
+    calibration or from an explicit `tcp_offset` for backward compatibility.
+    The URDF TCP remains fixed.
+    """
 
     if object_pose is not None and object_shape is not None:
         backend.scene.add_collision_object(object_id, object_pose, object_shape)
 
     effective_grasp_pose = grasp_pose
-    if (
-        effective_grasp_pose is None
-        and grasp_center_pose is not None
-        and tcp_offset is not None
-    ):
-        effective_grasp_pose = compute_tcp_pose_from_grasp_center(
-            grasp_center_pose,
-            tcp_offset,
-        )
+    if effective_grasp_pose is None and grasp_center_pose is not None:
+        if grasp_width_m is not None:
+            effective_grasp_pose = tcp_target_from_grasp_center(
+                grasp_center_pose,
+                grasp_width_m,
+            )
+        elif tcp_offset is not None:
+            effective_grasp_pose = compute_tcp_pose_from_grasp_center(
+                grasp_center_pose,
+                tcp_offset,
+            )
 
     if pregrasp_pose is not None:
         backend.motion.move_to_pose(pregrasp_pose)
@@ -83,23 +94,33 @@ def place_object(
     place_object_pose: Any | None = None,
     object_shape: Any | None = None,
     place_grasp_center_pose: Any | None = None,
+    place_width_m: float | None = None,
     tcp_offset: Any | None = None,
     preplace_pose: Any | None = None,
     place_pose: Any | None = None,
     retreat_pose: Any | None = None,
 ) -> dict[str, Any]:
-    """Run the intended backend-only place sequence skeleton."""
+    """Run the intended backend-only place sequence skeleton.
+
+    `place_grasp_center_pose` is the desired logical grasp center in the
+    planning or world frame for the placement pose. If `place_pose` is not
+    provided, the fixed TCP target sent to IK or MoveIt can be computed either
+    from `place_width_m` using the RG2 calibration or from an explicit
+    `tcp_offset` for backward compatibility. The URDF TCP remains fixed.
+    """
 
     effective_place_pose = place_pose
-    if (
-        effective_place_pose is None
-        and place_grasp_center_pose is not None
-        and tcp_offset is not None
-    ):
-        effective_place_pose = compute_tcp_pose_from_grasp_center(
-            place_grasp_center_pose,
-            tcp_offset,
-        )
+    if effective_place_pose is None and place_grasp_center_pose is not None:
+        if place_width_m is not None:
+            effective_place_pose = tcp_target_from_grasp_center(
+                place_grasp_center_pose,
+                place_width_m,
+            )
+        elif tcp_offset is not None:
+            effective_place_pose = compute_tcp_pose_from_grasp_center(
+                place_grasp_center_pose,
+                tcp_offset,
+            )
 
     if preplace_pose is not None:
         backend.motion.move_to_pose(preplace_pose)
