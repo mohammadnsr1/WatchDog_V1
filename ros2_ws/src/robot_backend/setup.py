@@ -20,7 +20,7 @@ setup(
             ["robot_backend/nodes/README.md"],
         ),
     ],
-    install_requires=["setuptools"],
+    install_requires=["setuptools", "mcp"],
     zip_safe=True,
     maintainer="TODO Maintainer",
     maintainer_email="todo@example.com",
@@ -30,5 +30,9 @@ setup(
     ),
     license="Apache-2.0",
     tests_require=["pytest"],
-    entry_points={"console_scripts": []},
+    entry_points={
+        "console_scripts": [
+            "gripper_mcp_server = robot_backend.mcp_servers.gripper_mcp_server:main",
+        ],
+    },
 )
