@@ -3,11 +3,15 @@
   <name>robot_backend</name>
   <version>0.1.0</version>
   <description>Backend abstraction layer and backend-agnostic robot skills for Isaac Sim + ROS 2 + MoveIt workflows.</description>
-  <maintainer email="todo@example.com">TODO Maintainer</maintainer>
+  <maintainer email="mnasr3@asu.edu">TODO Maintainer</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>moveit_msgs</exec_depend>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>shape_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>isaac_trajectory_bridge_interfaces</exec_depend>
 
