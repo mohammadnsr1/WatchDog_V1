@@ -33,6 +33,7 @@ setup(
     entry_points={
         "console_scripts": [
             "gripper_mcp_server = robot_backend.mcp_servers.gripper_mcp_server:main",
+            "motion_mcp_server = robot_backend.mcp_servers.motion_mcp_server:main",
         ],
     },
 )
