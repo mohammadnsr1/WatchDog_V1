@@ -45,7 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pose_parser = subparsers.add_parser(
         "pose",
-        help="Send a Cartesian pose target through backend.motion.move_to_pose().",
+        help="Send a pose target through backend.motion.move_to_pose().",
     )
     pose_parser.add_argument("--frame-id", default=SAFE_TEST_POSE["frame_id"])
     pose_parser.add_argument("--x", type=float, default=SAFE_TEST_POSE["position"]["x"])
@@ -55,19 +55,41 @@ def _build_parser() -> argparse.ArgumentParser:
     pose_parser.add_argument("--qy", type=float, default=SAFE_TEST_POSE["orientation"]["y"])
     pose_parser.add_argument("--qz", type=float, default=SAFE_TEST_POSE["orientation"]["z"])
     pose_parser.add_argument("--qw", type=float, default=SAFE_TEST_POSE["orientation"]["w"])
-    pose_parser.add_argument("--ik-timeout-sec", type=float, default=5.0)
+    pose_parser.add_argument(
+        "--target-type",
+        choices=["tcp", "grasp-center"],
+        default="tcp",
+    )
+    pose_parser.add_argument("--width-m", type=float)
+    pose_parser.add_argument("--position-tolerance-m", type=float, default=0.005)
+    pose_parser.add_argument("--orientation-tolerance-rad", type=float, default=0.01)
+    pose_parser.add_argument("--allowed-planning-time", type=float, default=5.0)
+    pose_parser.add_argument("--num-planning-attempts", type=int, default=3)
+    pose_parser.add_argument("--max-velocity-scaling-factor", type=float, default=0.3)
+    pose_parser.add_argument("--max-acceleration-scaling-factor", type=float, default=0.3)
+    pose_parser.add_argument(
+        "--solve-ik-first",
+        action="store_true",
+        help="Debug-only: resolve one IK solution first, then plan in joint space.",
+    )
+    pose_parser.add_argument(
+        "--ik-timeout-sec",
+        type=float,
+        default=5.0,
+        help="Debug-only timeout for /compute_ik when --solve-ik-first is used.",
+    )
     pose_parser.add_argument(
         "--avoid-collisions",
         dest="avoid_collisions",
         action="store_true",
         default=True,
-        help="Ask MoveIt IK to avoid collisions while solving.",
+        help="Debug-only IK collision check when --solve-ik-first is used.",
     )
     pose_parser.add_argument(
         "--allow-collisions",
         dest="avoid_collisions",
         action="store_false",
-        help="Disable collision checking for IK to see whether the timeout is collision-related.",
+        help="Debug-only: disable IK collision checking with --solve-ik-first.",
     )
     return parser
 
@@ -117,11 +139,26 @@ def main() -> None:
                 _resolve_joint_values(args.values)
             )
         elif args.mode == "pose":
-            result = backend.motion.move_to_pose(
-                _resolve_pose(args),
-                ik_timeout_sec=args.ik_timeout_sec,
-                avoid_collisions=args.avoid_collisions,
-            )
+            kwargs = {
+                "position_tolerance_m": args.position_tolerance_m,
+                "orientation_tolerance_rad": args.orientation_tolerance_rad,
+                "allowed_planning_time": args.allowed_planning_time,
+                "num_planning_attempts": args.num_planning_attempts,
+                "max_velocity_scaling_factor": args.max_velocity_scaling_factor,
+                "max_acceleration_scaling_factor": args.max_acceleration_scaling_factor,
+                "solve_ik_first": args.solve_ik_first,
+            }
+            if args.solve_ik_first:
+                kwargs["ik_timeout_sec"] = args.ik_timeout_sec
+                kwargs["avoid_collisions"] = args.avoid_collisions
+            if args.target_type == "grasp-center":
+                if args.width_m is None:
+                    raise ValueError(
+                        "--width-m is required when --target-type grasp-center is used."
+                    )
+                kwargs["gripper_width_m"] = args.width_m
+                kwargs["target_is_grasp_center"] = True
+            result = backend.motion.move_to_pose(_resolve_pose(args), **kwargs)
         else:  # pragma: no cover - argparse enforces valid modes
             raise ValueError(f"Unsupported mode: {args.mode}")
 
