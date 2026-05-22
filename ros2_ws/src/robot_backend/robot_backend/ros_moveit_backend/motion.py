@@ -7,21 +7,19 @@ from typing import Any
 from typing import Mapping
 
 import rclpy
-from geometry_msgs.msg import Pose
+from builtin_interfaces.msg import Duration
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import BoundingVolume
 from moveit_msgs.msg import Constraints
 from moveit_msgs.msg import JointConstraint
 from moveit_msgs.msg import MotionPlanRequest
 from moveit_msgs.msg import MoveItErrorCodes
-from moveit_msgs.msg import OrientationConstraint
 from moveit_msgs.msg import PlanningOptions
-from moveit_msgs.msg import PositionConstraint
+from moveit_msgs.msg import RobotState
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from moveit_msgs.srv import GetPositionIK
 from sensor_msgs.msg import JointState
-from shape_msgs.msg import SolidPrimitive
 
 from robot_backend.interfaces.motion_backend import MotionBackend
 from robot_backend.interfaces.motion_backend import PoseLike
@@ -38,11 +36,14 @@ ARM_JOINT_NAMES = [
 DEFAULT_PLANNING_GROUP = "ur_manipulator"
 DEFAULT_TCP_FRAME = "tcp"
 DEFAULT_MOVE_GROUP_ACTION = "/move_action"
+DEFAULT_IK_SERVICE_NAME = "/compute_ik"
 DEFAULT_JOINT_STATE_TOPIC = "/joint_states"
 _DEFAULT_ALLOWED_PLANNING_TIME = 5.0
 _DEFAULT_ACTION_TIMEOUT = 30.0
 _DEFAULT_GOAL_POSITION_TOLERANCE_M = 0.005
 _DEFAULT_GOAL_ORIENTATION_TOLERANCE_RAD = 0.01
+_DEFAULT_IK_TIMEOUT = 5.0
+_INITIAL_JOINT_STATE_TIMEOUT = 1.0
 
 _ERROR_CODE_NAMES = {
     getattr(MoveItErrorCodes, name): name
@@ -59,11 +60,13 @@ class ROSMoveItMotionBackend(MotionBackend):
         node: Node | None = None,
         *,
         move_group_action_name: str = DEFAULT_MOVE_GROUP_ACTION,
+        ik_service_name: str = DEFAULT_IK_SERVICE_NAME,
         joint_state_topic: str = DEFAULT_JOINT_STATE_TOPIC,
     ) -> None:
         self._owns_node = node is None
         self._node = node or self._create_node()
         self._move_group_action_name = move_group_action_name
+        self._ik_service_name = ik_service_name
         self._joint_state_topic = joint_state_topic
         self._latest_joint_state: JointState | None = None
         self._joint_state_received = False
@@ -77,6 +80,10 @@ class ROSMoveItMotionBackend(MotionBackend):
             self._node,
             MoveGroup,
             self._move_group_action_name,
+        )
+        self._ik_client = self._node.create_client(
+            GetPositionIK,
+            self._ik_service_name,
         )
 
     @property
@@ -92,55 +99,29 @@ class ROSMoveItMotionBackend(MotionBackend):
         tcp_frame: str = DEFAULT_TCP_FRAME,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Plan and execute a motion to a target pose through move_group."""
+        """Resolve a pose target through MoveIt IK, then plan as a joint goal."""
 
         pose_stamped = self._coerce_pose_stamped(target_pose)
-        allowed_planning_time = float(
-            kwargs.get("allowed_planning_time", _DEFAULT_ALLOWED_PLANNING_TIME)
-        )
-        position_tolerance = float(
-            kwargs.get(
-                "position_tolerance_m",
-                _DEFAULT_GOAL_POSITION_TOLERANCE_M,
-            )
-        )
-        orientation_tolerance = float(
-            kwargs.get(
-                "orientation_tolerance_rad",
-                _DEFAULT_GOAL_ORIENTATION_TOLERANCE_RAD,
-            )
-        )
-
-        goal = MoveGroup.Goal()
-        goal.request = self._build_pose_motion_plan_request(
+        ik_joint_positions = self._compute_ik_joint_positions(
             pose_stamped=pose_stamped,
             planning_group=planning_group,
             tcp_frame=tcp_frame,
-            allowed_planning_time=allowed_planning_time,
-            num_planning_attempts=int(kwargs.get("num_planning_attempts", 1)),
-            max_velocity_scaling_factor=float(
-                kwargs.get("max_velocity_scaling_factor", 1.0)
-            ),
-            max_acceleration_scaling_factor=float(
-                kwargs.get("max_acceleration_scaling_factor", 1.0)
-            ),
-            position_tolerance_m=position_tolerance,
-            orientation_tolerance_rad=orientation_tolerance,
+            timeout_sec=float(kwargs.get("ik_timeout_sec", _DEFAULT_IK_TIMEOUT)),
+            avoid_collisions=bool(kwargs.get("avoid_collisions", True)),
         )
-        goal.planning_options = self._build_planning_options(kwargs)
-
-        result_response = self._execute_move_group_goal(
-            goal,
-            timeout_sec=float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT)),
+        joint_result = self.move_to_joint_positions(
+            ik_joint_positions,
+            planning_group=planning_group,
+            **kwargs,
         )
-
         return {
             "ok": True,
             "command": "move_to_pose",
             "planning_group": planning_group,
             "tcp_frame": tcp_frame,
             "target_pose": self._pose_stamped_to_dict(pose_stamped),
-            "response": self._summarize_move_group_result(result_response),
+            "ik_solution": ik_joint_positions,
+            "response": joint_result["response"],
         }
 
     def move_to_joint_positions(
@@ -192,6 +173,7 @@ class ROSMoveItMotionBackend(MotionBackend):
             "planning_group_default": DEFAULT_PLANNING_GROUP,
             "tcp_frame_default": DEFAULT_TCP_FRAME,
             "move_group_action_name": self._move_group_action_name,
+            "ik_service_name": self._ik_service_name,
             "joint_state_topic": self._joint_state_topic,
             "known_arm_joint_names": list(ARM_JOINT_NAMES),
             "known_arm_joint_order": {
@@ -202,7 +184,9 @@ class ROSMoveItMotionBackend(MotionBackend):
         joint_state = self._latest_joint_state
         if joint_state is None:
             try:
-                joint_state = self._wait_for_joint_state(timeout_sec=0.25)
+                joint_state = self._wait_for_joint_state(
+                    timeout_sec=_INITIAL_JOINT_STATE_TIMEOUT
+                )
             except TimeoutError:
                 state["current_joint_positions"] = None
                 state["todo"] = (
@@ -327,67 +311,72 @@ class ROSMoveItMotionBackend(MotionBackend):
         request.goal_constraints = [constraints]
         return request
 
-    def _build_pose_motion_plan_request(
+
+    def _compute_ik_joint_positions(
         self,
         *,
         pose_stamped: PoseStamped,
         planning_group: str,
         tcp_frame: str,
-        allowed_planning_time: float,
-        num_planning_attempts: int,
-        max_velocity_scaling_factor: float,
-        max_acceleration_scaling_factor: float,
-        position_tolerance_m: float,
-        orientation_tolerance_rad: float,
-    ) -> MotionPlanRequest:
-        request = self._base_motion_plan_request(
-            planning_group=planning_group,
-            allowed_planning_time=allowed_planning_time,
-            num_planning_attempts=num_planning_attempts,
-            max_velocity_scaling_factor=max_velocity_scaling_factor,
-            max_acceleration_scaling_factor=max_acceleration_scaling_factor,
+        timeout_sec: float,
+        avoid_collisions: bool,
+    ) -> dict[str, float]:
+        current_joint_state = self._wait_for_joint_state(
+            timeout_sec=_INITIAL_JOINT_STATE_TIMEOUT
         )
+        request = GetPositionIK.Request()
+        request.ik_request.group_name = planning_group
+        request.ik_request.robot_state = RobotState()
+        request.ik_request.robot_state.joint_state = current_joint_state
+        request.ik_request.avoid_collisions = avoid_collisions
+        request.ik_request.ik_link_name = tcp_frame
+        request.ik_request.pose_stamped = pose_stamped
+        request.ik_request.timeout = self._duration_from_seconds(timeout_sec)
 
-        primitive = SolidPrimitive()
-        primitive.type = SolidPrimitive.BOX
-        primitive.dimensions = [
-            max(position_tolerance_m * 2.0, 1e-6),
-            max(position_tolerance_m * 2.0, 1e-6),
-            max(position_tolerance_m * 2.0, 1e-6),
-        ]
+        if not self._ik_client.wait_for_service(timeout_sec=2.0):
+            raise RuntimeError(
+                f"MoveIt IK service {self._ik_service_name} is not available within 2.0 seconds."
+            )
 
-        region_pose = Pose()
-        region_pose.position.x = pose_stamped.pose.position.x
-        region_pose.position.y = pose_stamped.pose.position.y
-        region_pose.position.z = pose_stamped.pose.position.z
-        region_pose.orientation.w = 1.0
+        future = self._ik_client.call_async(request)
+        rclpy.spin_until_future_complete(
+            self._node,
+            future,
+            timeout_sec=max(timeout_sec, 2.0),
+        )
+        if not future.done():
+            raise TimeoutError(
+                f"Timed out waiting for MoveIt IK response from {self._ik_service_name}."
+            )
 
-        bounding_volume = BoundingVolume()
-        bounding_volume.primitives = [primitive]
-        bounding_volume.primitive_poses = [region_pose]
+        exception = future.exception()
+        if exception is not None:
+            raise RuntimeError(
+                f"MoveIt IK request failed: {exception}"
+            ) from exception
 
-        position_constraint = PositionConstraint()
-        position_constraint.header = pose_stamped.header
-        position_constraint.link_name = tcp_frame
-        position_constraint.constraint_region = bounding_volume
-        position_constraint.weight = 1.0
+        response = future.result()
+        if response is None:
+            raise RuntimeError(
+                f"MoveIt IK service {self._ik_service_name} returned no response."
+            )
 
-        orientation_constraint = OrientationConstraint()
-        orientation_constraint.header = pose_stamped.header
-        orientation_constraint.link_name = tcp_frame
-        orientation_constraint.orientation = pose_stamped.pose.orientation
-        orientation_constraint.absolute_x_axis_tolerance = orientation_tolerance_rad
-        orientation_constraint.absolute_y_axis_tolerance = orientation_tolerance_rad
-        orientation_constraint.absolute_z_axis_tolerance = orientation_tolerance_rad
-        orientation_constraint.parameterization = OrientationConstraint.ROTATION_VECTOR
-        orientation_constraint.weight = 1.0
+        if response.error_code.val != MoveItErrorCodes.SUCCESS:
+            raise RuntimeError(self._format_moveit_error(response.error_code))
 
-        constraints = Constraints()
-        constraints.name = "pose_goal"
-        constraints.position_constraints = [position_constraint]
-        constraints.orientation_constraints = [orientation_constraint]
-        request.goal_constraints = [constraints]
-        return request
+        solution_map = {
+            name: response.solution.joint_state.position[index]
+            for index, name in enumerate(response.solution.joint_state.name)
+            if index < len(response.solution.joint_state.position)
+        }
+        missing = [name for name in ARM_JOINT_NAMES if name not in solution_map]
+        if missing:
+            raise RuntimeError(
+                "MoveIt IK response did not include all UR5e arm joints: "
+                f"missing {missing}."
+            )
+        return {joint_name: float(solution_map[joint_name]) for joint_name in ARM_JOINT_NAMES}
+
 
     def _base_motion_plan_request(
         self,
@@ -518,6 +507,21 @@ class ROSMoveItMotionBackend(MotionBackend):
         pose_stamped.pose.orientation.z = float(orientation["z"])
         pose_stamped.pose.orientation.w = float(orientation["w"])
         return pose_stamped
+
+    @staticmethod
+    def _duration_from_seconds(seconds: float) -> Duration:
+        safe_seconds = max(float(seconds), 0.0)
+        whole_seconds = int(safe_seconds)
+        nanoseconds = int(round((safe_seconds - whole_seconds) * 1e9))
+        if nanoseconds >= 1_000_000_000:
+            whole_seconds += 1
+            nanoseconds -= 1_000_000_000
+
+        duration = Duration()
+        duration.sec = whole_seconds
+        duration.nanosec = nanoseconds
+        return duration
+
 
     def _pose_stamped_to_dict(self, pose_stamped: PoseStamped) -> dict[str, Any]:
         return {
