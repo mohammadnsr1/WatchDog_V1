@@ -22,7 +22,7 @@ setup(
     ],
     install_requires=["setuptools", "mcp"],
     zip_safe=True,
-    maintainer="TODO Maintainer",
+    maintainer="mnasr3@asu.edu",
     maintainer_email="todo@example.com",
     description=(
         "Backend abstraction layer and backend-agnostic robot skills for "
