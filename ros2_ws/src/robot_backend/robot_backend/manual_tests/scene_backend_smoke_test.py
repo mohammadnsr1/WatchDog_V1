@@ -108,6 +108,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     detach_parser.add_argument("--object-id", default="red_cube")
 
+    subparsers.add_parser(
+        "sequence-attach",
+        help="Run add -> list -> attach -> list -> detach -> list and clean up if needed.",
+    )
+
     return parser
 
 
@@ -125,6 +130,71 @@ def _resolve_pose(args: argparse.Namespace) -> dict[str, object]:
             "z": float(args.qz),
             "w": float(args.qw),
         },
+    }
+
+
+def _default_box_pose() -> dict[str, object]:
+    return {
+        "frame_id": DEFAULT_BOX_POSE["frame_id"],
+        "position": dict(DEFAULT_BOX_POSE["position"]),
+        "orientation": dict(DEFAULT_BOX_POSE["orientation"]),
+    }
+
+
+def _run_sequence_attach(backend) -> dict[str, object]:
+    object_id = "red_cube"
+    touch_links = list(DEFAULT_TOUCH_LINKS)
+    steps: list[dict[str, object]] = []
+
+    steps.append(
+        {
+            "step": "add-box",
+            "result": backend.scene.add_collision_object(
+                object_id=object_id,
+                pose=_default_box_pose(),
+                shape={"type": "box", "dimensions": list(DEFAULT_BOX_DIMENSIONS)},
+            ),
+        }
+    )
+    steps.append({"step": "list-after-add", "result": backend.scene.get_objects()})
+    steps.append(
+        {
+            "step": "attach",
+            "result": backend.scene.attach_object(
+                object_id=object_id,
+                link_name="tcp",
+                touch_links=touch_links,
+            ),
+        }
+    )
+    steps.append({"step": "list-after-attach", "result": backend.scene.get_objects()})
+    steps.append(
+        {
+            "step": "detach",
+            "result": backend.scene.detach_object(object_id),
+        }
+    )
+    post_detach = backend.scene.get_objects()
+    steps.append({"step": "list-after-detach", "result": post_detach})
+
+    world_ids = {
+        item.get("id")
+        for item in post_detach.get("world_collision_objects", [])
+        if isinstance(item, dict)
+    }
+    if object_id in world_ids:
+        steps.append(
+            {
+                "step": "remove-world-object",
+                "result": backend.scene.remove_collision_object(object_id),
+            }
+        )
+
+    return {
+        "ok": True,
+        "command": "sequence-attach",
+        "object_id": object_id,
+        "steps": steps,
     }
 
 
@@ -167,6 +237,8 @@ def main() -> None:
             )
         elif args.mode == "detach":
             result = backend.scene.detach_object(args.object_id)
+        elif args.mode == "sequence-attach":
+            result = _run_sequence_attach(backend)
         else:  # pragma: no cover - argparse enforces valid modes
             raise ValueError(f"Unsupported mode: {args.mode}")
 

@@ -175,7 +175,7 @@ class ROSMoveItSceneBackend(SceneBackend):
         link_name: str,
         touch_links: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """Attach an object to a robot link."""
+        """Attach an object to a robot link using full collision geometry."""
 
         normalized_object_id = self._normalize_object_id(object_id)
         normalized_link_name = self._normalize_required_string(link_name, "link_name")
@@ -186,10 +186,14 @@ class ROSMoveItSceneBackend(SceneBackend):
         else:
             resolved_touch_links = self._normalize_link_names(touch_links)
 
+        attached_collision_object, used_cached_geometry = self._get_world_collision_object(
+            normalized_object_id
+        )
+        attached_collision_object.operation = CollisionObject.ADD
+
         attached = AttachedCollisionObject()
         attached.link_name = normalized_link_name
-        attached.object.id = normalized_object_id
-        attached.object.operation = CollisionObject.ADD
+        attached.object = attached_collision_object
         attached.touch_links = list(resolved_touch_links)
 
         remove_world_object = CollisionObject()
@@ -215,17 +219,17 @@ class ROSMoveItSceneBackend(SceneBackend):
             "object_id": normalized_object_id,
             "link_name": normalized_link_name,
             "touch_links": list(resolved_touch_links),
+            "used_cached_geometry": used_cached_geometry,
             "response": self._summarize_apply_planning_scene_response(response),
-            "todo": (
-                "This attach path assumes MoveIt can resolve the object geometry by ID "
-                "from the planning scene. If your MoveIt setup requires full geometry in "
-                "AttachedCollisionObject.object, extend the cached CollisionObject path "
-                "recorded during add_collision_object()."
-            ),
         }
 
     def detach_object(self, object_id: str) -> dict[str, Any]:
-        """Detach an attached object from the robot."""
+        """Detach an attached object from the robot.
+
+        This only removes the object from the robot attached state. Place skills
+        should re-add or update the object in the world collision set after
+        detach when they know the released pose.
+        """
 
         normalized_object_id = self._normalize_object_id(object_id)
         attached = AttachedCollisionObject()
@@ -249,12 +253,16 @@ class ROSMoveItSceneBackend(SceneBackend):
             "command": "detach_object",
             "object_id": normalized_object_id,
             "response": self._summarize_apply_planning_scene_response(response),
+            "note": (
+                "detach_object only removes the object from attached robot state. "
+                "Place skills should re-add or update the world collision object afterward."
+            ),
         }
 
     def clear_octomap(self) -> dict[str, Any]:
         """Clear perception-derived occupancy data when needed."""
 
-        response = self._call_service(
+        self._call_service(
             self._clear_octomap_client,
             Empty.Request(),
             self._clear_octomap_service,
@@ -405,6 +413,35 @@ class ROSMoveItSceneBackend(SceneBackend):
         raise ValueError(
             f"Unsupported collision shape type {shape_type!r}. "
             "Supported types are: box, sphere, cylinder, mesh."
+        )
+
+    def _get_world_collision_object(self, object_id: str) -> tuple[CollisionObject, bool]:
+        """Return full world collision geometry for one object ID."""
+
+        normalized_object_id = self._normalize_object_id(object_id)
+        cached_object = self._collision_object_cache.get(normalized_object_id)
+        if cached_object is not None:
+            return deepcopy(cached_object), True
+
+        request = GetPlanningScene.Request()
+        request.components = PlanningSceneComponents()
+        request.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+        )
+        response = self._call_service(
+            self._get_planning_scene_client,
+            request,
+            self._get_planning_scene_service,
+        )
+        for collision_object in response.scene.world.collision_objects:
+            if collision_object.id == normalized_object_id:
+                self._collision_object_cache[normalized_object_id] = deepcopy(collision_object)
+                return deepcopy(collision_object), False
+
+        raise RuntimeError(
+            f"Cannot attach object {normalized_object_id!r} because it is not present "
+            "in the world collision objects. Add it first."
         )
 
     def _call_service(
