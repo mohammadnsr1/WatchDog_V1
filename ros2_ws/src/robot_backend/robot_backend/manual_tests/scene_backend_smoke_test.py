@@ -146,54 +146,55 @@ def _run_sequence_attach(backend) -> dict[str, object]:
     touch_links = list(DEFAULT_TOUCH_LINKS)
     steps: list[dict[str, object]] = []
 
-    steps.append(
-        {
-            "step": "add-box",
-            "result": backend.scene.add_collision_object(
-                object_id=object_id,
-                pose=_default_box_pose(),
-                shape={"type": "box", "dimensions": list(DEFAULT_BOX_DIMENSIONS)},
-            ),
-        }
+    add_result = backend.scene.add_collision_object(
+        object_id=object_id,
+        pose=_default_box_pose(),
+        shape={"type": "box", "dimensions": list(DEFAULT_BOX_DIMENSIONS)},
     )
-    steps.append({"step": "list-after-add", "result": backend.scene.get_objects()})
-    steps.append(
-        {
-            "step": "attach",
-            "result": backend.scene.attach_object(
-                object_id=object_id,
-                link_name="tcp",
-                touch_links=touch_links,
-            ),
-        }
+    steps.append({"step": "add-box", "result": add_result})
+
+    list_after_add = backend.scene.get_objects()
+    steps.append({"step": "list-after-add", "result": list_after_add})
+
+    attach_result = backend.scene.attach_object(
+        object_id=object_id,
+        link_name="tcp",
+        touch_links=touch_links,
     )
-    steps.append({"step": "list-after-attach", "result": backend.scene.get_objects()})
-    steps.append(
-        {
-            "step": "detach",
-            "result": backend.scene.detach_object(object_id),
-        }
-    )
+    steps.append({"step": "attach", "result": attach_result})
+
+    list_after_attach = backend.scene.get_objects()
+    steps.append({"step": "list-after-attach", "result": list_after_attach})
+
+    detach_result = backend.scene.detach_object(object_id)
+    steps.append({"step": "detach", "result": detach_result})
+
     post_detach = backend.scene.get_objects()
     steps.append({"step": "list-after-detach", "result": post_detach})
 
+    cleanup_result = None
     world_ids = {
         item.get("id")
         for item in post_detach.get("world_collision_objects", [])
         if isinstance(item, dict)
     }
     if object_id in world_ids:
-        steps.append(
-            {
-                "step": "remove-world-object",
-                "result": backend.scene.remove_collision_object(object_id),
-            }
-        )
+        cleanup_result = backend.scene.remove_collision_object(object_id)
+        steps.append({"step": "remove-world-object", "result": cleanup_result})
 
     return {
         "ok": True,
         "command": "sequence-attach",
         "object_id": object_id,
+        "verification_summary": {
+            "add_verified_present": add_result.get("verified_present"),
+            "attach_apply_response_success": attach_result.get("apply_response_success"),
+            "attach_verified_attached": attach_result.get("verified_attached"),
+            "attach_verified_removed_from_world": attach_result.get("verified_removed_from_world"),
+            "detach_verified_detached": detach_result.get("verified_detached"),
+            "world_object_present_after_detach": detach_result.get("world_object_present_after_detach"),
+            "cleanup_ok": None if cleanup_result is None else cleanup_result.get("ok"),
+        },
         "steps": steps,
     }
 

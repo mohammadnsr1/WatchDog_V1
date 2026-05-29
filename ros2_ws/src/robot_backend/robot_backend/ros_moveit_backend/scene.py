@@ -110,13 +110,16 @@ class ROSMoveItSceneBackend(SceneBackend):
             self._apply_planning_scene_service,
         )
         self._collision_object_cache[normalized_object_id] = deepcopy(collision_object)
+        verified_present = self._verify_world_object_present(normalized_object_id)
 
         return {
-            "ok": bool(response.success),
+            "ok": verified_present,
             "command": "add_collision_object",
             "object_id": normalized_object_id,
             "frame_id": pose_stamped.header.frame_id,
             "shape": geometry["summary"],
+            "apply_response_success": bool(response.success),
+            "verified_present": verified_present,
             "response": self._summarize_apply_planning_scene_response(response),
         }
 
@@ -124,6 +127,24 @@ class ROSMoveItSceneBackend(SceneBackend):
         """Remove a collision object from the planning scene."""
 
         normalized_object_id = self._normalize_object_id(object_id)
+        world_exists_before = self._world_object_exists(normalized_object_id)
+        attached_exists_before = self._attached_object_exists(normalized_object_id)
+
+        if not world_exists_before:
+            self._collision_object_cache.pop(normalized_object_id, None)
+            self._touch_links_by_object.pop(normalized_object_id, None)
+            return {
+                "ok": True,
+                "command": "remove_collision_object",
+                "object_id": normalized_object_id,
+                "already_absent": True,
+                "world_object_exists_before": False,
+                "attached_object_exists_before": attached_exists_before,
+                "verified_absent": True,
+                "apply_response_success": None,
+                "response": None,
+            }
+
         collision_object = CollisionObject()
         collision_object.id = normalized_object_id
         collision_object.operation = CollisionObject.REMOVE
@@ -138,13 +159,20 @@ class ROSMoveItSceneBackend(SceneBackend):
             request,
             self._apply_planning_scene_service,
         )
-        self._collision_object_cache.pop(normalized_object_id, None)
+        verified_absent = self._verify_world_object_absent(normalized_object_id)
+        if verified_absent:
+            self._collision_object_cache.pop(normalized_object_id, None)
         self._touch_links_by_object.pop(normalized_object_id, None)
 
         return {
-            "ok": bool(response.success),
+            "ok": verified_absent,
             "command": "remove_collision_object",
             "object_id": normalized_object_id,
+            "already_absent": False,
+            "world_object_exists_before": world_exists_before,
+            "attached_object_exists_before": attached_exists_before,
+            "apply_response_success": bool(response.success),
+            "verified_absent": verified_absent,
             "response": self._summarize_apply_planning_scene_response(response),
         }
 
@@ -212,14 +240,24 @@ class ROSMoveItSceneBackend(SceneBackend):
             request,
             self._apply_planning_scene_service,
         )
+        verified_attached = self._verify_attached_object_present(
+            normalized_object_id,
+            normalized_link_name,
+        )
+        verified_removed_from_world = self._verify_world_object_absent(
+            normalized_object_id
+        )
 
         return {
-            "ok": bool(response.success),
+            "ok": verified_attached,
             "command": "attach_object",
             "object_id": normalized_object_id,
             "link_name": normalized_link_name,
             "touch_links": list(resolved_touch_links),
             "used_cached_geometry": used_cached_geometry,
+            "apply_response_success": bool(response.success),
+            "verified_attached": verified_attached,
+            "verified_removed_from_world": verified_removed_from_world,
             "response": self._summarize_apply_planning_scene_response(response),
         }
 
@@ -247,11 +285,16 @@ class ROSMoveItSceneBackend(SceneBackend):
             request,
             self._apply_planning_scene_service,
         )
+        verified_detached = not self._attached_object_exists(normalized_object_id)
+        world_object_present_after_detach = self._world_object_exists(normalized_object_id)
 
         return {
-            "ok": bool(response.success),
+            "ok": verified_detached,
             "command": "detach_object",
             "object_id": normalized_object_id,
+            "apply_response_success": bool(response.success),
+            "verified_detached": verified_detached,
+            "world_object_present_after_detach": world_object_present_after_detach,
             "response": self._summarize_apply_planning_scene_response(response),
             "note": (
                 "detach_object only removes the object from attached robot state. "
@@ -281,32 +324,18 @@ class ROSMoveItSceneBackend(SceneBackend):
     def get_objects(self) -> dict[str, Any]:
         """Return known world and attached objects from the planning scene."""
 
-        request = GetPlanningScene.Request()
-        request.components = PlanningSceneComponents()
-        request.components.components = (
-            PlanningSceneComponents.WORLD_OBJECT_NAMES
-            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
-            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
-        )
-        response = self._call_service(
-            self._get_planning_scene_client,
-            request,
-            self._get_planning_scene_service,
-        )
-        scene = response.scene
-        world_objects = [
-            self._summarize_collision_object(collision_object)
-            for collision_object in scene.world.collision_objects
-        ]
-        attached_objects = [
-            self._summarize_attached_collision_object(attached_object)
-            for attached_object in scene.robot_state.attached_collision_objects
-        ]
+        world_objects, attached_objects = self._fetch_scene_objects()
         return {
             "ok": True,
             "command": "get_objects",
-            "world_collision_objects": world_objects,
-            "attached_objects": attached_objects,
+            "world_collision_objects": [
+                self._summarize_collision_object(collision_object)
+                for collision_object in world_objects
+            ],
+            "attached_objects": [
+                self._summarize_attached_collision_object(attached_object)
+                for attached_object in attached_objects
+            ],
         }
 
     def _create_node(self) -> Node:
@@ -415,6 +444,55 @@ class ROSMoveItSceneBackend(SceneBackend):
             "Supported types are: box, sphere, cylinder, mesh."
         )
 
+    def _fetch_scene_objects(self) -> tuple[list[CollisionObject], list[AttachedCollisionObject]]:
+        """Fetch world and attached collision objects from MoveIt's planning scene."""
+
+        request = GetPlanningScene.Request()
+        request.components = PlanningSceneComponents()
+        request.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_NAMES
+            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+        )
+        response = self._call_service(
+            self._get_planning_scene_client,
+            request,
+            self._get_planning_scene_service,
+        )
+        return (
+            list(response.scene.world.collision_objects),
+            list(response.scene.robot_state.attached_collision_objects),
+        )
+
+    def _world_object_exists(self, object_id: str) -> bool:
+        normalized_object_id = self._normalize_object_id(object_id)
+        world_objects, _ = self._fetch_scene_objects()
+        return any(collision_object.id == normalized_object_id for collision_object in world_objects)
+
+    def _attached_object_exists(self, object_id: str, link_name: str | None = None) -> bool:
+        normalized_object_id = self._normalize_object_id(object_id)
+        normalized_link_name = (
+            self._normalize_required_string(link_name, "link_name")
+            if link_name is not None
+            else None
+        )
+        _, attached_objects = self._fetch_scene_objects()
+        for attached_object in attached_objects:
+            if attached_object.object.id != normalized_object_id:
+                continue
+            if normalized_link_name is None or attached_object.link_name == normalized_link_name:
+                return True
+        return False
+
+    def _verify_world_object_absent(self, object_id: str) -> bool:
+        return not self._world_object_exists(object_id)
+
+    def _verify_world_object_present(self, object_id: str) -> bool:
+        return self._world_object_exists(object_id)
+
+    def _verify_attached_object_present(self, object_id: str, link_name: str | None = None) -> bool:
+        return self._attached_object_exists(object_id, link_name)
+
     def _get_world_collision_object(self, object_id: str) -> tuple[CollisionObject, bool]:
         """Return full world collision geometry for one object ID."""
 
@@ -423,18 +501,8 @@ class ROSMoveItSceneBackend(SceneBackend):
         if cached_object is not None:
             return deepcopy(cached_object), True
 
-        request = GetPlanningScene.Request()
-        request.components = PlanningSceneComponents()
-        request.components.components = (
-            PlanningSceneComponents.WORLD_OBJECT_NAMES
-            | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
-        )
-        response = self._call_service(
-            self._get_planning_scene_client,
-            request,
-            self._get_planning_scene_service,
-        )
-        for collision_object in response.scene.world.collision_objects:
+        world_objects, _ = self._fetch_scene_objects()
+        for collision_object in world_objects:
             if collision_object.id == normalized_object_id:
                 self._collision_object_cache[normalized_object_id] = deepcopy(collision_object)
                 return deepcopy(collision_object), False
