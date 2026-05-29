@@ -1,9 +1,8 @@
-"""ROS-backed MoveIt planning scene backend skeleton."""
+"""ROS-backed MoveIt planning scene backend."""
 
 from __future__ import annotations
 
 from typing import Any
-from typing import Sequence
 
 import rclpy
 from rclpy.node import Node
