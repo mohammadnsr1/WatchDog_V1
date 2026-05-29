@@ -101,6 +101,26 @@ def _launch_setup(context):
                 "rg2_command_rate_hz": rg2_command_rate_hz,
             }.items(),
         ),
+        # MoveIt planning frame is lowercase `world`, while Isaac Sim's default
+        # frame is uppercase `World`. This static identity transform connects
+        # the TF trees and assumes both frames represent the same physical
+        # coordinate frame.
+        Node(
+            package="tf2_ros",
+            executable="static_transform_publisher",
+            name="world_to_isaac_world_static_tf",
+            arguments=[
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+                "0",
+                "1",
+                "world",
+                "World",
+            ],
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution([sim_bringup_launch_dir, "camera_tf.launch.py"])
