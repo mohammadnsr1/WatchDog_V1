@@ -1,0 +1,39 @@
+# Model registry for tracked objects that should appear in the MoveIt planning scene.
+#
+# - tf_frame is the tracked object frame published into TF.
+# - lookup_frame is the frame used for MoveIt planning scene poses.
+# - pose_offset is T_object_collision, the transform from tracked object frame
+#   to the collision geometry frame.
+# - The final collision pose is T_lookup_collision = T_lookup_object * T_object_collision.
+# - Mesh entries can be added later once scene backend mesh loading is implemented.
+
+objects:
+  red_cube:
+    enabled: true
+    object_id: red_cube
+    tf_frame: red_cube
+    lookup_frame: world
+    class_name: cube
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: box
+      dimensions: [0.05, 0.05, 0.05]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+
+  green_cube:
+    enabled: true
+    object_id: green_cube
+    tf_frame: green_cube
+    lookup_frame: world
+    class_name: cube
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: box
+      dimensions: [0.05, 0.05, 0.05]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}

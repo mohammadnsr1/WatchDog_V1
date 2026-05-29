@@ -19,8 +19,12 @@ setup(
             "share/robot_backend/nodes",
             ["robot_backend/nodes/README.md"],
         ),
+        (
+            "share/robot_backend/config",
+            ["config/model_registry.yaml"],
+        ),
     ],
-    install_requires=["setuptools", "mcp"],
+    install_requires=["setuptools", "mcp", "PyYAML"],
     zip_safe=True,
     maintainer="mnasr3@asu.edu",
     maintainer_email="todo@example.com",
@@ -34,6 +38,7 @@ setup(
         "console_scripts": [
             "gripper_mcp_server = robot_backend.mcp_servers.gripper_mcp_server:main",
             "motion_mcp_server = robot_backend.mcp_servers.motion_mcp_server:main",
+            "scene_tf_sync_node = robot_backend.nodes.scene_tf_sync_node:main",
         ],
     },
 )
