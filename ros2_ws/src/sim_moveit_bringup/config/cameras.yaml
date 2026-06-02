@@ -2,6 +2,6 @@ cameras:
   - name: camera_depth
     parent_frame: world
     child_frame: camera_depth_optical_frame
-    xyz: [0.2, -0.1, 1.8]
-    quat_xyzw: [-0.0, 0.99939, 0.0349, 0.0]
+    xyz: [0.25, -0.2, 1.7]
+    quat_xyzw: [0.0, 1.0, 0.0, 0.0]
     pointcloud_topic: /camera/depth/points

@@ -83,7 +83,7 @@
   <joint name="world_to_base_link" type="fixed">
     <parent link="world"/>
     <child link="base_link"/>
-    <origin xyz="0 -0.7 0" rpy="0 0 0"/>
+    <origin xyz="0.22686 -0.64727 0.08579" rpy="0 0 0"/>
   </joint>
   <link name="shoulder_link">
     <visual>

@@ -297,8 +297,8 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("crop_min_x", default_value="-1.0", description="Workspace crop minimum X in meters."),
             DeclareLaunchArgument("crop_max_x", default_value="2.0", description="Workspace crop maximum X in meters."),
-            DeclareLaunchArgument("crop_min_y", default_value="-1.5", description="Workspace crop minimum Y in meters."),
-            DeclareLaunchArgument("crop_max_y", default_value="1.5", description="Workspace crop maximum Y in meters."),
+            DeclareLaunchArgument("crop_min_y", default_value="-1.0", description="Workspace crop minimum Y in meters."),
+            DeclareLaunchArgument("crop_max_y", default_value="1.0", description="Workspace crop maximum Y in meters."),
             DeclareLaunchArgument("crop_min_z", default_value="-0.1", description="Workspace crop minimum Z in meters."),
             DeclareLaunchArgument("crop_max_z", default_value="1.8", description="Workspace crop maximum Z in meters."),
             DeclareLaunchArgument(
