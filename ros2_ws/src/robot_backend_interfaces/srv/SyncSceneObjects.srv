@@ -1,0 +1,10 @@
+# Sync collision objects from TF + model_registry into MoveIt's planning scene.
+# Empty object_ids means sync all enabled registry objects.
+# Non-empty object_ids means sync only the listed objects.
+string[] object_ids
+---
+bool success
+string[] synced_object_ids
+string[] failed_object_ids
+string[] skipped_object_ids
+string message

@@ -16,6 +16,7 @@ from moveit_msgs.msg import PlanningSceneComponents
 from moveit_msgs.srv import ApplyPlanningScene
 from moveit_msgs.srv import GetPlanningScene
 from rclpy.node import Node
+from robot_backend_interfaces.srv import SyncSceneObjects
 from shape_msgs.msg import SolidPrimitive
 from std_srvs.srv import Empty
 
@@ -25,6 +26,7 @@ from robot_backend.interfaces.scene_backend import SceneBackend
 DEFAULT_APPLY_PLANNING_SCENE_SERVICE = "/apply_planning_scene"
 DEFAULT_GET_PLANNING_SCENE_SERVICE = "/get_planning_scene"
 DEFAULT_CLEAR_OCTOMAP_SERVICE = "/clear_octomap"
+DEFAULT_SYNC_SCENE_OBJECTS_SERVICE = "/sync_scene_objects"
 
 _PRIMITIVE_TYPE_NAMES = {
     SolidPrimitive.BOX: "box",
@@ -44,12 +46,14 @@ class ROSMoveItSceneBackend(SceneBackend):
         apply_planning_scene_service: str = DEFAULT_APPLY_PLANNING_SCENE_SERVICE,
         get_planning_scene_service: str = DEFAULT_GET_PLANNING_SCENE_SERVICE,
         clear_octomap_service: str = DEFAULT_CLEAR_OCTOMAP_SERVICE,
+        sync_scene_objects_service: str = DEFAULT_SYNC_SCENE_OBJECTS_SERVICE,
     ) -> None:
         self._owns_node = node is None
         self._node = node or self._create_node()
         self._apply_planning_scene_service = apply_planning_scene_service
         self._get_planning_scene_service = get_planning_scene_service
         self._clear_octomap_service = clear_octomap_service
+        self._sync_scene_objects_service = sync_scene_objects_service
         self._touch_links_by_object: dict[str, list[str]] = {}
         self._collision_object_cache: dict[str, CollisionObject] = {}
         self._apply_planning_scene_client = self._node.create_client(
@@ -63,6 +67,10 @@ class ROSMoveItSceneBackend(SceneBackend):
         self._clear_octomap_client = self._node.create_client(
             Empty,
             self._clear_octomap_service,
+        )
+        self._sync_scene_objects_client = self._node.create_client(
+            SyncSceneObjects,
+            self._sync_scene_objects_service,
         )
 
     @property
@@ -336,6 +344,38 @@ class ROSMoveItSceneBackend(SceneBackend):
                 self._summarize_attached_collision_object(attached_object)
                 for attached_object in attached_objects
             ],
+        }
+
+    def sync_collision_objects(
+        self,
+        object_ids: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Sync collision objects from TF + model_registry into MoveIt's planning scene.
+
+        Delegates to the /sync_scene_objects service provided by scene_tf_sync_node.
+
+        Args:
+            object_ids: If provided, sync only these objects. If None or empty, sync all
+                        enabled objects in the model registry.
+        """
+
+        request = SyncSceneObjects.Request()
+        request.object_ids = list(object_ids) if object_ids else []
+
+        response = self._call_service(
+            self._sync_scene_objects_client,
+            request,
+            self._sync_scene_objects_service,
+        )
+
+        return {
+            "ok": bool(response.success),
+            "command": "sync_collision_objects",
+            "service_name": self._sync_scene_objects_service,
+            "synced_object_ids": list(response.synced_object_ids),
+            "failed_object_ids": list(response.failed_object_ids),
+            "skipped_object_ids": list(response.skipped_object_ids),
+            "message": str(response.message),
         }
 
     def _create_node(self) -> Node:

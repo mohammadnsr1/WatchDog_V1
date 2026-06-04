@@ -59,3 +59,15 @@ class SceneBackend(ABC):
     @abstractmethod
     def get_objects(self) -> Any:
         """Return known scene objects in a backend-defined format."""
+
+    @abstractmethod
+    def sync_collision_objects(
+        self,
+        object_ids: Sequence[str] | None = None,
+    ) -> Any:
+        """Sync collision objects from TF + model_registry into the planning scene.
+
+        Args:
+            object_ids: If provided, sync only these objects. If None or empty,
+                        sync all enabled objects in the model registry.
+        """

@@ -1,8 +1,19 @@
 """Manual smoke test helper for the MoveIt planning scene backend.
 
-This helper is intentionally not exposed as a console script yet.
-Run it manually later in a ROS environment after the relevant workspace is
-built and sourced.
+Run after building and sourcing the workspace:
+
+    scene_backend_smoke_test <mode> [options]
+
+Or without installing:
+
+    python3 -m robot_backend.manual_tests.scene_backend_smoke_test <mode>
+
+Modes added for the service-driven scene sync refactor:
+
+    sync                  -- call sync_collision_objects() for all registry objects
+    sync-objects <ids>    -- call sync_collision_objects() for specific object IDs
+    sequence-sync         -- sync-all -> list -> verify registry objects appeared
+    sequence-sync-restore -- remove one object, sync, verify it comes back from TF
 """
 
 from __future__ import annotations
@@ -32,6 +43,9 @@ DEFAULT_BOX_POSE = {
 }
 DEFAULT_BOX_DIMENSIONS = [0.05, 0.05, 0.05]
 DEFAULT_TOUCH_LINKS = ["tcp"]
+
+# Objects expected in the model registry for sync verification.
+REGISTRY_OBJECT_IDS = ["red_cube", "green_cube"]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -83,10 +97,6 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="link_names",
         nargs="+",
         default=list(DEFAULT_TOUCH_LINKS),
-        help=(
-            "Touch links to cache for the object. Defaults to ['tcp'] because "
-            "that is a safe generic fallback when RG2-specific links are not pinned down yet."
-        ),
     )
 
     attach_parser = subparsers.add_parser(
@@ -111,6 +121,50 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "sequence-attach",
         help="Run add -> list -> attach -> list -> detach -> list and clean up if needed.",
+    )
+
+    # --- Sync service modes ---
+
+    subparsers.add_parser(
+        "sync",
+        help=(
+            "Call sync_collision_objects() with no filter — syncs all enabled "
+            "registry objects from TF into MoveIt."
+        ),
+    )
+
+    sync_objects_parser = subparsers.add_parser(
+        "sync-objects",
+        help=(
+            "Call sync_collision_objects(object_ids=[...]) for specific IDs only. "
+            "Example: sync-objects red_cube green_cube"
+        ),
+    )
+    sync_objects_parser.add_argument(
+        "object_ids",
+        nargs="+",
+        help="One or more object IDs to sync from the model registry.",
+    )
+
+    subparsers.add_parser(
+        "sequence-sync",
+        help=(
+            "Full roundtrip: sync all registry objects -> list -> verify expected "
+            "objects appeared in the planning scene."
+        ),
+    )
+
+    sequence_sync_restore_parser = subparsers.add_parser(
+        "sequence-sync-restore",
+        help=(
+            "Remove an object from the scene, then call sync to verify it is "
+            "restored from TF. Demonstrates TF as the authoritative pose source."
+        ),
+    )
+    sequence_sync_restore_parser.add_argument(
+        "--object-id",
+        default="red_cube",
+        help="Object to remove and then restore via sync.",
     )
 
     return parser
@@ -138,6 +192,15 @@ def _default_box_pose() -> dict[str, object]:
         "frame_id": DEFAULT_BOX_POSE["frame_id"],
         "position": dict(DEFAULT_BOX_POSE["position"]),
         "orientation": dict(DEFAULT_BOX_POSE["orientation"]),
+    }
+
+
+def _world_object_ids(get_objects_result: dict) -> set[str]:
+    """Return the set of world-collision-object IDs from a get_objects() result."""
+    return {
+        item.get("id")
+        for item in get_objects_result.get("world_collision_objects", [])
+        if isinstance(item, dict) and item.get("id")
     }
 
 
@@ -173,12 +236,7 @@ def _run_sequence_attach(backend) -> dict[str, object]:
     steps.append({"step": "list-after-detach", "result": post_detach})
 
     cleanup_result = None
-    world_ids = {
-        item.get("id")
-        for item in post_detach.get("world_collision_objects", [])
-        if isinstance(item, dict)
-    }
-    if object_id in world_ids:
+    if object_id in _world_object_ids(post_detach):
         cleanup_result = backend.scene.remove_collision_object(object_id)
         steps.append({"step": "remove-world-object", "result": cleanup_result})
 
@@ -194,6 +252,107 @@ def _run_sequence_attach(backend) -> dict[str, object]:
             "detach_verified_detached": detach_result.get("verified_detached"),
             "world_object_present_after_detach": detach_result.get("world_object_present_after_detach"),
             "cleanup_ok": None if cleanup_result is None else cleanup_result.get("ok"),
+        },
+        "steps": steps,
+    }
+
+
+def _run_sequence_sync(backend) -> dict[str, object]:
+    """Sync all registry objects and verify they appear in the planning scene."""
+    steps: list[dict[str, object]] = []
+
+    initial_state = backend.scene.get_objects()
+    steps.append({"step": "list-before-sync", "result": initial_state})
+    ids_before = _world_object_ids(initial_state)
+
+    sync_result = backend.scene.sync_collision_objects()
+    steps.append({"step": "sync-all", "result": sync_result})
+
+    post_sync_state = backend.scene.get_objects()
+    steps.append({"step": "list-after-sync", "result": post_sync_state})
+    ids_after = _world_object_ids(post_sync_state)
+
+    expected = set(REGISTRY_OBJECT_IDS)
+    synced_ids = set(sync_result.get("synced_object_ids", []))
+    failed_ids = set(sync_result.get("failed_object_ids", []))
+    skipped_ids = set(sync_result.get("skipped_object_ids", []))
+    appeared = ids_after - ids_before
+    missing_from_scene = synced_ids - ids_after
+    expected_present = expected & ids_after
+
+    overall_ok = (
+        sync_result.get("ok", False)
+        and not failed_ids
+        and expected_present == expected
+    )
+
+    return {
+        "ok": overall_ok,
+        "command": "sequence-sync",
+        "verification_summary": {
+            "service_ok": sync_result.get("ok"),
+            "service_message": sync_result.get("message"),
+            "synced_ids": sorted(synced_ids),
+            "failed_ids": sorted(failed_ids),
+            "skipped_ids": sorted(skipped_ids),
+            "world_ids_before_sync": sorted(ids_before),
+            "world_ids_after_sync": sorted(ids_after),
+            "newly_appeared_in_scene": sorted(appeared),
+            "synced_but_missing_from_scene": sorted(missing_from_scene),
+            "expected_registry_objects": sorted(expected),
+            "expected_objects_present_in_scene": sorted(expected_present),
+            "all_expected_present": expected_present == expected,
+        },
+        "steps": steps,
+    }
+
+
+def _run_sequence_sync_restore(backend, object_id: str) -> dict[str, object]:
+    """Remove object_id, call sync, verify it is restored from TF."""
+    steps: list[dict[str, object]] = []
+
+    # 1. Sync first so there is a known baseline.
+    initial_sync = backend.scene.sync_collision_objects()
+    steps.append({"step": "initial-sync", "result": initial_sync})
+
+    state_after_initial_sync = backend.scene.get_objects()
+    steps.append({"step": "list-after-initial-sync", "result": state_after_initial_sync})
+    present_before_remove = object_id in _world_object_ids(state_after_initial_sync)
+
+    # 2. Remove the object manually to simulate a stale or cleared scene.
+    remove_result = backend.scene.remove_collision_object(object_id)
+    steps.append({"step": "remove", "result": remove_result})
+
+    state_after_remove = backend.scene.get_objects()
+    steps.append({"step": "list-after-remove", "result": state_after_remove})
+    absent_after_remove = object_id not in _world_object_ids(state_after_remove)
+
+    # 3. Sync only this object to verify TF restores it.
+    restore_sync = backend.scene.sync_collision_objects(object_ids=[object_id])
+    steps.append({"step": "sync-restore", "result": restore_sync})
+
+    state_after_restore = backend.scene.get_objects()
+    steps.append({"step": "list-after-restore", "result": state_after_restore})
+    restored = object_id in _world_object_ids(state_after_restore)
+
+    overall_ok = (
+        present_before_remove
+        and absent_after_remove
+        and restore_sync.get("ok", False)
+        and restored
+    )
+
+    return {
+        "ok": overall_ok,
+        "command": "sequence-sync-restore",
+        "object_id": object_id,
+        "verification_summary": {
+            "present_before_remove": present_before_remove,
+            "absent_after_remove": absent_after_remove,
+            "restore_sync_ok": restore_sync.get("ok"),
+            "restore_sync_message": restore_sync.get("message"),
+            "restored_in_scene": restored,
+            "overall_pass": overall_ok,
         },
         "steps": steps,
     }
@@ -240,6 +399,14 @@ def main() -> None:
             result = backend.scene.detach_object(args.object_id)
         elif args.mode == "sequence-attach":
             result = _run_sequence_attach(backend)
+        elif args.mode == "sync":
+            result = backend.scene.sync_collision_objects()
+        elif args.mode == "sync-objects":
+            result = backend.scene.sync_collision_objects(object_ids=args.object_ids)
+        elif args.mode == "sequence-sync":
+            result = _run_sequence_sync(backend)
+        elif args.mode == "sequence-sync-restore":
+            result = _run_sequence_sync_restore(backend, args.object_id)
         else:  # pragma: no cover - argparse enforces valid modes
             raise ValueError(f"Unsupported mode: {args.mode}")
 
