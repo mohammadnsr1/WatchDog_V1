@@ -1,18 +1,8 @@
-"""Sync object TF poses and model-registry collision shapes into MoveIt's planning scene.
-
-Manual usage later:
-- Prerequisites:
-  - Isaac Sim publishing TF frames such as World -> red_cube and World -> green_cube.
-  - Bringup publishing the static identity transform world -> World.
-  - MoveIt services /apply_planning_scene and /get_planning_scene available.
-- Then run this node once or on a timer to push registry-defined objects into MoveIt.
-- After a sync, use the scene backend smoke test list mode to confirm red_cube and
-  green_cube appear in the planning scene.
-"""
+"""Continuously sync object TF poses and model-registry collision shapes into MoveIt's planning scene."""
 
 from __future__ import annotations
 
-import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +22,9 @@ from robot_backend.utils.geometry import make_pose
 
 
 _DEFAULT_SYNC_RATE_HZ = 1.0
-_DEFAULT_TF_LOOKUP_TIMEOUT_SEC = 0.5
+_DEFAULT_TF_LOOKUP_TIMEOUT_SEC = 2.0
+_DEFAULT_SUMMARY_LOG_INTERVAL_SEC = 10.0
+_DEFAULT_WARNING_THROTTLE_SEC = 5.0
 
 
 class SceneTFSyncNode(Node):
@@ -42,7 +34,6 @@ class SceneTFSyncNode(Node):
         super().__init__('scene_tf_sync_node')
         self.declare_parameter('model_registry_path', '')
         self.declare_parameter('sync_rate_hz', _DEFAULT_SYNC_RATE_HZ)
-        self.declare_parameter('once', False)
         self.declare_parameter('remove_missing_objects', False)
         self.declare_parameter('tf_lookup_timeout_sec', _DEFAULT_TF_LOOKUP_TIMEOUT_SEC)
         self.declare_parameter('add_only_enabled', True)
@@ -51,24 +42,27 @@ class SceneTFSyncNode(Node):
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self, spin_thread=False)
         self._last_successful_sync_by_object: dict[str, dict[str, Any]] = {}
+        self._sync_in_progress = False
+        self._warning_last_logged_at: dict[str, float] = {}
+        self._last_summary_signature: tuple[int, int, int] | None = None
+        self._last_summary_log_time = 0.0
 
         self._model_registry_path = self._resolve_registry_path()
         self._registry = self._load_registry(self._model_registry_path)
         self._sync_rate_hz = float(self.get_parameter('sync_rate_hz').value)
-        self._once = bool(self.get_parameter('once').value)
         self._remove_missing_objects = bool(self.get_parameter('remove_missing_objects').value)
         self._tf_lookup_timeout_sec = float(self.get_parameter('tf_lookup_timeout_sec').value)
         self._add_only_enabled = bool(self.get_parameter('add_only_enabled').value)
-        self._timer = None
+
+        if self._sync_rate_hz <= 0.0:
+            raise ValueError('sync_rate_hz must be > 0.')
 
         configured_objects = list(self._registry.get('objects', {}).keys())
         self.get_logger().info(f'Loaded model registry: {self._model_registry_path}')
         self.get_logger().info(f'Configured registry objects: {configured_objects}')
+        self.get_logger().info(f'Scene sync rate: {self._sync_rate_hz} Hz')
 
-        if not self._once:
-            if self._sync_rate_hz <= 0.0:
-                raise ValueError('sync_rate_hz must be > 0 when once=false.')
-            self._timer = self.create_timer(1.0 / self._sync_rate_hz, self._on_timer)
+        self._timer = self.create_timer(1.0 / self._sync_rate_hz, self._on_timer)
 
     def sync_once(self) -> dict[str, Any]:
         """Perform one registry -> TF -> planning scene update pass."""
@@ -83,41 +77,22 @@ class SceneTFSyncNode(Node):
         skipped_count = 0
 
         for registry_key, entry in objects_section.items():
-            try:
-                result = self._sync_registry_entry(registry_key, entry)
-            except Exception as exc:
-                failure_count += 1
-                result = {
-                    'ok': False,
-                    'object_id': registry_key,
-                    'status': 'exception',
-                    'error': str(exc),
-                }
-                self.get_logger().error(
-                    f"Scene sync failed for {registry_key}: {exc}"
+            result = self._sync_registry_entry(registry_key, entry)
+            results[registry_key] = result
+
+            if result.get('status') == 'skipped':
+                skipped_count += 1
+            elif result.get('ok'):
+                success_count += 1
+                self.get_logger().debug(
+                    f"Scene sync succeeded for {result['object_id']}"
                 )
             else:
-                if result.get('status') == 'skipped':
-                    skipped_count += 1
-                elif result.get('ok'):
-                    success_count += 1
-                else:
-                    failure_count += 1
-
-                if result.get('ok'):
-                    self.get_logger().info(
-                        f"Scene sync succeeded for {result['object_id']}"
-                    )
-                elif result.get('status') == 'skipped':
-                    self.get_logger().info(
-                        f"Scene sync skipped for {result['object_id']}: {result.get('reason')}"
-                    )
-                else:
-                    self.get_logger().warning(
-                        f"Scene sync failed for {result['object_id']}: {result.get('error')}"
-                    )
-
-            results[registry_key] = result
+                failure_count += 1
+                self._log_warning_throttled(
+                    key=f"sync_failure:{result['object_id']}",
+                    message=f"Scene sync failed for {result['object_id']}: {result.get('error')}",
+                )
 
         return {
             'ok': failure_count == 0,
@@ -130,27 +105,37 @@ class SceneTFSyncNode(Node):
         }
 
     def _on_timer(self) -> None:
-        result = self.sync_once()
-        self.get_logger().info(
-            'Scene sync summary: '
-            + json.dumps(
-                {
-                    'success_count': result['success_count'],
-                    'failure_count': result['failure_count'],
-                    'skipped_count': result['skipped_count'],
-                },
-                sort_keys=True,
-            )
-        )
+        if self._sync_in_progress:
+            self.get_logger().debug('Scene sync already in progress; skipping timer tick.')
+            return
+
+        self._sync_in_progress = True
+        try:
+            result = self.sync_once()
+            self._log_cycle_summary(result)
+        except Exception as exc:
+            self.get_logger().error(f'Scene sync cycle crashed unexpectedly: {exc}')
+        finally:
+            self._sync_in_progress = False
 
     def _sync_registry_entry(self, registry_key: str, entry: Any) -> dict[str, Any]:
         if not isinstance(entry, dict):
-            raise ValueError(f'Registry entry {registry_key!r} must be a mapping.')
+            return self._failure_result(
+                registry_key,
+                registry_key,
+                f'Registry entry {registry_key!r} must be a mapping.',
+                status='invalid_registry',
+            )
 
         enabled = bool(entry.get('enabled', True))
         object_id = str(entry.get('object_id', registry_key)).strip()
         if not object_id:
-            raise ValueError(f'Registry entry {registry_key!r} has an empty object_id.')
+            return self._failure_result(
+                registry_key,
+                registry_key,
+                f'Registry entry {registry_key!r} has an empty object_id.',
+                status='invalid_registry',
+            )
 
         if self._add_only_enabled and not enabled:
             return {
@@ -162,12 +147,22 @@ class SceneTFSyncNode(Node):
 
         tf_frame = str(entry.get('tf_frame', '')).strip()
         if not tf_frame:
-            raise ValueError(f'Registry entry {registry_key!r} must define tf_frame.')
+            return self._failure_result(
+                registry_key,
+                object_id,
+                f'Registry entry {registry_key!r} must define tf_frame.',
+                status='invalid_registry',
+            )
         lookup_frame = str(entry.get('lookup_frame', 'world')).strip() or 'world'
 
         collision = entry.get('collision')
         if not isinstance(collision, dict):
-            raise ValueError(f'Registry entry {registry_key!r} must define collision.')
+            return self._failure_result(
+                registry_key,
+                object_id,
+                f'Registry entry {registry_key!r} must define collision.',
+                status='invalid_registry',
+            )
 
         shape_type = str(collision.get('type', '')).strip().lower()
         if shape_type == 'mesh':
@@ -175,31 +170,59 @@ class SceneTFSyncNode(Node):
                 f"Mesh collision for {object_id} is not supported yet. "
                 'Scene backend mesh loading is still a TODO.'
             )
-            self.get_logger().warning(warning)
-            return {
-                'ok': False,
-                'object_id': object_id,
-                'status': 'unsupported',
-                'error': warning,
-            }
+            return self._failure_result(
+                registry_key,
+                object_id,
+                warning,
+                status='unsupported',
+                lookup_frame=lookup_frame,
+                tf_frame=tf_frame,
+            )
 
         try:
             tf_pose = self._lookup_tf_pose(lookup_frame=lookup_frame, tf_frame=tf_frame)
         except RuntimeError as exc:
             if self._remove_missing_objects:
-                remove_result = self._backend.scene.remove_collision_object(object_id)
-                self.get_logger().warning(
-                    f"Removed stale world object for {object_id} after TF lookup failure: {remove_result}"
-                )
-            raise
-        pose_offset = self._normalize_pose_offset(collision.get('pose_offset'), lookup_frame)
-        collision_pose = compose_poses(tf_pose, pose_offset)
-        shape = self._build_shape_spec(collision)
-        backend_result = self._backend.scene.add_collision_object(
-            object_id=object_id,
-            pose=collision_pose,
-            shape=shape,
-        )
+                try:
+                    remove_result = self._backend.scene.remove_collision_object(object_id)
+                    self.get_logger().debug(
+                        f"Removed stale world object for {object_id} after TF lookup failure: {remove_result}"
+                    )
+                except Exception as remove_exc:
+                    self._log_warning_throttled(
+                        key=f"remove_failure:{object_id}",
+                        message=(
+                            f'Removing stale collision object for {object_id} failed after TF loss: '
+                            f'{remove_exc}'
+                        ),
+                    )
+            return self._failure_result(
+                registry_key,
+                object_id,
+                str(exc),
+                status='tf_unavailable',
+                lookup_frame=lookup_frame,
+                tf_frame=tf_frame,
+            )
+
+        try:
+            pose_offset = self._normalize_pose_offset(collision.get('pose_offset'), lookup_frame)
+            collision_pose = compose_poses(tf_pose, pose_offset)
+            shape = self._build_shape_spec(collision)
+            backend_result = self._backend.scene.add_collision_object(
+                object_id=object_id,
+                pose=collision_pose,
+                shape=shape,
+            )
+        except Exception as exc:
+            return self._failure_result(
+                registry_key,
+                object_id,
+                str(exc),
+                status='backend_error',
+                lookup_frame=lookup_frame,
+                tf_frame=tf_frame,
+            )
 
         result = {
             'ok': bool(backend_result.get('ok', False)),
@@ -212,7 +235,73 @@ class SceneTFSyncNode(Node):
         }
         if result['ok']:
             self._last_successful_sync_by_object[object_id] = result
+            return result
+
+        return self._failure_result(
+            registry_key,
+            object_id,
+            str(backend_result.get('error', 'add_collision_object returned ok=false')),
+            status='backend_error',
+            lookup_frame=lookup_frame,
+            tf_frame=tf_frame,
+            backend_result=backend_result,
+        )
+
+    def _failure_result(
+        self,
+        registry_key: str,
+        object_id: str,
+        error: str,
+        *,
+        status: str,
+        lookup_frame: str | None = None,
+        tf_frame: str | None = None,
+        backend_result: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            'ok': False,
+            'object_id': object_id,
+            'registry_key': registry_key,
+            'status': status,
+            'error': error,
+        }
+        if lookup_frame is not None:
+            result['lookup_frame'] = lookup_frame
+        if tf_frame is not None:
+            result['tf_frame'] = tf_frame
+        if backend_result is not None:
+            result['backend_result'] = backend_result
         return result
+
+    def _log_warning_throttled(self, *, key: str, message: str) -> None:
+        now = time.monotonic()
+        last_logged_at = self._warning_last_logged_at.get(key, 0.0)
+        if now - last_logged_at >= _DEFAULT_WARNING_THROTTLE_SEC:
+            self.get_logger().warning(message)
+            self._warning_last_logged_at[key] = now
+
+    def _log_cycle_summary(self, result: dict[str, Any]) -> None:
+        signature = (
+            int(result['success_count']),
+            int(result['failure_count']),
+            int(result['skipped_count']),
+        )
+        now = time.monotonic()
+        should_log = (
+            signature != self._last_summary_signature
+            or now - self._last_summary_log_time >= _DEFAULT_SUMMARY_LOG_INTERVAL_SEC
+        )
+        if not should_log:
+            return
+
+        self.get_logger().info(
+            'Scene sync summary: '
+            f"success={result['success_count']} "
+            f"failure={result['failure_count']} "
+            f"skipped={result['skipped_count']}"
+        )
+        self._last_summary_signature = signature
+        self._last_summary_log_time = now
 
     def _lookup_tf_pose(self, *, lookup_frame: str, tf_frame: str) -> dict[str, Any]:
         try:
@@ -324,13 +413,7 @@ def main(args: list[str] | None = None) -> None:
     node: SceneTFSyncNode | None = None
     try:
         node = SceneTFSyncNode()
-        if node.get_parameter('once').value:
-            for _ in range(5):
-                rclpy.spin_once(node, timeout_sec=0.1)
-            result = node.sync_once()
-            node.get_logger().info(json.dumps(result, sort_keys=True))
-        else:
-            rclpy.spin(node)
+        rclpy.spin(node)
     finally:
         if node is not None:
             node.destroy_node()
