@@ -35,6 +35,7 @@ def _launch_setup(context):
     crop_max_z = LaunchConfiguration("crop_max_z")
     target_frame = LaunchConfiguration("target_frame")
     output_stamp_mode = LaunchConfiguration("output_stamp_mode")
+    launch_scene_sync = LaunchConfiguration("launch_scene_sync")
     start_rg2_controller = LaunchConfiguration("start_rg2_controller")
     rg2_open_position = LaunchConfiguration("rg2_open_position")
     rg2_close_position = LaunchConfiguration("rg2_close_position")
@@ -130,6 +131,16 @@ def _launch_setup(context):
                 "use_sim_time": use_sim_time,
             }.items(),
             condition=IfCondition(publish_camera_tf),
+        ),
+        # Service-driven scene sync node: exposes /sync_scene_objects so skills
+        # can pull fresh TF-based collision objects into MoveIt on demand.
+        Node(
+            package="robot_backend",
+            executable="scene_tf_sync_node",
+            name="scene_tf_sync_node",
+            output="screen",
+            parameters=[{"use_sim_time": use_sim_time}],
+            condition=IfCondition(launch_scene_sync),
         ),
         LogInfo(
             msg=(
@@ -248,6 +259,14 @@ def generate_launch_description():
                     "so cloud, TF, and robot state stay time-consistent; use now only as an emergency/debug "
                     "workaround for stale sensor stamps, because restamping old clouds as now can create "
                     "robot ghost points in the MoveIt octomap during motion."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "launch_scene_sync",
+                default_value="true",
+                description=(
+                    "Launch scene_tf_sync_node, which exposes the /sync_scene_objects service "
+                    "so pick/place skills can pull TF-based collision objects into MoveIt on demand."
                 ),
             ),
             DeclareLaunchArgument(
