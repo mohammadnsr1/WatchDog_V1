@@ -368,6 +368,11 @@ class ROSMoveItSceneBackend(SceneBackend):
             self._sync_scene_objects_service,
         )
 
+        # Invalidate stale cache entries so attach_object always fetches
+        # fresh geometry from MoveIt after a sync updates object poses.
+        for oid in response.synced_object_ids:
+            self._collision_object_cache.pop(oid, None)
+
         return {
             "ok": bool(response.success),
             "command": "sync_collision_objects",

@@ -40,6 +40,7 @@ setup(
             "motion_mcp_server = robot_backend.mcp_servers.motion_mcp_server:main",
             "scene_tf_sync_node = robot_backend.nodes.scene_tf_sync_node:main",
             "scene_backend_smoke_test = robot_backend.manual_tests.scene_backend_smoke_test:main",
+            "pick_place_mcp_server = robot_backend.mcp_servers.pick_place_mcp_server:main",
         ],
     },
 )
