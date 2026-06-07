@@ -608,26 +608,49 @@ class ROSMoveItSceneBackend(SceneBackend):
             "success": bool(response.success),
         }
 
+    def _summarize_pose(self, pose: Any) -> dict[str, Any]:
+        return {
+            "position": {
+                "x": float(pose.position.x),
+                "y": float(pose.position.y),
+                "z": float(pose.position.z),
+            },
+            "orientation": {
+                "x": float(pose.orientation.x),
+                "y": float(pose.orientation.y),
+                "z": float(pose.orientation.z),
+                "w": float(pose.orientation.w),
+            },
+        }
+
     def _summarize_collision_object(
         self,
         collision_object: CollisionObject,
     ) -> dict[str, Any]:
         geometry: list[dict[str, Any]] = []
-        for primitive in collision_object.primitives:
-            geometry.append(self._summarize_primitive(primitive))
+        for i, primitive in enumerate(collision_object.primitives):
+            entry = self._summarize_primitive(primitive)
+            if i < len(collision_object.primitive_poses):
+                entry["pose"] = self._summarize_pose(collision_object.primitive_poses[i])
+            geometry.append(entry)
         if collision_object.meshes:
-            geometry.append(
-                {
+            for i, _ in enumerate(collision_object.meshes):
+                entry: dict[str, Any] = {
                     "type": "mesh",
-                    "mesh_count": len(collision_object.meshes),
                     "todo": "Mesh summary is limited because this backend does not load mesh resources yet.",
                 }
-            )
-        return {
+                if i < len(collision_object.mesh_poses):
+                    entry["pose"] = self._summarize_pose(collision_object.mesh_poses[i])
+                geometry.append(entry)
+        result: dict[str, Any] = {
             "id": collision_object.id,
             "frame_id": collision_object.header.frame_id,
             "geometry": geometry,
         }
+        # Convenience top-level pose for the common single-primitive case
+        if len(geometry) == 1 and "pose" in geometry[0]:
+            result["pose"] = geometry[0]["pose"]
+        return result
 
     def _summarize_attached_collision_object(
         self,
