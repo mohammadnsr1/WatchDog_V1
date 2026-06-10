@@ -25,7 +25,10 @@ from __future__ import annotations
 
 import atexit
 import math
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_backend.mcp_servers import ensure_mcp_server_environment
 
@@ -33,10 +36,14 @@ ensure_mcp_server_environment("robot_backend.mcp_servers.pick_place_mcp_server")
 
 import rclpy
 from rclpy.node import Node
+from tf2_ros import Buffer, TransformListener
 
+from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.pick_place_skills import pick_object as pick_object_skill
 from robot_backend.skills.pick_place_skills import place_object as place_object_skill
+from robot_backend.skills.pose_query_skills import get_object_pose as get_object_pose_skill
+from robot_backend.skills.pose_query_skills import get_object_poses as get_object_poses_skill
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
@@ -52,9 +59,19 @@ else:
 
 _MIN_QUATERNION_NORM = 1e-8
 
+# Default registry path: resolved relative to this file so no ament_index call is
+# needed at import time (ament may not be sourced when the linter runs).
+_DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
+
 mcp = FastMCP("robot_backend_pick_place") if FastMCP is not None else None
 _NODE: Node | None = None
 _BACKEND = None
+# TF context: separate lightweight node so its spin_thread never races with
+# the service-call spin in the main backend node.
+_TF_NODE: Node | None = None
+_TF_BUFFER: Buffer | None = None
+_TF_LISTENER: TransformListener | None = None
+_REGISTRY: dict[str, Any] | None = None
 
 
 def _ensure_backend():
@@ -65,11 +82,53 @@ def _ensure_backend():
         rclpy.init(args=None)
     _NODE = Node("robot_backend_pick_place_mcp_server")
     _BACKEND = create_ros_moveit_backend(node=_NODE)
+    # Initialise event bus with this node (ROS publisher) and the default log path.
+    import os
+    log_path = os.environ.get(
+        "WATCHDOG_EVENT_LOG",
+        str(Path.home() / ".watchdog" / "events.jsonl"),
+    )
+    configure_bus(node=_NODE, log_path=log_path)
     return _BACKEND
 
 
+def _load_registry() -> dict[str, Any]:
+    """Load model_registry.yaml, trying ament share dir then source-relative path."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+    except Exception:
+        path = _DEFAULT_REGISTRY_PATH
+    with path.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def _ensure_tf_context() -> tuple[Buffer, dict[str, Any]]:
+    """Lazy-init the TF buffer/listener and registry cache.
+
+    Uses a dedicated TF node with spin_thread=True so transforms are received
+    continuously without interfering with the service-call spin on _NODE.
+    """
+    global _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
+    _ensure_backend()  # guarantees rclpy.init() has been called
+    if _TF_BUFFER is None:
+        _TF_NODE = Node("robot_backend_pick_place_tf_client")
+        _TF_BUFFER = Buffer()
+        _TF_LISTENER = TransformListener(_TF_BUFFER, _TF_NODE, spin_thread=True)
+    if _REGISTRY is None:
+        _REGISTRY = _load_registry()
+    return _TF_BUFFER, _REGISTRY
+
+
 def _shutdown_backend() -> None:
-    global _NODE, _BACKEND
+    global _NODE, _BACKEND, _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
+    shutdown_bus()
+    if _TF_NODE is not None:
+        _TF_NODE.destroy_node()
+        _TF_NODE = None
+    _TF_BUFFER = None
+    _TF_LISTENER = None
+    _REGISTRY = None
     if _NODE is not None:
         _NODE.destroy_node()
         _NODE = None
@@ -183,6 +242,48 @@ def _require_all_or_none(values: dict[str, float | None], group: str) -> bool:
 if mcp is not None:
 
     @mcp.tool()
+    def get_object_pose(object_id: str) -> dict[str, Any]:
+        """Return the current TF pose of a registry object in world coordinates.
+
+        Queries TF directly — this is the authoritative real-time pose of the
+        object, not MoveIt's cached copy. Call this to locate an object before
+        constructing pick coordinates. Does NOT modify the planning scene.
+
+        Parameters
+        ----------
+        object_id:
+            Registry object ID (e.g. "red_cube").
+        """
+        command = "get_object_pose"
+        try:
+            oid = _validate_object_id(object_id)
+            tf_buffer, registry = _ensure_tf_context()
+            return get_object_pose_skill(tf_buffer, registry, oid)
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
+
+    @mcp.tool()
+    def get_object_poses(graspable_only: bool = False) -> dict[str, Any]:
+        """Return current TF poses for all enabled registry objects.
+
+        Queries TF for every enabled object in the model registry. Use this
+        to survey the scene before planning a pick sequence. Each entry in the
+        returned poses list has the same shape as get_object_pose.
+
+        Parameters
+        ----------
+        graspable_only:
+            If True, only return objects with graspable: true in the registry
+            (useful when the executor only cares about pickable targets).
+        """
+        command = "get_object_poses"
+        try:
+            tf_buffer, registry = _ensure_tf_context()
+            return get_object_poses_skill(tf_buffer, registry, graspable_only=graspable_only)
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
     def sync_scene(object_ids: list[str] | None = None) -> dict[str, Any]:
         """Sync collision objects from TF + model registry into MoveIt's planning scene.
 
@@ -216,6 +317,90 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
+    def begin_step(
+        step_id: str,
+        object_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Record the start of an execution step and attach an optional contract.
+
+        Publishes a begin_step event to the WatchDog event bus. The WatchDog
+        uses the begin_step timestamp to open a sensor-recording window. All
+        skill_start / skill_end events that follow (until end_step) are within
+        this step's window.
+
+        Parameters
+        ----------
+        step_id:
+            Unique identifier chosen by the agent (e.g. "pick_red_cube_0").
+            Must be unique within a session to allow correct begin/end pairing.
+        object_id:
+            Registry object ID. When provided the corresponding PickContract is
+            loaded from the registry spec and serialized into the event payload,
+            binding the spec snapshot to this step's timestamp.
+        """
+        command = "begin_step"
+        try:
+            if not isinstance(step_id, str) or not step_id.strip():
+                raise ValueError("step_id must be a non-empty string.")
+            step_id = step_id.strip()
+
+            contract_dict = None
+            if object_id is not None:
+                from robot_backend.contracts.loader import load_pick_contract
+                from robot_backend.contracts.schema import to_json
+                import json
+                contract = load_pick_contract(_validate_object_id(object_id))
+                contract_dict = json.loads(to_json(contract))
+
+            from robot_backend.events.bus import get_bus
+            get_bus().emit_begin_step(step_id=step_id, contract=contract_dict)
+            return _ok(command, step_id=step_id, contract_attached=contract_dict is not None)
+        except Exception as exc:
+            return _error(command, exc, step_id=step_id)
+
+    @mcp.tool()
+    def end_step(
+        step_id: str,
+        claimed_outcome: str,
+        notes: str = "",
+    ) -> dict[str, Any]:
+        """Record the end of an execution step and declare the claimed outcome.
+
+        Publishes an end_step event. The WatchDog closes the sensor-recording
+        window at this timestamp and compares the claimed_outcome against
+        independent observations from the recording.
+
+        Parameters
+        ----------
+        step_id:
+            Must match the step_id used in the corresponding begin_step call.
+        claimed_outcome:
+            The agent's self-assessed result: "success", "failure", or "partial".
+            This is a CLAIM, not a verified result — the WatchDog checks it.
+        notes:
+            Optional free-text annotation (reason for failure, etc.).
+        """
+        command = "end_step"
+        _VALID_OUTCOMES = {"success", "failure", "partial"}
+        try:
+            if not isinstance(step_id, str) or not step_id.strip():
+                raise ValueError("step_id must be a non-empty string.")
+            if claimed_outcome not in _VALID_OUTCOMES:
+                raise ValueError(
+                    f"claimed_outcome must be one of {sorted(_VALID_OUTCOMES)}, "
+                    f"got {claimed_outcome!r}."
+                )
+            from robot_backend.events.bus import get_bus
+            get_bus().emit_end_step(
+                step_id=step_id.strip(),
+                claimed_outcome=claimed_outcome,
+                notes=notes,
+            )
+            return _ok(command, step_id=step_id.strip(), claimed_outcome=claimed_outcome)
+        except Exception as exc:
+            return _error(command, exc, step_id=step_id)
+
+    @mcp.tool()
     def pick_object(
         object_id: str,
         x: float,
@@ -226,6 +411,7 @@ if mcp is not None:
         qz: float,
         qw: float,
         grasp_width_m: float,
+        grasp_width_source: str = "agent_estimate",
         frame_id: str = "world",
         pregrasp_x: float | None = None,
         pregrasp_y: float | None = None,
@@ -257,9 +443,12 @@ if mcp is not None:
         qx, qy, qz, qw:
             Grasp center orientation quaternion.
         grasp_width_m:
-            Gripper opening width at the grasp point, in meters. Set this
-            slightly larger than the object dimension in the grasp direction
-            (e.g. 0.07 for a 6 cm cube).
+            Gripper opening width at the grasp point, in meters.
+        grasp_width_source:
+            Provenance of grasp_width_m: "registry_spec" if the value was taken
+            from model_registry.yaml spec.grasp.grasp_width_m, "agent_estimate"
+            if the agent chose a value independently. A declared estimate is
+            auditable — the WatchDog can compare it against the registry constant.
         frame_id:
             Reference frame for all poses (default: "world").
         pregrasp_x/y/z:
@@ -270,8 +459,14 @@ if mcp is not None:
             The gripper will be at grasp_width_m when moving here.
         """
         command = "pick_object"
+        _VALID_SOURCES = {"registry_spec", "agent_estimate"}
         try:
             oid = _validate_object_id(object_id)
+            if grasp_width_source not in _VALID_SOURCES:
+                raise ValueError(
+                    f"grasp_width_source must be one of {sorted(_VALID_SOURCES)}, "
+                    f"got {grasp_width_source!r}."
+                )
             grasp_center = _build_pose_dict(
                 frame_id=frame_id, x=x, y=y, z=z, qx=qx, qy=qy, qz=qz, qw=qw
             )
@@ -311,6 +506,7 @@ if mcp is not None:
                 object_id=oid,
                 grasp_center_pose=grasp_center,
                 grasp_width_m=width,
+                grasp_width_source=grasp_width_source,
                 pregrasp_pose=pregrasp_pose,
                 retreat_pose=retreat_pose,
             )

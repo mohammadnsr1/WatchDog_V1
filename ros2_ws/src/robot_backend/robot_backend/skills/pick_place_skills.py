@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 from typing import Sequence
 
+from robot_backend.events.decorator import emit_skill_events
 from robot_backend.interfaces.robot_backend import RobotBackend
 from robot_backend.utils.grasp_offsets import compute_tcp_pose_from_grasp_center
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
@@ -38,6 +39,7 @@ RG2_TOUCH_LINKS: list[str] = [
 ]
 
 
+@emit_skill_events
 def pick_object(
     backend: RobotBackend,
     *,
@@ -46,6 +48,7 @@ def pick_object(
     object_shape: Any | None = None,
     grasp_center_pose: Any | None = None,
     grasp_width_m: float | None = None,
+    grasp_width_source: str = "agent_estimate",
     tcp_offset: Any | None = None,
     pregrasp_pose: Any | None = None,
     grasp_pose: Any | None = None,
@@ -133,6 +136,7 @@ def pick_object(
     }
 
 
+@emit_skill_events
 def place_object(
     backend: RobotBackend,
     *,

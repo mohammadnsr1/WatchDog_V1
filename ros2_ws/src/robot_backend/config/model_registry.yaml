@@ -6,6 +6,18 @@
 #   to the collision geometry frame.
 # - The final collision pose is T_lookup_collision = T_lookup_object * T_object_collision.
 # - Mesh entries can be added later once scene backend mesh loading is implemented.
+#
+# spec block (graspable objects only):
+#   Represents manufacturing documentation — fixed, authoritative constants.
+#   Thresholds here are the SOLE source of truth for contract clauses; never
+#   duplicate them as inline constants elsewhere in the code.
+#
+#   grasp.grasp_center_offset  — T_object_grasp_center (zero for symmetric primitives)
+#   grasp.grasp_width_m        — nominal RG2 opening width during approach [m]
+#   tolerances.position_m      — allowable object pose error before / after pick [m]
+#   tolerances.orientation_deg — allowable orientation error [degrees]
+#   tolerances.lift_height_min_m — minimum vertical displacement to confirm grasp [m]
+#   limits.max_contact_force_n — invariant upper bound on contact force [N]
 
 objects:
   red_cube:
@@ -22,6 +34,18 @@ objects:
       pose_offset:
         position: {x: 0.0, y: 0.0, z: 0.0}
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        grasp_center_offset:
+          position: {x: 0.0, y: 0.0, z: 0.0}
+          orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+        grasp_width_m: 0.065      # 6.5 cm — slightly wider than the 6 cm cube face
+      tolerances:
+        position_m: 0.005         # 5 mm pre-pick localization tolerance
+        orientation_deg: 5.0      # 5 degree heading tolerance
+        lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+      limits:
+        max_contact_force_n: 20.0  # derived from RG2 max grip force on a 6 cm rigid cube
 
   green_cube:
     enabled: true
@@ -37,3 +61,15 @@ objects:
       pose_offset:
         position: {x: 0.0, y: 0.0, z: 0.0}
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        grasp_center_offset:
+          position: {x: 0.0, y: 0.0, z: 0.0}
+          orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+        grasp_width_m: 0.045      # 4.5 cm — slightly wider than the 4 cm cube face
+      tolerances:
+        position_m: 0.005         # 5 mm pre-pick localization tolerance
+        orientation_deg: 5.0      # 5 degree heading tolerance
+        lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+      limits:
+        max_contact_force_n: 15.0  # lower limit for the smaller, lighter green cube
