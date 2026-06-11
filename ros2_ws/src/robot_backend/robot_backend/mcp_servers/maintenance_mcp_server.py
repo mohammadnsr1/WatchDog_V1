@@ -19,11 +19,11 @@ import atexit
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from robot_backend.mcp_servers import ensure_mcp_server_environment
 
 ensure_mcp_server_environment("robot_backend.mcp_servers.maintenance_mcp_server")
+
+import yaml
 
 import rclpy
 from rclpy.node import Node

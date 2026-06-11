@@ -28,11 +28,11 @@ import math
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from robot_backend.mcp_servers import ensure_mcp_server_environment
 
 ensure_mcp_server_environment("robot_backend.mcp_servers.pick_place_mcp_server")
+
+import yaml
 
 import rclpy
 from rclpy.node import Node
@@ -140,8 +140,38 @@ def _shutdown_backend() -> None:
 atexit.register(_shutdown_backend)
 
 
+def _serialize_value(value: Any) -> Any:
+    """Convert ROS messages and other non-JSON types into MCP-safe values."""
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+
+    success = getattr(value, "success", None)
+    message = getattr(value, "message", None)
+    if success is not None or message is not None:
+        return {
+            "success": bool(success) if success is not None else None,
+            "message": message,
+        }
+
+    if isinstance(value, dict):
+        return {str(key): _serialize_value(item) for key, item in value.items()}
+
+    if isinstance(value, (list, tuple)):
+        return [_serialize_value(item) for item in value]
+
+    field_types = getattr(value.__class__, "get_fields_and_field_types", None)
+    if callable(field_types):
+        return {
+            field_name: _serialize_value(getattr(value, field_name))
+            for field_name in field_types().keys()
+        }
+
+    return str(value)
+
+
 def _ok(command: str, **payload: Any) -> dict[str, Any]:
-    return {"ok": True, "command": command, **payload}
+    return {"ok": True, "command": command, **_serialize_value(payload)}
 
 
 def _error(command: str, error: Exception | str, **payload: Any) -> dict[str, Any]:
