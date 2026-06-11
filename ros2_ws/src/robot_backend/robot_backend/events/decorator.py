@@ -26,6 +26,11 @@ import time
 from typing import Any, Callable
 
 
+# Infrastructure params that carry no audit value in event logs and are either
+# too large (registry dict) or not JSON-serializable (tf2_ros.Buffer).
+_EXCLUDED_PARAMS: frozenset[str] = frozenset({"registry", "tf_buffer"})
+
+
 def _sanitize_params(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Return the serializable (JSON-safe) subset of a kwargs dict.
 
@@ -35,6 +40,8 @@ def _sanitize_params(kwargs: dict[str, Any]) -> dict[str, Any]:
     """
     safe: dict[str, Any] = {}
     for key, value in kwargs.items():
+        if key in _EXCLUDED_PARAMS:
+            continue
         if isinstance(value, (str, int, float, bool, type(None))):
             safe[key] = value
         elif isinstance(value, (list, tuple)) and all(

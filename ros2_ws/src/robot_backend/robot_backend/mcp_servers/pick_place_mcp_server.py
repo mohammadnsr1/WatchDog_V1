@@ -424,12 +424,17 @@ if mcp is not None:
 
         Internally this skill:
           1. Syncs the object's TF pose into MoveIt.
-          2. Moves to pregrasp position (if provided), gripper open.
-          3. Opens gripper to full width.
-          4. Moves to the grasp center pose.
-          5. Closes the gripper.
-          6. Attaches the object to the robot (removes it from world scene).
-          7. Moves to retreat position (if provided).
+          2. Captures the object's resting TF pose as a reference.
+          3. Moves to pregrasp position (if provided), gripper open.
+          4. Opens gripper to full width.
+          5. Moves to the grasp center pose.
+          6. Closes the gripper.
+          7. Attaches the object to the robot (removes it from world scene).
+          8. Lifts to the retreat position (or a minimal 5 cm lift if no retreat).
+          9. Verifies the grasp: compares object TF pose to reference and TCP.
+             On failure the attachment is reversed and ok=False with grasp_failed=True
+             is returned. On success the object remains attached.
+         10. Moves to retreat position (if the lift in step 8 was not already the retreat).
 
         All positions are in grasp-center coordinates (logical grip point),
         not raw TCP coordinates. The server handles the RG2 TCP offset internally.
@@ -501,6 +506,10 @@ if mcp is not None:
                 retreat_pose = tcp_target_from_grasp_center(retreat_center, width)
 
             backend = _ensure_backend()
+            try:
+                tf_buffer, registry = _ensure_tf_context()
+            except Exception:
+                tf_buffer, registry = None, None
             result = pick_object_skill(
                 backend,
                 object_id=oid,
@@ -509,6 +518,8 @@ if mcp is not None:
                 grasp_width_source=grasp_width_source,
                 pregrasp_pose=pregrasp_pose,
                 retreat_pose=retreat_pose,
+                tf_buffer=tf_buffer,
+                registry=registry,
             )
             return _ok(command, object_id=oid, result=result)
         except Exception as exc:
