@@ -83,17 +83,19 @@ class ROSGripperBackend(GripperBackend):
 
         return self._node
 
-    def open(self) -> Trigger.Response:
+    def open(self) -> dict[str, Any]:
         """Call the RG2 open service."""
 
-        return self._call_service(self._open_binding)
+        response = self._call_service(self._open_binding)
+        return {"ok": response.success, "message": response.message}
 
-    def close(self) -> Trigger.Response:
+    def close(self) -> dict[str, Any]:
         """Call the RG2 close service."""
 
-        return self._call_service(self._close_binding)
+        response = self._call_service(self._close_binding)
+        return {"ok": response.success, "message": response.message}
 
-    def set_width(self, width_m: float) -> SetGripperPosition.Response:
+    def set_width(self, width_m: float) -> dict[str, Any]:
         """Command a physical RG2 opening width in meters.
 
         This converts the requested physical width to the RG2 master joint
@@ -104,17 +106,18 @@ class ROSGripperBackend(GripperBackend):
         position_rad = width_to_joint_position(width_m, self._calibration)
         return self.set_joint_position(position_rad)
 
-    def set_joint_position(self, position_rad: float) -> SetGripperPosition.Response:
+    def set_joint_position(self, position_rad: float) -> dict[str, Any]:
         """Command the raw RG2 master joint target in radians.
 
         This is backend-specific and bypasses the higher-level physical width
         semantics exposed by `GripperBackend.set_width(width_m)`.
         """
 
-        return self._call_service(
+        response = self._call_service(
             self._set_position_binding,
             position_rad=position_rad,
         )
+        return {"ok": response.success, "message": response.message}
 
     def get_state(self) -> dict[str, Any]:
         """Return backend metadata and the active RG2 calibration."""
