@@ -9,7 +9,9 @@ The workspace confirms these default RG2 controller services:
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 from typing import Callable
 
@@ -51,6 +53,7 @@ class ROSGripperBackend(GripperBackend):
         open_binding: ServiceBinding | None = None,
         close_binding: ServiceBinding | None = None,
         set_position_binding: ServiceBinding | None = None,
+        joint_states_topic: str = "/joint_states",
     ) -> None:
         self._owns_node = node is None
         self._node = node or self._create_node()
@@ -70,6 +73,9 @@ class ROSGripperBackend(GripperBackend):
             srv_type=SetGripperPosition,
             request_builder=self._build_set_position_request,
         )
+        self._joint_states_topic = joint_states_topic
+        self._joint_state_sub = None
+        self._latest_joint_state: Any = None
 
     @property
     def node(self) -> Node:
@@ -136,6 +142,67 @@ class ROSGripperBackend(GripperBackend):
                 "tcp_to_grasp_center_closed": self._calibration.tcp_to_grasp_center_closed,
             },
         }
+
+    def read_joint_state(
+        self,
+        joint_name: str,
+        timeout_sec: float = 1.0,
+    ) -> dict[str, Any]:
+        """Return effort and position for joint_name from /joint_states.
+
+        Creates the subscription once on first call (lazy init) and caches
+        the latest message. Spins the node with spin_once until a message
+        containing the named joint arrives or timeout elapses.
+        """
+        self._ensure_joint_state_subscription()
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self._node, timeout_sec=0.02)
+            msg = self._latest_joint_state
+            if msg is not None:
+                names = list(msg.name)
+                if joint_name in names:
+                    idx = names.index(joint_name)
+                    effort = (
+                        float(msg.effort[idx])
+                        if msg.effort and idx < len(msg.effort)
+                        else 0.0
+                    )
+                    position = (
+                        float(msg.position[idx])
+                        if msg.position and idx < len(msg.position)
+                        else 0.0
+                    )
+                    return {
+                        "ok": True,
+                        "joint_name": joint_name,
+                        "effort": effort,
+                        "position": position,
+                    }
+        return {
+            "ok": False,
+            "joint_name": joint_name,
+            "error": (
+                f"Timeout ({timeout_sec:.1f}s) waiting for joint state "
+                f"containing '{joint_name}' on {self._joint_states_topic}."
+            ),
+        }
+
+    def _ensure_joint_state_subscription(self) -> None:
+        """Create the /joint_states subscription once, lazily."""
+        if self._joint_state_sub is not None:
+            return
+        from sensor_msgs.msg import JointState
+
+        def _callback(msg: Any) -> None:
+            self._latest_joint_state = msg
+
+        self._joint_state_sub = self._node.create_subscription(
+            JointState,
+            self._joint_states_topic,
+            _callback,
+            10,
+        )
 
     def _create_node(self) -> Node:
         """Create an internal helper node if one was not supplied."""

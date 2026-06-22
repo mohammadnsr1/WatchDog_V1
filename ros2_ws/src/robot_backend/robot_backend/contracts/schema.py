@@ -66,6 +66,7 @@ class PickContract(BaseModel):
     version: str = "1.0"
     object_id: str
     grasp_width_m: float
+    force_threshold_n: float
     preconditions: list[Clause]
     effects: list[Clause]
     invariants: list[Clause]

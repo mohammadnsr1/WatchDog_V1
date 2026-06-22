@@ -25,6 +25,12 @@ _DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
 )
 
+# System-wide constants for grasp success criteria clauses.
+# These must stay in sync with gripper_skills.AIR_CLOSE_FLOOR_EFFORT and
+# gripper_skills.GRASP_WIDTH_TOLERANCE_M respectively.
+_GRASP_EFFORT_FLOOR: float = 0.05   # sim effort units — empirical air-close floor
+_GRASP_WIDTH_TOL_M: float = 0.020   # metres — ±20 mm plausibility band
+
 
 def _load_registry(path: Path | None) -> dict[str, Any]:
     resolved = path or _DEFAULT_REGISTRY_PATH
@@ -84,6 +90,7 @@ def load_pick_contract(
 
     # --- Extract spec values (let KeyError/TypeError surface for missing fields) ---
     grasp_width_m: float = float(grasp["grasp_width_m"])
+    force_threshold_n: float = float(grasp["force_threshold_n"])
     position_tol: float = float(tolerances["position_m"])
     orientation_tol: float = float(tolerances["orientation_deg"])
     lift_height_min: float = float(tolerances["lift_height_min_m"])
@@ -145,6 +152,28 @@ def load_pick_contract(
             ),
             unit="m",
         ),
+        Clause(
+            field="grasp_effort_plateau",
+            comparison=Comparison.GE,
+            threshold=_GRASP_EFFORT_FLOOR,
+            description=(
+                "Mean finger_joint effort at the detected plateau must exceed the "
+                "air-close floor, confirming physical contact with the object "
+                "rather than an air grasp."
+            ),
+            unit="sim_effort",
+        ),
+        Clause(
+            field="grasp_width_error_m",
+            comparison=Comparison.LE,
+            threshold=_GRASP_WIDTH_TOL_M,
+            description=(
+                "Absolute deviation between the measured grip width at plateau and "
+                "spec.grasp.grasp_width_m must stay within the plausibility band. "
+                "A near-zero measured width indicates an air grasp."
+            ),
+            unit="m",
+        ),
     ]
 
     # --- Invariants: must hold THROUGHOUT execution ---
@@ -154,16 +183,29 @@ def load_pick_contract(
             comparison=Comparison.LE,
             threshold=max_force,
             description=(
-                "Contact force on the object must not exceed the per-object limit "
-                "at any point during the pick sequence."
+                "Contact force on the object must not exceed the hardware safety "
+                "limit at any point during the pick sequence."
             ),
             unit="N",
+        ),
+        Clause(
+            field="grasp_effort_instantaneous",
+            comparison=Comparison.LE,
+            threshold=force_threshold_n,
+            description=(
+                "Instantaneous finger_joint effort must not exceed the per-object "
+                "guarded-close cap (spec.grasp.force_threshold_n) during the grasp "
+                "sequence. This is a software-enforced effort ceiling, distinct from "
+                "the hardware safety limit in limits.max_contact_force_n."
+            ),
+            unit="sim_effort",
         ),
     ]
 
     return PickContract(
         object_id=object_id,
         grasp_width_m=grasp_width_m,
+        force_threshold_n=force_threshold_n,
         preconditions=preconditions,
         effects=effects,
         invariants=invariants,

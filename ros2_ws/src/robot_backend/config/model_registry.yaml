@@ -13,11 +13,25 @@
 #   duplicate them as inline constants elsewhere in the code.
 #
 #   grasp.grasp_center_offset  — T_object_grasp_center (zero for symmetric primitives)
-#   grasp.grasp_width_m        — nominal RG2 opening width during approach [m]
+#   grasp.grasp_width_m        — EXPECTED RG2 opening width at contact [m].
+#                                This is a verification input for the grasp primitive,
+#                                NOT a commanded position. Force control closes until a
+#                                plateau; this value is compared against the measured
+#                                width at plateau to detect air grasps.
+#   grasp.force_threshold_n    — per-object effort cap for the guarded close [sim effort
+#                                units]. The grasp primitive stops if instantaneous
+#                                finger_joint effort exceeds this value. Low for delicate
+#                                objects, higher for rigid ones.
+#                                NOTE: in Isaac Sim the effort scale is small (~0.48 for
+#                                a solid rigid grasp). These values are in sim effort
+#                                units, not physical Newtons. Force control is therefore
+#                                approximate in sim; real-hardware deployments should
+#                                re-characterise and update these thresholds.
 #   tolerances.position_m      — allowable object pose error before / after pick [m]
 #   tolerances.orientation_deg — allowable orientation error [degrees]
 #   tolerances.lift_height_min_m — minimum vertical displacement to confirm grasp [m]
 #   limits.max_contact_force_n — invariant upper bound on contact force [N]
+#                                (hardware safety limit; distinct from force_threshold_n)
 
 objects:
   red_cube:
@@ -39,13 +53,14 @@ objects:
         grasp_center_offset:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-        grasp_width_m: 0.065      # 6.5 cm — slightly wider than the 6 cm cube face
+        grasp_width_m: 0.065      # expected contact width [m]; verification input, not a command
+        force_threshold_n: 0.50   # effort cap: solid 6 cm cube; above the ~0.48 sim plateau
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
       limits:
-        max_contact_force_n: 20.0  # derived from RG2 max grip force on a 6 cm rigid cube
+        max_contact_force_n: 20.0  # hardware safety limit [N] — distinct from force_threshold_n
 
   green_cube:
     enabled: true
@@ -66,10 +81,11 @@ objects:
         grasp_center_offset:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-        grasp_width_m: 0.045      # 4.5 cm — slightly wider than the 4 cm cube face
+        grasp_width_m: 0.045      # expected contact width [m]; verification input, not a command
+        force_threshold_n: 0.45   # effort cap: smaller 4 cm cube; slightly below the rigid plateau
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
       limits:
-        max_contact_force_n: 15.0  # lower limit for the smaller, lighter green cube
+        max_contact_force_n: 15.0  # hardware safety limit [N] — distinct from force_threshold_n

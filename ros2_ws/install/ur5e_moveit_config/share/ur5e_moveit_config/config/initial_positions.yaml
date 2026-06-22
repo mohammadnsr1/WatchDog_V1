@@ -1,1 +1,8 @@
-/home/mohammadnsr1/watchdog/WatchDog_V1/ros2_ws/src/ur5e_moveit_config/config/initial_positions.yaml
+initial_positions:
+  shoulder_pan_joint: 0.0
+  shoulder_lift_joint: -1.5708
+  elbow_joint: 1.5708
+  wrist_1_joint: -1.5708
+  wrist_2_joint: -1.5708
+  wrist_3_joint: 0.0
+  finger_joint: 0.0

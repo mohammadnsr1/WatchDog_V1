@@ -16,18 +16,24 @@ this server must have the `mcp` package installed.
 from __future__ import annotations
 
 import atexit
+import os
+from pathlib import Path
 from typing import Any
 
 from robot_backend.mcp_servers import ensure_mcp_server_environment
 
 ensure_mcp_server_environment("robot_backend.mcp_servers.gripper_mcp_server")
 
+import yaml
+
 import rclpy
 from rclpy.node import Node
 
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import close_gripper_skill
+from robot_backend.skills.gripper_skills import grasp_skill
 from robot_backend.skills.gripper_skills import open_gripper_skill
+from robot_backend.skills.gripper_skills import release_skill
 from robot_backend.skills.gripper_skills import set_gripper_width_skill
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 
@@ -41,15 +47,30 @@ else:
     _MCP_IMPORT_ERROR = None
 
 
+_DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
+)
+
 mcp = FastMCP("robot_backend_gripper") if FastMCP is not None else None
 _NODE: Node | None = None
 _BACKEND = None
+_REGISTRY: dict[str, Any] | None = None
+
+
+def _load_registry() -> dict[str, Any]:
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+    except Exception:
+        path = _DEFAULT_REGISTRY_PATH
+    with path.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
 
 
 def _ensure_backend():
     """Create and cache one shared ROS node and backend for MCP tools."""
 
-    global _NODE, _BACKEND
+    global _NODE, _BACKEND, _REGISTRY
 
     if _BACKEND is not None:
         return _BACKEND
@@ -59,18 +80,21 @@ def _ensure_backend():
 
     _NODE = Node("robot_backend_gripper_mcp_server")
     _BACKEND = create_ros_moveit_backend(node=_NODE)
+    if _REGISTRY is None:
+        _REGISTRY = _load_registry()
     return _BACKEND
 
 
 def _shutdown_backend() -> None:
     """Destroy the shared ROS node and shut down rclpy if this server owns it."""
 
-    global _NODE, _BACKEND
+    global _NODE, _BACKEND, _REGISTRY
 
     if _NODE is not None:
         _NODE.destroy_node()
         _NODE = None
     _BACKEND = None
+    _REGISTRY = None
     if rclpy.ok():
         rclpy.shutdown()
 
@@ -121,6 +145,12 @@ def _error(command: str, error: Exception | str, **payload: Any) -> dict[str, An
         "error": str(error),
         **payload,
     }
+
+
+def _validate_object_id(object_id: Any) -> str:
+    if not isinstance(object_id, str) or not object_id.strip():
+        raise ValueError("object_id must be a non-empty string.")
+    return object_id.strip()
 
 
 def _validate_width(width_m: float) -> float:
@@ -195,6 +225,50 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc)
 
+
+    @mcp.tool()
+    def grasp(object_id: str) -> dict[str, Any]:
+        """Force-controlled guarded close that attaches object_id on confirmed contact.
+
+        Closes the RG2 incrementally while monitoring finger_joint effort from
+        /joint_states. Stops when effort plateaus above the empirical air-close
+        floor AND the measured finger width corresponds to a plausible object size
+        per the registry spec. Attaches object_id to the robot link on success.
+        Returns structured provenance (plateau effort, measured width, expected
+        width, pass/fail per criterion) on both success and failure paths.
+        Does not verify whether the object remains grasped through subsequent motion.
+
+        Parameters
+        ----------
+        object_id:
+            Registry object ID to grasp (e.g. "red_cube").
+        """
+        command = "grasp"
+        try:
+            oid = _validate_object_id(object_id)
+            backend = _ensure_backend()
+            result = grasp_skill(backend, object_id=oid, registry=_REGISTRY or {})
+            return result
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
+
+    @mcp.tool()
+    def release(object_id: str) -> dict[str, Any]:
+        """Open the gripper, detach object_id, and sync its TF pose into the world scene.
+
+        Parameters
+        ----------
+        object_id:
+            Registry object ID to release (e.g. "red_cube").
+        """
+        command = "release"
+        try:
+            oid = _validate_object_id(object_id)
+            backend = _ensure_backend()
+            result = release_skill(backend, object_id=oid)
+            return result
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
 
     @mcp.tool()
     def set_gripper_joint_position(position_rad: float) -> dict[str, Any]:

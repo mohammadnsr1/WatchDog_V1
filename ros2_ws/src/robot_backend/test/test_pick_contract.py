@@ -61,6 +61,7 @@ def minimal_registry(tmp_path: Path) -> Path:
                   position: {x: 0.0, y: 0.0, z: 0.0}
                   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
                 grasp_width_m: 0.055
+                force_threshold_n: 0.42
               tolerances:
                 position_m: 0.004
                 orientation_deg: 3.0
@@ -96,10 +97,12 @@ class TestLoadFromRegistry:
         assert len(red_cube_contract.preconditions) == 3
 
     def test_effect_count(self, red_cube_contract: PickContract) -> None:
-        assert len(red_cube_contract.effects) == 2
+        # pose effects (lift height, TCP offset) + grasp effects (effort plateau, width error)
+        assert len(red_cube_contract.effects) == 4
 
     def test_invariant_count(self, red_cube_contract: PickContract) -> None:
-        assert len(red_cube_contract.invariants) == 1
+        # hardware force limit + software effort cap
+        assert len(red_cube_contract.invariants) == 2
 
     def test_precondition_thresholds_from_registry(self, red_cube_contract: PickContract) -> None:
         pos_clause = next(
@@ -141,6 +144,68 @@ class TestLoadFromRegistry:
         green_force = green_cube_contract.invariants[0].threshold
         assert green_force < red_force
 
+    # ------------------------------------------------------------------
+    # force_threshold_n and new clauses
+    # ------------------------------------------------------------------
+
+    def test_red_cube_force_threshold_n(self, red_cube_contract: PickContract) -> None:
+        # From registry spec.grasp.force_threshold_n: 0.50
+        assert red_cube_contract.force_threshold_n == pytest.approx(0.50)
+
+    def test_green_cube_force_threshold_n(self, green_cube_contract: PickContract) -> None:
+        # From registry spec.grasp.force_threshold_n: 0.45
+        assert green_cube_contract.force_threshold_n == pytest.approx(0.45)
+
+    def test_green_cube_force_threshold_lower_than_red(
+        self,
+        red_cube_contract: PickContract,
+        green_cube_contract: PickContract,
+    ) -> None:
+        assert green_cube_contract.force_threshold_n < red_cube_contract.force_threshold_n
+
+    def test_grasp_effort_plateau_effect_clause(self, red_cube_contract: PickContract) -> None:
+        clause = next(
+            c for c in red_cube_contract.effects if c.field == "grasp_effort_plateau"
+        )
+        assert clause.comparison == Comparison.GE
+        # Threshold = _GRASP_EFFORT_FLOOR = 0.05
+        assert clause.threshold == pytest.approx(0.05)
+        assert clause.unit == "sim_effort"
+
+    def test_grasp_width_error_effect_clause(self, red_cube_contract: PickContract) -> None:
+        clause = next(
+            c for c in red_cube_contract.effects if c.field == "grasp_width_error_m"
+        )
+        assert clause.comparison == Comparison.LE
+        # Threshold = _GRASP_WIDTH_TOL_M = 0.020
+        assert clause.threshold == pytest.approx(0.020)
+        assert clause.unit == "m"
+
+    def test_grasp_effort_instantaneous_invariant(self, red_cube_contract: PickContract) -> None:
+        clause = next(
+            c for c in red_cube_contract.invariants
+            if c.field == "grasp_effort_instantaneous"
+        )
+        assert clause.comparison == Comparison.LE
+        # Threshold sourced from spec.grasp.force_threshold_n = 0.50
+        assert clause.threshold == pytest.approx(0.50)
+        assert clause.unit == "sim_effort"
+
+    def test_grasp_effort_cap_differs_per_object(
+        self,
+        red_cube_contract: PickContract,
+        green_cube_contract: PickContract,
+    ) -> None:
+        red_cap = next(
+            c.threshold for c in red_cube_contract.invariants
+            if c.field == "grasp_effort_instantaneous"
+        )
+        green_cap = next(
+            c.threshold for c in green_cube_contract.invariants
+            if c.field == "grasp_effort_instantaneous"
+        )
+        assert green_cap < red_cap
+
     def test_missing_object_raises(self) -> None:
         with pytest.raises(KeyError, match="not found in registry"):
             load_pick_contract("no_such_object")
@@ -171,6 +236,7 @@ class TestLoadFromRegistry:
         contract = load_pick_contract("test_cube", registry_path=minimal_registry)
         assert contract.object_id == "test_cube"
         assert contract.grasp_width_m == pytest.approx(0.055)
+        assert contract.force_threshold_n == pytest.approx(0.42)
         assert contract.invariants[0].threshold == pytest.approx(10.0)
 
 

@@ -1,0 +1,379 @@
+"""MCP server for scene-state tools: pose queries, scene auditing, and recovery.
+
+Tools:
+  get_object_pose      — TF pose of one registry object (planning frame).
+  get_object_poses     — TF poses of all enabled registry objects.
+  get_scene_summary    — MoveIt's current beliefs: world + attached objects.
+  sync_scene           — push TF-derived poses into MoveIt's collision scene.
+  reset_object_state   — idempotent single-object recovery to WORLD_TRACKED.
+  recover_scene        — reset all objects + clear octomap.
+  begin_step           — open a WatchDog execution-step recording window.
+  end_step             — close the window and declare the claimed outcome.
+
+Process pattern (same as gripper_mcp_server):
+  - Lazy rclpy.init on first tool call.
+  - Single shared _NODE + _BACKEND for the process lifetime.
+  - Dedicated _TF_NODE with spin_thread=True for continuous TF reception
+    (separate from _NODE so TF spin never races with service-call spin).
+  - atexit-registered shutdown closes both nodes cleanly.
+  - Event bus configured on startup (ROS publisher + JSONL log).
+"""
+
+from __future__ import annotations
+
+import atexit
+import os
+from pathlib import Path
+from typing import Any
+
+from robot_backend.mcp_servers import ensure_mcp_server_environment
+
+ensure_mcp_server_environment("robot_backend.mcp_servers.scene_mcp_server")
+
+import yaml
+
+import rclpy
+from rclpy.node import Node
+from tf2_ros import Buffer, TransformListener
+
+from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.ros_moveit_backend import create_ros_moveit_backend
+from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
+from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
+from robot_backend.skills.maintenance_skills import reset_object_state as reset_object_state_skill
+from robot_backend.skills.pose_query_skills import get_object_pose as get_object_pose_skill
+from robot_backend.skills.pose_query_skills import get_object_poses as get_object_poses_skill
+
+
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError as exc:
+    FastMCP = None  # type: ignore[assignment]
+    _MCP_IMPORT_ERROR = exc
+else:
+    _MCP_IMPORT_ERROR = None
+
+
+_DEFAULT_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
+)
+
+mcp = FastMCP("robot_backend_scene") if FastMCP is not None else None
+_NODE: Node | None = None
+_BACKEND = None
+_TF_NODE: Node | None = None
+_TF_BUFFER: Buffer | None = None
+_TF_LISTENER: TransformListener | None = None
+_REGISTRY: dict[str, Any] | None = None
+
+
+def _load_registry() -> dict[str, Any]:
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+    except Exception:
+        path = _DEFAULT_REGISTRY_PATH
+    with path.open("r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def _ensure_backend():
+    global _NODE, _BACKEND, _REGISTRY
+    if _BACKEND is not None:
+        return _BACKEND
+    if not rclpy.ok():
+        rclpy.init(args=None)
+    _NODE = Node("robot_backend_scene_mcp_server")
+    _BACKEND = create_ros_moveit_backend(node=_NODE)
+    log_path = os.environ.get(
+        "WATCHDOG_EVENT_LOG",
+        str(Path.home() / ".watchdog" / "events.jsonl"),
+    )
+    configure_bus(node=_NODE, log_path=log_path)
+    if _REGISTRY is None:
+        _REGISTRY = _load_registry()
+    return _BACKEND
+
+
+def _ensure_tf_context() -> tuple[Buffer, dict[str, Any]]:
+    """Lazy-init the TF buffer/listener and registry cache."""
+    global _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
+    _ensure_backend()  # guarantees rclpy.init() has been called
+    if _TF_BUFFER is None:
+        _TF_NODE = Node("robot_backend_scene_tf_client")
+        _TF_BUFFER = Buffer()
+        _TF_LISTENER = TransformListener(_TF_BUFFER, _TF_NODE, spin_thread=True)
+    if _REGISTRY is None:
+        _REGISTRY = _load_registry()
+    return _TF_BUFFER, _REGISTRY
+
+
+def _shutdown_backend() -> None:
+    global _NODE, _BACKEND, _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
+    shutdown_bus()
+    if _TF_NODE is not None:
+        _TF_NODE.destroy_node()
+        _TF_NODE = None
+    _TF_BUFFER = None
+    _TF_LISTENER = None
+    _REGISTRY = None
+    if _NODE is not None:
+        _NODE.destroy_node()
+        _NODE = None
+    _BACKEND = None
+    if rclpy.ok():
+        rclpy.shutdown()
+
+
+atexit.register(_shutdown_backend)
+
+
+def _ok(command: str, **payload: Any) -> dict[str, Any]:
+    return {"ok": True, "command": command, **payload}
+
+
+def _error(command: str, error: Exception | str, **payload: Any) -> dict[str, Any]:
+    return {"ok": False, "command": command, "error": str(error), **payload}
+
+
+def _validate_object_id(object_id: Any) -> str:
+    if not isinstance(object_id, str) or not object_id.strip():
+        raise ValueError("object_id must be a non-empty string.")
+    return object_id.strip()
+
+
+if mcp is not None:
+
+    # ------------------------------------------------------------------
+    # Pose queries — TF is the single authoritative pose source.
+    # These do NOT touch the MoveIt planning scene.
+    # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def get_object_pose(object_id: str) -> dict[str, Any]:
+        """Return the current TF pose of a registry object in its lookup frame.
+
+        Reads tf_frame and lookup_frame from the model registry, then queries
+        the live TF graph. Does not read or write MoveIt's planning scene.
+
+        Parameters
+        ----------
+        object_id:
+            Registry object ID (e.g. "red_cube").
+        """
+        command = "get_object_pose"
+        try:
+            oid = _validate_object_id(object_id)
+            tf_buffer, registry = _ensure_tf_context()
+            return get_object_pose_skill(tf_buffer, registry, oid)
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
+
+    @mcp.tool()
+    def get_object_poses(graspable_only: bool = False) -> dict[str, Any]:
+        """Return current TF poses for all enabled registry objects.
+
+        Queries TF for every enabled object in the model registry. Failures for
+        individual objects are collected in a 'failed' list rather than aborting
+        the entire call.
+
+        Parameters
+        ----------
+        graspable_only:
+            When True, only returns objects whose registry entry has
+            graspable: true.
+        """
+        command = "get_object_poses"
+        try:
+            tf_buffer, registry = _ensure_tf_context()
+            return get_object_poses_skill(tf_buffer, registry, graspable_only=graspable_only)
+        except Exception as exc:
+            return _error(command, exc)
+
+    # ------------------------------------------------------------------
+    # Scene state — MoveIt's planning scene beliefs.
+    # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def get_scene_summary() -> dict[str, Any]:
+        """Return a read-only audit of MoveIt's current planning scene.
+
+        Reports world collision objects (TF-tracked) and attached objects
+        (held by the robot), with convenience counts. Does not modify state.
+        """
+        command = "get_scene_summary"
+        try:
+            backend = _ensure_backend()
+            result = get_scene_summary_skill(backend)
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
+    def sync_scene(object_ids: list[str] | None = None) -> dict[str, Any]:
+        """Push TF-derived object poses into MoveIt's collision scene.
+
+        Reads the current TF pose for each object and upserts it as a
+        CollisionObject in MoveIt's world scene. With no arguments, syncs
+        all enabled registry objects. Pass object_ids to sync a subset.
+
+        Parameters
+        ----------
+        object_ids:
+            Registry object IDs to sync. Syncs all enabled objects when None.
+        """
+        command = "sync_scene"
+        try:
+            backend = _ensure_backend()
+            result = backend.scene.sync_collision_objects(
+                object_ids=object_ids if object_ids else None
+            )
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc)
+
+    # ------------------------------------------------------------------
+    # Scene recovery — repair inconsistent planning scene state.
+    # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def reset_object_state(object_id: str) -> dict[str, Any]:
+        """Reset one object to WORLD_TRACKED state, idempotently.
+
+        Queries MoveIt's current scene to determine whether the object is
+        attached. If it is, detaches it first. Then syncs the object's
+        TF-based pose back into the world collision scene.
+
+        Parameters
+        ----------
+        object_id:
+            Registry object ID to reset (e.g. "red_cube").
+        """
+        command = "reset_object_state"
+        try:
+            oid = _validate_object_id(object_id)
+            backend = _ensure_backend()
+            result = reset_object_state_skill(backend, object_id=oid)
+            return _ok(command, object_id=oid, result=result)
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
+
+    @mcp.tool()
+    def recover_scene() -> dict[str, Any]:
+        """Full scene recovery: reset all tracked objects and clear the octomap.
+
+        Iterates every enabled object in the model registry, detaches any that
+        are attached, and syncs each back to its current TF pose. Clears the
+        octomap afterward to flush stale perception voxels.
+        """
+        command = "recover_scene"
+        try:
+            backend = _ensure_backend()
+            result = recover_scene_skill(backend, registry=_REGISTRY)
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc)
+
+    # ------------------------------------------------------------------
+    # Step instrumentation — WatchDog execution-window management.
+    # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def begin_step(
+        step_id: str,
+        object_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Publish a begin_step event to the WatchDog event bus.
+
+        Opens a sensor-recording window keyed by step_id. All skill_start /
+        skill_end events that follow (until the matching end_step) are within
+        this window. When object_id is provided the corresponding PickContract
+        is loaded from the registry spec and embedded in the event payload.
+
+        Parameters
+        ----------
+        step_id:
+            Caller-chosen identifier, unique within the session.
+        object_id:
+            Registry object ID. When provided, its PickContract is attached to
+            the event for downstream conformance checking.
+        """
+        command = "begin_step"
+        try:
+            if not isinstance(step_id, str) or not step_id.strip():
+                raise ValueError("step_id must be a non-empty string.")
+            step_id = step_id.strip()
+
+            contract_dict = None
+            if object_id is not None:
+                import json
+                from robot_backend.contracts.loader import load_pick_contract
+                from robot_backend.contracts.schema import to_json
+                contract = load_pick_contract(_validate_object_id(object_id))
+                contract_dict = json.loads(to_json(contract))
+
+            _ensure_backend()
+            from robot_backend.events.bus import get_bus
+            get_bus().emit_begin_step(step_id=step_id, contract=contract_dict)
+            return _ok(command, step_id=step_id, contract_attached=contract_dict is not None)
+        except Exception as exc:
+            return _error(command, exc, step_id=step_id)
+
+    @mcp.tool()
+    def end_step(
+        step_id: str,
+        claimed_outcome: str,
+        notes: str = "",
+    ) -> dict[str, Any]:
+        """Publish an end_step event and declare the claimed outcome.
+
+        Closes the sensor-recording window opened by the matching begin_step.
+        The WatchDog compares claimed_outcome against independent sensor
+        observations from the recording window.
+
+        Parameters
+        ----------
+        step_id:
+            Must match the step_id from the corresponding begin_step call.
+        claimed_outcome:
+            Self-assessed result: "success", "failure", or "partial".
+        notes:
+            Optional free-text annotation.
+        """
+        command = "end_step"
+        _VALID_OUTCOMES = {"success", "failure", "partial"}
+        try:
+            if not isinstance(step_id, str) or not step_id.strip():
+                raise ValueError("step_id must be a non-empty string.")
+            if claimed_outcome not in _VALID_OUTCOMES:
+                raise ValueError(
+                    f"claimed_outcome must be one of {sorted(_VALID_OUTCOMES)}, "
+                    f"got {claimed_outcome!r}."
+                )
+            _ensure_backend()
+            from robot_backend.events.bus import get_bus
+            get_bus().emit_end_step(
+                step_id=step_id.strip(),
+                claimed_outcome=claimed_outcome,
+                notes=notes,
+            )
+            return _ok(command, step_id=step_id.strip(), claimed_outcome=claimed_outcome)
+        except Exception as exc:
+            return _error(command, exc, step_id=step_id)
+
+
+def main() -> None:
+    """Run the scene MCP server."""
+    if mcp is None:
+        raise RuntimeError(
+            "The Python package 'mcp' is required to run scene_mcp_server."
+        ) from _MCP_IMPORT_ERROR
+
+    try:
+        mcp.run()
+    finally:
+        _shutdown_backend()
+
+
+if __name__ == "__main__":
+    main()
