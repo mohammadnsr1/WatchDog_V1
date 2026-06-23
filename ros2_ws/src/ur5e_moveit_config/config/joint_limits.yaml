@@ -4,18 +4,12 @@
 default_robot_padding: 0.0
 default_robot_scale: 1.0
 link_padding:
-  - link: onrobot_rg2_left_inner_finger
-    padding: 0.0
-  - link: onrobot_rg2_right_inner_finger
-    padding: 0.0
-  - link: onrobot_rg2_left_inner_knuckle
-    padding: 0.0
-  - link: onrobot_rg2_right_inner_knuckle
-    padding: 0.0
-  - link: onrobot_rg2_left_outer_knuckle
-    padding: 0.0
-  - link: onrobot_rg2_right_outer_knuckle
-    padding: 0.0
+  onrobot_rg2_left_inner_finger: 0.0
+  onrobot_rg2_right_inner_finger: 0.0
+  onrobot_rg2_left_inner_knuckle: 0.0
+  onrobot_rg2_right_inner_knuckle: 0.0
+  onrobot_rg2_left_outer_knuckle: 0.0
+  onrobot_rg2_right_outer_knuckle: 0.0
 
 joint_limits:
   shoulder_pan_joint:

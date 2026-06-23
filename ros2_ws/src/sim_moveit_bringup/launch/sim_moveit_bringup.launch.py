@@ -74,7 +74,7 @@ def _launch_setup(context):
                 "use_sim_time": use_sim_time,
                 "use_octomap": use_octomap,
                 "pointcloud_topic": moveit_pointcloud_topic,
-                "octomap_resolution": "0.05",
+                "octomap_resolution": "0.01",
                 "max_update_rate": pointcloud_filter_rate,
                 "octomap_max_range": "2.0",
                 "filtered_cloud_topic": "/moveit/filtered_cloud",
