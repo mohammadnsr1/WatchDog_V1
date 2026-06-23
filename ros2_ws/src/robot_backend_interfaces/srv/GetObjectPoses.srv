@@ -1,0 +1,7 @@
+bool graspable_only
+bool enabled_only
+---
+bool ok
+string poses_json
+string failed_json
+string error

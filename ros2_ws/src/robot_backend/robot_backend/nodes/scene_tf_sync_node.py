@@ -1,15 +1,17 @@
 """Service-driven sync of model-registry TF objects into MoveIt's planning scene.
 
-Exposes a single service: /sync_scene_objects (SyncSceneObjects).
+Exposes three services:
+  /sync_scene_objects  (SyncSceneObjects) — push TF-derived poses into MoveIt.
+  /get_object_pose     (GetObjectPose)    — look up one object's TF pose.
+  /get_object_poses    (GetObjectPoses)   — look up all matching objects' poses.
+  /reset_tf            (std_srvs/Trigger) — flush and recreate the TF buffer
+                                            after a sim reset.
 
-On each request:
-  1. Read the model registry.
-  2. Look up TF poses for the requested (or all enabled) objects.
-  3. Build CollisionObject messages.
-  4. Call /apply_planning_scene and wait for confirmation.
-  5. Return a result summary.
+This node is the sole executor-side owner of a tf2_ros.Buffer. All other
+executor components (including the scene MCP server) query TF by calling
+these services rather than creating their own buffers.
 
-Requires MultiThreadedExecutor because the service handler needs to call
+Requires MultiThreadedExecutor because the sync handler needs to call
 /apply_planning_scene (a nested service call) and wait for its response.
 A SingleThreadedExecutor would deadlock: the handler thread would be waiting
 for a response callback that can never run because the only thread is occupied
@@ -18,6 +20,7 @@ by the handler itself.
 
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -34,30 +37,37 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
-from robot_backend_interfaces.srv import SyncSceneObjects
+from robot_backend_interfaces.srv import GetObjectPose, GetObjectPoses, SyncSceneObjects
 from shape_msgs.msg import SolidPrimitive
+from std_srvs.srv import Trigger
 from tf2_ros import Buffer
 from tf2_ros import TransformException
 from tf2_ros import TransformListener
 
+from robot_backend.skills.pose_query_skills import get_object_pose, get_object_poses
 from robot_backend.utils.geometry import compose_poses
 from robot_backend.utils.geometry import make_pose
 
 
 _DEFAULT_TF_LOOKUP_TIMEOUT_SEC = 0.1
+_DEFAULT_MAX_TF_AGE_SEC = 0.5
 _DEFAULT_APPLY_PLANNING_SCENE_SERVICE = '/apply_planning_scene'
 _DEFAULT_SYNC_SCENE_OBJECTS_SERVICE = '/sync_scene_objects'
+_DEFAULT_GET_OBJECT_POSE_SERVICE = '/get_object_pose'
+_DEFAULT_GET_OBJECT_POSES_SERVICE = '/get_object_poses'
+_DEFAULT_RESET_TF_SERVICE = '/reset_tf'
 _DEFAULT_APPLY_TIMEOUT_SEC = 10.0
 
 
 class SceneTFSyncNode(Node):
-    """Serve /sync_scene_objects: resolve TF poses and push CollisionObjects into MoveIt."""
+    """Single executor-side TF buffer owner; serves sync, pose query, and TF reset services."""
 
     def __init__(self) -> None:
         super().__init__('scene_tf_sync_node')
 
         self.declare_parameter('model_registry_path', '')
         self.declare_parameter('tf_lookup_timeout_sec', _DEFAULT_TF_LOOKUP_TIMEOUT_SEC)
+        self.declare_parameter('max_tf_age_sec', _DEFAULT_MAX_TF_AGE_SEC)
         self.declare_parameter('add_only_enabled', True)
         self.declare_parameter(
             'apply_planning_scene_service', _DEFAULT_APPLY_PLANNING_SCENE_SERVICE
@@ -65,11 +75,19 @@ class SceneTFSyncNode(Node):
         self.declare_parameter(
             'sync_scene_objects_service', _DEFAULT_SYNC_SCENE_OBJECTS_SERVICE
         )
+        self.declare_parameter(
+            'get_object_pose_service', _DEFAULT_GET_OBJECT_POSE_SERVICE
+        )
+        self.declare_parameter(
+            'get_object_poses_service', _DEFAULT_GET_OBJECT_POSES_SERVICE
+        )
+        self.declare_parameter('reset_tf_service', _DEFAULT_RESET_TF_SERVICE)
         self.declare_parameter('apply_timeout_sec', _DEFAULT_APPLY_TIMEOUT_SEC)
 
         self._tf_lookup_timeout_sec = float(
             self.get_parameter('tf_lookup_timeout_sec').value
         )
+        self._max_tf_age_sec = float(self.get_parameter('max_tf_age_sec').value)
         self._add_only_enabled = bool(self.get_parameter('add_only_enabled').value)
         self._apply_planning_scene_service = str(
             self.get_parameter('apply_planning_scene_service').value
@@ -77,6 +95,13 @@ class SceneTFSyncNode(Node):
         self._sync_scene_objects_service = str(
             self.get_parameter('sync_scene_objects_service').value
         )
+        self._get_object_pose_service = str(
+            self.get_parameter('get_object_pose_service').value
+        )
+        self._get_object_poses_service = str(
+            self.get_parameter('get_object_poses_service').value
+        )
+        self._reset_tf_service = str(self.get_parameter('reset_tf_service').value)
         self._apply_timeout_sec = float(self.get_parameter('apply_timeout_sec').value)
 
         self._registry = self._load_registry()
@@ -88,6 +113,9 @@ class SceneTFSyncNode(Node):
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self, spin_thread=False)
+        # Lock protects _tf_buffer / _tf_listener reassignment during reset so
+        # concurrent lookups read a consistent buffer reference.
+        self._tf_lock = threading.Lock()
 
         self._apply_client = self.create_client(
             ApplyPlanningScene,
@@ -101,13 +129,36 @@ class SceneTFSyncNode(Node):
             self._handle_sync_service,
             callback_group=cb_group,
         )
+        self.create_service(
+            GetObjectPose,
+            self._get_object_pose_service,
+            self._handle_get_object_pose,
+            callback_group=cb_group,
+        )
+        self.create_service(
+            GetObjectPoses,
+            self._get_object_poses_service,
+            self._handle_get_object_poses,
+            callback_group=cb_group,
+        )
+        self.create_service(
+            Trigger,
+            self._reset_tf_service,
+            self._handle_reset_tf,
+            callback_group=cb_group,
+        )
 
         configured = list(self._registry.get('objects', {}).keys())
         self.get_logger().info(f'Registry objects: {configured}')
-        self.get_logger().info(f'Serving {self._sync_scene_objects_service}')
+        self.get_logger().info(
+            f'Serving {self._sync_scene_objects_service}, '
+            f'{self._get_object_pose_service}, '
+            f'{self._get_object_poses_service}, '
+            f'{self._reset_tf_service}'
+        )
 
     # ------------------------------------------------------------------
-    # Service handler
+    # /sync_scene_objects handler
     # ------------------------------------------------------------------
 
     def _handle_sync_service(
@@ -183,7 +234,88 @@ class SceneTFSyncNode(Node):
         return response
 
     # ------------------------------------------------------------------
-    # Object building
+    # /get_object_pose handler
+    # ------------------------------------------------------------------
+
+    def _handle_get_object_pose(
+        self,
+        request: GetObjectPose.Request,
+        response: GetObjectPose.Response,
+    ) -> GetObjectPose.Response:
+        with self._tf_lock:
+            buf = self._tf_buffer
+        result = get_object_pose(
+            buf,
+            self._registry,
+            request.object_id,
+            tf_timeout_sec=self._tf_lookup_timeout_sec,
+            clock=self.get_clock(),
+            max_tf_age_sec=self._max_tf_age_sec,
+        )
+        response.ok = bool(result['ok'])
+        response.object_id = str(result.get('object_id', request.object_id))
+        response.error = str(result.get('error', ''))
+        if result['ok']:
+            response.frame_id = str(result['frame_id'])
+            response.tf_frame = str(result['tf_frame'])
+            p = result['pose']
+            response.pose.position.x = float(p['position']['x'])
+            response.pose.position.y = float(p['position']['y'])
+            response.pose.position.z = float(p['position']['z'])
+            response.pose.orientation.x = float(p['orientation']['x'])
+            response.pose.orientation.y = float(p['orientation']['y'])
+            response.pose.orientation.z = float(p['orientation']['z'])
+            response.pose.orientation.w = float(p['orientation']['w'])
+        return response
+
+    # ------------------------------------------------------------------
+    # /get_object_poses handler
+    # ------------------------------------------------------------------
+
+    def _handle_get_object_poses(
+        self,
+        request: GetObjectPoses.Request,
+        response: GetObjectPoses.Response,
+    ) -> GetObjectPoses.Response:
+        with self._tf_lock:
+            buf = self._tf_buffer
+        result = get_object_poses(
+            buf,
+            self._registry,
+            enabled_only=bool(request.enabled_only),
+            graspable_only=bool(request.graspable_only),
+            tf_timeout_sec=self._tf_lookup_timeout_sec,
+            clock=self.get_clock(),
+            max_tf_age_sec=self._max_tf_age_sec,
+        )
+        response.ok = bool(result['ok'])
+        response.poses_json = json.dumps(result.get('poses', []))
+        response.failed_json = json.dumps(result.get('failed', []))
+        response.error = ''
+        return response
+
+    # ------------------------------------------------------------------
+    # /reset_tf handler
+    # ------------------------------------------------------------------
+
+    def _handle_reset_tf(
+        self,
+        request: Trigger.Request,
+        response: Trigger.Response,
+    ) -> Trigger.Response:
+        """Destroy and recreate the TF buffer to flush pre-reset stale transforms."""
+        new_buffer = Buffer()
+        new_listener = TransformListener(new_buffer, self, spin_thread=False)
+        with self._tf_lock:
+            self._tf_buffer = new_buffer
+            self._tf_listener = new_listener
+        self.get_logger().info('TF buffer flushed and recreated.')
+        response.success = True
+        response.message = 'TF buffer flushed and recreated.'
+        return response
+
+    # ------------------------------------------------------------------
+    # Object building (sync path)
     # ------------------------------------------------------------------
 
     def _build_objects(
@@ -304,8 +436,14 @@ class SceneTFSyncNode(Node):
     # ------------------------------------------------------------------
 
     def _lookup_tf_pose(self, *, lookup_frame: str, tf_frame: str) -> dict[str, Any]:
+        """Look up the latest TF transform with a freshness guard.
+
+        Raises RuntimeError on lookup failure or stale transform.
+        """
+        with self._tf_lock:
+            buf = self._tf_buffer
         try:
-            transform = self._tf_buffer.lookup_transform(
+            transform = buf.lookup_transform(
                 lookup_frame,
                 tf_frame,
                 Time(),
@@ -315,6 +453,15 @@ class SceneTFSyncNode(Node):
             raise RuntimeError(
                 f'TF lookup failed {lookup_frame} -> {tf_frame}: {exc}'
             ) from exc
+
+        stamp_time = Time.from_msg(transform.header.stamp)
+        age_ns = (self.get_clock().now() - stamp_time).nanoseconds
+        if age_ns > 0 and age_ns / 1e9 > self._max_tf_age_sec:
+            raise RuntimeError(
+                f'stale TF: transform age {age_ns / 1e9:.3f}s '
+                f'exceeds max_tf_age_sec={self._max_tf_age_sec} '
+                f'({lookup_frame} -> {tf_frame})'
+            )
 
         t = transform.transform.translation
         r = transform.transform.rotation

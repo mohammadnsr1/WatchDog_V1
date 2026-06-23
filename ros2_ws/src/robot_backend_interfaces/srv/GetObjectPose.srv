@@ -1,0 +1,8 @@
+string object_id
+---
+bool ok
+string object_id
+string frame_id
+string tf_frame
+geometry_msgs/Pose pose
+string error

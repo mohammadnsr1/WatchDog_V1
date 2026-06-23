@@ -2,23 +2,25 @@
 
 Skills here take (tf_buffer, registry) rather than RobotBackend because their
 only dependencies are the TF graph and registry metadata — not motion, gripper,
-or scene manipulation. The MCP server creates and owns the TF buffer; these
-functions are stateless wrappers that do the lookup and format the result.
+or scene manipulation.
 
-BOUNDARY NOTE: these skills are for the EXECUTOR to locate objects before
-planning a pick. They must NOT be used as the WatchDog's evidence source.
-A supervisor would set up its own independent TF observation channel rather
-than piggybacking on the executor's query path.
+BOUNDARY NOTE: the single executor-side TF buffer owner is scene_tf_sync_node.
+The MCP server is a thin client of that node's /get_object_pose and
+/get_object_poses services. These helpers are called by scene_tf_sync_node's
+service handlers and must NOT be used by the WatchDog observation path. A
+supervisor must use an independent TF observation channel.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+_HAVE_ROS = False
 try:
     from rclpy.duration import Duration
     from rclpy.time import Time
     from tf2_ros import Buffer, TransformException
+    _HAVE_ROS = True
 except ImportError:
     # Stubs so this module can be imported in pure-Python test environments
     # (e.g. when ROS shared libraries are absent). At runtime a real rclpy/tf2_ros
@@ -42,18 +44,20 @@ def get_object_pose(
     *,
     tf_timeout_sec: float = 1.0,
     clock=None,
+    max_tf_age_sec: float | None = None,
 ) -> dict[str, Any]:
     """Return the current TF pose of one registry object in its lookup frame.
 
-    Reads tf_frame and lookup_frame from the registry entry, then queries
-    the provided TF buffer. TF is the single source of pose truth; this
-    function does not touch MoveIt's planning scene.
+    Looks up the latest available transform (Time()) so the call never
+    extrapolates into the future. When max_tf_age_sec and clock are both
+    provided, the returned transform's stamp is compared against clock.now():
+    if the age exceeds max_tf_age_sec the call returns ok=False with a
+    'stale TF' error rather than silently returning stale data.
 
     Parameters
     ----------
     tf_buffer:
-        Active tf2_ros.Buffer (must have a TransformListener attached and
-        be receiving transforms from the ROS network).
+        Active tf2_ros.Buffer owned by scene_tf_sync_node.
     registry:
         Loaded model_registry.yaml content (top-level dict with "objects" key).
     object_id:
@@ -61,11 +65,11 @@ def get_object_pose(
     tf_timeout_sec:
         How long to wait for a transform to become available.
     clock:
-        rclpy Clock (or any object with a .now() method returning rclpy.Time).
-        When provided, the lookup requests the transform at clock.now(), which
-        forces TF to wait for a fresh message rather than returning a cached
-        value from a previous session. When None, falls back to Time() (latest
-        cached — may be stale across process restarts or sim resets).
+        rclpy Clock used only for the freshness comparison. Not used for the
+        lookup time (always Time() / latest cached).
+    max_tf_age_sec:
+        When set (together with clock), reject transforms older than this many
+        seconds relative to clock.now(). Default None disables the check.
 
     Returns
     -------
@@ -94,12 +98,11 @@ def get_object_pose(
             "error": f"Registry entry for {object_id!r} is missing tf_frame.",
         }
 
-    lookup_time = clock.now() if clock is not None else Time()
     try:
         transform = tf_buffer.lookup_transform(
             lookup_frame,
             tf_frame,
-            lookup_time,
+            Time(),
             timeout=Duration(seconds=tf_timeout_sec),
         )
     except TransformException as exc:
@@ -109,6 +112,23 @@ def get_object_pose(
             "object_id": object_id,
             "error": f"TF lookup failed ({lookup_frame} ← {tf_frame}): {exc}",
         }
+
+    if max_tf_age_sec is not None and clock is not None and _HAVE_ROS:
+        try:
+            stamp_time = Time.from_msg(transform.header.stamp)
+            age_ns = (clock.now() - stamp_time).nanoseconds
+            if age_ns > 0 and age_ns / 1e9 > max_tf_age_sec:
+                return {
+                    "ok": False,
+                    "command": "get_object_pose",
+                    "object_id": object_id,
+                    "error": (
+                        f"stale TF: transform age {age_ns / 1e9:.3f}s "
+                        f"exceeds max_tf_age_sec={max_tf_age_sec}"
+                    ),
+                }
+        except Exception:
+            pass  # skip freshness check if stamp comparison is unavailable
 
     t = transform.transform.translation
     r = transform.transform.rotation
@@ -138,6 +158,7 @@ def get_object_poses(
     graspable_only: bool = False,
     tf_timeout_sec: float = 1.0,
     clock=None,
+    max_tf_age_sec: float | None = None,
 ) -> dict[str, Any]:
     """Return TF poses for all matching registry objects.
 
@@ -154,6 +175,8 @@ def get_object_poses(
     tf_timeout_sec:
         Per-object TF lookup timeout.
     clock:
+        Passed through to get_object_pose for freshness comparison.
+    max_tf_age_sec:
         Passed through to get_object_pose. See that function for details.
     """
     objects = registry.get("objects", {})
@@ -169,7 +192,12 @@ def get_object_poses(
             continue
 
         result = get_object_pose(
-            tf_buffer, registry, object_id, tf_timeout_sec=tf_timeout_sec, clock=clock
+            tf_buffer,
+            registry,
+            object_id,
+            tf_timeout_sec=tf_timeout_sec,
+            clock=clock,
+            max_tf_age_sec=max_tf_age_sec,
         )
         if result["ok"]:
             poses.append(result)

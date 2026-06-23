@@ -3,6 +3,7 @@
 Tools:
   get_object_pose      — TF pose of one registry object (planning frame).
   get_object_poses     — TF poses of all enabled registry objects.
+  reset_tf             — flush the TF buffer after an Isaac sim reset.
   get_scene_summary    — MoveIt's current beliefs: world + attached objects.
   sync_scene           — push TF-derived poses into MoveIt's collision scene.
   reset_object_state   — idempotent single-object recovery to WORLD_TRACKED.
@@ -13,15 +14,16 @@ Tools:
 Process pattern (same as gripper_mcp_server):
   - Lazy rclpy.init on first tool call.
   - Single shared _NODE + _BACKEND for the process lifetime.
-  - Dedicated _TF_NODE with spin_thread=True for continuous TF reception
-    (separate from _NODE so TF spin never races with service-call spin).
-  - atexit-registered shutdown closes both nodes cleanly.
+  - Pose queries are thin ROS service clients to /get_object_pose and
+    /get_object_poses served by scene_tf_sync_node (the sole TF buffer owner).
+  - atexit-registered shutdown closes the node cleanly.
   - Event bus configured on startup (ROS publisher + JSONL log).
 """
 
 from __future__ import annotations
 
 import atexit
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -34,15 +36,12 @@ import yaml
 
 import rclpy
 from rclpy.node import Node
-from tf2_ros import Buffer, TransformListener
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
 from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
 from robot_backend.skills.maintenance_skills import reset_object_state as reset_object_state_skill
-from robot_backend.skills.pose_query_skills import get_object_pose as get_object_pose_skill
-from robot_backend.skills.pose_query_skills import get_object_poses as get_object_poses_skill
 
 
 try:
@@ -61,10 +60,10 @@ _DEFAULT_REGISTRY_PATH = (
 mcp = FastMCP("robot_backend_scene") if FastMCP is not None else None
 _NODE: Node | None = None
 _BACKEND = None
-_TF_NODE: Node | None = None
-_TF_BUFFER: Buffer | None = None
-_TF_LISTENER: TransformListener | None = None
 _REGISTRY: dict[str, Any] | None = None
+_POSE_CLIENT = None
+_POSES_CLIENT = None
+_RESET_TF_CLIENT = None
 
 
 def _load_registry() -> dict[str, Any]:
@@ -78,7 +77,7 @@ def _load_registry() -> dict[str, Any]:
 
 
 def _ensure_backend():
-    global _NODE, _BACKEND, _REGISTRY
+    global _NODE, _BACKEND, _REGISTRY, _POSE_CLIENT, _POSES_CLIENT, _RESET_TF_CLIENT
     if _BACKEND is not None:
         return _BACKEND
     if not rclpy.ok():
@@ -92,30 +91,41 @@ def _ensure_backend():
     configure_bus(node=_NODE, log_path=log_path)
     if _REGISTRY is None:
         _REGISTRY = _load_registry()
+
+    from robot_backend_interfaces.srv import GetObjectPose, GetObjectPoses
+    from std_srvs.srv import Trigger
+    _POSE_CLIENT = _NODE.create_client(GetObjectPose, '/get_object_pose')
+    _POSES_CLIENT = _NODE.create_client(GetObjectPoses, '/get_object_poses')
+    _RESET_TF_CLIENT = _NODE.create_client(Trigger, '/reset_tf')
+
     return _BACKEND
 
 
-def _ensure_tf_context() -> tuple[Buffer, dict[str, Any]]:
-    """Lazy-init the TF buffer/listener and registry cache."""
-    global _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
-    _ensure_backend()  # guarantees rclpy.init() has been called
-    if _TF_BUFFER is None:
-        _TF_NODE = Node("robot_backend_scene_tf_client")
-        _TF_BUFFER = Buffer()
-        _TF_LISTENER = TransformListener(_TF_BUFFER, _TF_NODE, spin_thread=True)
-    if _REGISTRY is None:
-        _REGISTRY = _load_registry()
-    return _TF_BUFFER, _REGISTRY
+def _call_service(client, request, service_name: str, timeout_sec: float = 5.0) -> Any:
+    """Call a service synchronously using spin_until_future_complete on _NODE."""
+    if not client.wait_for_service(timeout_sec=timeout_sec):
+        raise RuntimeError(
+            f"Service {service_name} not available within {timeout_sec:.1f}s. "
+            "Is scene_tf_sync_node running?"
+        )
+    future = client.call_async(request)
+    rclpy.spin_until_future_complete(_NODE, future, timeout_sec=timeout_sec)
+    if not future.done():
+        raise TimeoutError(
+            f"Timed out waiting for {service_name} after {timeout_sec:.1f}s."
+        )
+    result = future.result()
+    if result is None:
+        raise RuntimeError(f"Service {service_name} returned no result.")
+    return result
 
 
 def _shutdown_backend() -> None:
-    global _NODE, _BACKEND, _TF_NODE, _TF_BUFFER, _TF_LISTENER, _REGISTRY
+    global _NODE, _BACKEND, _REGISTRY, _POSE_CLIENT, _POSES_CLIENT, _RESET_TF_CLIENT
     shutdown_bus()
-    if _TF_NODE is not None:
-        _TF_NODE.destroy_node()
-        _TF_NODE = None
-    _TF_BUFFER = None
-    _TF_LISTENER = None
+    _POSE_CLIENT = None
+    _POSES_CLIENT = None
+    _RESET_TF_CLIENT = None
     _REGISTRY = None
     if _NODE is not None:
         _NODE.destroy_node()
@@ -145,16 +155,17 @@ def _validate_object_id(object_id: Any) -> str:
 if mcp is not None:
 
     # ------------------------------------------------------------------
-    # Pose queries — TF is the single authoritative pose source.
-    # These do NOT touch the MoveIt planning scene.
+    # Pose queries — thin clients of scene_tf_sync_node's services.
+    # TF is owned exclusively by that node; no Buffer lives here.
     # ------------------------------------------------------------------
 
     @mcp.tool()
     def get_object_pose(object_id: str) -> dict[str, Any]:
         """Return the current TF pose of a registry object in its lookup frame.
 
-        Reads tf_frame and lookup_frame from the model registry, then queries
-        the live TF graph. Does not read or write MoveIt's planning scene.
+        Delegates to scene_tf_sync_node's /get_object_pose service, which
+        holds the single executor-side TF buffer. Does not read or write
+        MoveIt's planning scene.
 
         Parameters
         ----------
@@ -164,8 +175,34 @@ if mcp is not None:
         command = "get_object_pose"
         try:
             oid = _validate_object_id(object_id)
-            tf_buffer, registry = _ensure_tf_context()
-            return get_object_pose_skill(tf_buffer, registry, oid, clock=_TF_NODE.get_clock())
+            _ensure_backend()
+            from robot_backend_interfaces.srv import GetObjectPose
+            req = GetObjectPose.Request()
+            req.object_id = oid
+            resp = _call_service(_POSE_CLIENT, req, '/get_object_pose')
+            if not resp.ok:
+                return {"ok": False, "command": command, "object_id": oid, "error": resp.error}
+            p = resp.pose
+            return {
+                "ok": True,
+                "command": command,
+                "object_id": resp.object_id,
+                "frame_id": resp.frame_id,
+                "tf_frame": resp.tf_frame,
+                "pose": {
+                    "position": {
+                        "x": float(p.position.x),
+                        "y": float(p.position.y),
+                        "z": float(p.position.z),
+                    },
+                    "orientation": {
+                        "x": float(p.orientation.x),
+                        "y": float(p.orientation.y),
+                        "z": float(p.orientation.z),
+                        "w": float(p.orientation.w),
+                    },
+                },
+            }
         except Exception as exc:
             return _error(command, exc, object_id=object_id)
 
@@ -173,9 +210,9 @@ if mcp is not None:
     def get_object_poses(graspable_only: bool = False) -> dict[str, Any]:
         """Return current TF poses for all enabled registry objects.
 
-        Queries TF for every enabled object in the model registry. Failures for
-        individual objects are collected in a 'failed' list rather than aborting
-        the entire call.
+        Delegates to scene_tf_sync_node's /get_object_poses service. Failures
+        for individual objects are collected in a 'failed' list rather than
+        aborting the entire call.
 
         Parameters
         ----------
@@ -185,8 +222,39 @@ if mcp is not None:
         """
         command = "get_object_poses"
         try:
-            tf_buffer, registry = _ensure_tf_context()
-            return get_object_poses_skill(tf_buffer, registry, graspable_only=graspable_only, clock=_TF_NODE.get_clock())
+            _ensure_backend()
+            from robot_backend_interfaces.srv import GetObjectPoses
+            req = GetObjectPoses.Request()
+            req.graspable_only = graspable_only
+            req.enabled_only = True
+            resp = _call_service(_POSES_CLIENT, req, '/get_object_poses')
+            poses = json.loads(resp.poses_json) if resp.poses_json else []
+            failed = json.loads(resp.failed_json) if resp.failed_json else []
+            return {
+                "ok": resp.ok,
+                "command": command,
+                "poses": poses,
+                "failed": failed,
+            }
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
+    def reset_tf() -> dict[str, Any]:
+        """Flush and recreate the TF buffer in scene_tf_sync_node.
+
+        Call this after an Isaac Sim reset to discard stale pre-reset
+        transforms. The node's TF buffer is destroyed and recreated so
+        subsequent pose queries reflect the new simulation state.
+        """
+        command = "reset_tf"
+        try:
+            _ensure_backend()
+            from std_srvs.srv import Trigger
+            resp = _call_service(_RESET_TF_CLIENT, Trigger.Request(), '/reset_tf')
+            if not resp.success:
+                return _error(command, resp.message)
+            return _ok(command, message=resp.message)
         except Exception as exc:
             return _error(command, exc)
 
@@ -306,11 +374,11 @@ if mcp is not None:
 
             contract_dict = None
             if object_id is not None:
-                import json
+                import json as _json
                 from robot_backend.contracts.loader import load_pick_contract
                 from robot_backend.contracts.schema import to_json
                 contract = load_pick_contract(_validate_object_id(object_id))
-                contract_dict = json.loads(to_json(contract))
+                contract_dict = _json.loads(to_json(contract))
 
             _ensure_backend()
             from robot_backend.events.bus import get_bus
