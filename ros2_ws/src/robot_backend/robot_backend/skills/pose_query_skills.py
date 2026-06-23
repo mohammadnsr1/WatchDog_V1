@@ -40,7 +40,8 @@ def get_object_pose(
     registry: dict[str, Any],
     object_id: str,
     *,
-    tf_timeout_sec: float = 0.5,
+    tf_timeout_sec: float = 1.0,
+    clock=None,
 ) -> dict[str, Any]:
     """Return the current TF pose of one registry object in its lookup frame.
 
@@ -59,6 +60,12 @@ def get_object_pose(
         Registry key of the object (e.g. "red_cube").
     tf_timeout_sec:
         How long to wait for a transform to become available.
+    clock:
+        rclpy Clock (or any object with a .now() method returning rclpy.Time).
+        When provided, the lookup requests the transform at clock.now(), which
+        forces TF to wait for a fresh message rather than returning a cached
+        value from a previous session. When None, falls back to Time() (latest
+        cached — may be stale across process restarts or sim resets).
 
     Returns
     -------
@@ -87,11 +94,12 @@ def get_object_pose(
             "error": f"Registry entry for {object_id!r} is missing tf_frame.",
         }
 
+    lookup_time = clock.now() if clock is not None else Time()
     try:
         transform = tf_buffer.lookup_transform(
             lookup_frame,
             tf_frame,
-            Time(),
+            lookup_time,
             timeout=Duration(seconds=tf_timeout_sec),
         )
     except TransformException as exc:
@@ -128,7 +136,8 @@ def get_object_poses(
     *,
     enabled_only: bool = True,
     graspable_only: bool = False,
-    tf_timeout_sec: float = 0.5,
+    tf_timeout_sec: float = 1.0,
+    clock=None,
 ) -> dict[str, Any]:
     """Return TF poses for all matching registry objects.
 
@@ -144,11 +153,8 @@ def get_object_poses(
         If True, only return objects with graspable: true in the registry.
     tf_timeout_sec:
         Per-object TF lookup timeout.
-
-    Returns
-    -------
-    dict with keys:
-        ok (True only if zero failures), command, poses (list), failed (list).
+    clock:
+        Passed through to get_object_pose. See that function for details.
     """
     objects = registry.get("objects", {})
     poses: list[dict[str, Any]] = []
@@ -163,7 +169,7 @@ def get_object_poses(
             continue
 
         result = get_object_pose(
-            tf_buffer, registry, object_id, tf_timeout_sec=tf_timeout_sec
+            tf_buffer, registry, object_id, tf_timeout_sec=tf_timeout_sec, clock=clock
         )
         if result["ok"]:
             poses.append(result)

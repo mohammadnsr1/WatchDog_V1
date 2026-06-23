@@ -165,7 +165,7 @@ if mcp is not None:
         try:
             oid = _validate_object_id(object_id)
             tf_buffer, registry = _ensure_tf_context()
-            return get_object_pose_skill(tf_buffer, registry, oid)
+            return get_object_pose_skill(tf_buffer, registry, oid, clock=_TF_NODE.get_clock())
         except Exception as exc:
             return _error(command, exc, object_id=object_id)
 
@@ -186,7 +186,7 @@ if mcp is not None:
         command = "get_object_poses"
         try:
             tf_buffer, registry = _ensure_tf_context()
-            return get_object_poses_skill(tf_buffer, registry, graspable_only=graspable_only)
+            return get_object_poses_skill(tf_buffer, registry, graspable_only=graspable_only, clock=_TF_NODE.get_clock())
         except Exception as exc:
             return _error(command, exc)
 
