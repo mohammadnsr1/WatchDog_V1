@@ -1,5 +1,22 @@
 # These values mirror the current URDF limits from robot_description.
 # Acceleration limits are conservative placeholders for planning and can be refined later.
+
+default_robot_padding: 0.0
+default_robot_scale: 1.0
+link_padding:
+  - link: onrobot_rg2_left_inner_finger
+    padding: 0.0
+  - link: onrobot_rg2_right_inner_finger
+    padding: 0.0
+  - link: onrobot_rg2_left_inner_knuckle
+    padding: 0.0
+  - link: onrobot_rg2_right_inner_knuckle
+    padding: 0.0
+  - link: onrobot_rg2_left_outer_knuckle
+    padding: 0.0
+  - link: onrobot_rg2_right_outer_knuckle
+    padding: 0.0
+
 joint_limits:
   shoulder_pan_joint:
     has_position_limits: true
