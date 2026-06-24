@@ -517,20 +517,76 @@ if mcp is not None:
         approach_vec_y: float | None = None,
         approach_vec_z: float | None = None,
     ) -> dict[str, Any]:
-        """Compute pre-grasp and grasp TCP poses from a desired grasp-center pose.
+        """Return the two TCP poses needed to approach and grasp an object,
+        without commanding any motion.
 
-        Pure geometry — no motion is commanded.  Both TCP poses are returned so
-        the caller can inspect them before deciding to execute.
+        Use this to inspect the planned pre-grasp and grasp positions before
+        committing to motion. Pass the results to execute_approach_and_preposition,
+        or drive the poses individually via move_tcp_to_pose.
 
-        `gripper_width_m` defaults to the fully-open RG2 width when omitted.
-        `approach_distance_m` defaults to 0.05 m when omitted.
-        `approach_vec_x/y/z`: world-frame approach direction unit vector.
-          Default [0, 0, 1] = world +Z, correct for top-down grasps.
-          For a side grasp approaching from +X use approach_vec_x=1, others 0.
-          The vector is normalized internally; magnitude does not matter.
-          Omit all three to use the [0, 0, 1] default (recorded in defaults_used).
-        `defaults_used` in the response lists any parameter that fell back to its
-        default so the caller can detect when an explicit value was not supplied.
+        Parameters
+        ----------
+        frame_id : str
+            The coordinate frame in which x, y, z are expressed. Use "world".
+        x, y, z : float
+            Position of the desired grasp center in frame_id. The grasp center
+            is the logical midpoint between the RG2 fingertips at the given
+            gripper width. For an object whose TF pose reports its geometric
+            center, pass that center here if you want the fingers to close
+            around it. The tool computes where the fixed TCP frame must be so
+            that the grasp center lands exactly on this point at the given width.
+        qx, qy, qz, qw : float
+            Orientation of the grasp center frame in frame_id. For a standard
+            top-down grasp use (qx=1, qy=0, qz=0, qw=0), which points the
+            gripper straight down. Identity orientation (qx=0, qy=0, qz=0,
+            qw=1) points the gripper upward and is not a valid top-down grasp.
+        gripper_width_m : float, optional
+            Expected physical finger gap in meters at the moment of contact.
+            This determines where the grasp center sits relative to the fixed
+            TCP frame. Obtain this value from the model registry field
+            spec.grasp.grasp_width_m for the target object. When omitted,
+            defaults to fully open (0.104 m) and "gripper_width_m" is added
+            to defaults_used in the response.
+        approach_distance_m : float, optional
+            Distance in meters between the grasp center target and the
+            pre-grasp staging position, measured along the approach vector.
+            Defaults to 0.05 m when omitted.
+        approach_vec_x, approach_vec_y, approach_vec_z : float, optional
+            World-frame direction the robot backs off along to place the
+            pre-grasp pose. Default [0, 0, 1] positions the pre-grasp directly
+            above the grasp center in world Z, which is correct for top-down
+            grasps. For a side grasp approaching from world +X, supply
+            approach_vec_x=1 and leave the others at 0. The vector is
+            normalized internally so its magnitude does not matter. When all
+            three are omitted the [0, 0, 1] default is used and
+            "approach_vector" is added to defaults_used.
+
+        Returns
+        -------
+        dict with keys:
+            ok : bool
+                True on success.
+            grasp_center_pose : dict
+                The requested grasp center expressed as a pose dict with
+                frame_id, position, and orientation.
+            pre_grasp_tcp_pose : dict
+                Fixed TCP target for the staging position, offset from the
+                grasp center by approach_distance_m along the approach vector.
+            grasp_tcp_pose : dict
+                Fixed TCP target that places the grasp center on the requested
+                position.
+            gripper_width_m : float
+                Effective width used for the TCP offset calculation.
+            approach_distance_m : float
+                Effective approach distance used.
+            approach_vector : dict
+                Normalized approach direction used, with keys x, y, z.
+            defaults_used : list of str
+                Names of parameters for which fallback values were applied.
+
+        After inspecting the poses, call execute_approach_and_preposition to
+        command the motion, or move to grasp_tcp_pose individually and then
+        call grasp() on the gripper server to close the fingers.
         """
 
         command = "compute_grasp_approach_poses"
@@ -584,19 +640,78 @@ if mcp is not None:
         approach_vec_z: float | None = None,
         stop_at_pregrasp: bool = False,
     ) -> dict[str, Any]:
-        """Move the arm through the pre-grasp pose and optionally into the grasp pose.
+        """Move the arm to the pre-grasp staging position and optionally
+        continue to the grasp position, then return the planned poses and
+        motion outcomes.
 
-        Geometry is identical to `compute_grasp_approach_poses`.  Both computed
-        TCP poses are included in the response even when motion fails so the
-        caller always sees what geometry was attempted.
+        The pose geometry is identical to compute_grasp_approach_poses. Both
+        computed TCP poses are included in the response even when motion fails
+        so the caller always has the planned geometry for diagnostics.
 
-        `approach_vec_x/y/z`: world-frame approach direction unit vector.
-          Default [0, 0, 1] = world +Z, correct for top-down grasps.
-          For a side grasp approaching from +X use approach_vec_x=1, others 0.
-          The vector is normalized internally; magnitude does not matter.
-          Omit all three to use the [0, 0, 1] default (recorded in defaults_used).
-        When `stop_at_pregrasp` is True the arm stops at the pre-grasp TCP pose
-        and does not continue to the grasp TCP pose.
+        Parameters
+        ----------
+        frame_id : str
+            The coordinate frame in which x, y, z are expressed. Use "world".
+        x, y, z : float
+            Position of the desired grasp center in frame_id. See
+            compute_grasp_approach_poses for the physical definition of the
+            grasp center.
+        qx, qy, qz, qw : float
+            Orientation of the grasp center frame in frame_id. For a standard
+            top-down grasp use (qx=1, qy=0, qz=0, qw=0).
+        gripper_width_m : float, optional
+            Expected physical finger gap in meters at the moment of contact.
+            Obtain from the model registry spec.grasp.grasp_width_m. Defaults
+            to fully open (0.104 m) when omitted; recorded in defaults_used.
+        approach_distance_m : float, optional
+            Distance in meters between the grasp center target and the
+            pre-grasp staging position. Defaults to 0.05 m when omitted.
+        approach_vec_x, approach_vec_y, approach_vec_z : float, optional
+            World-frame direction along which the pre-grasp position is offset
+            from the grasp center. Default [0, 0, 1] gives a position directly
+            above the grasp center in world Z, correct for top-down grasps.
+            For a side grasp approaching from world +X, supply approach_vec_x=1
+            and leave the others at 0. The vector is normalized internally.
+            Omit all three for the [0, 0, 1] default; recorded in defaults_used.
+        stop_at_pregrasp : bool, optional
+            When True the arm stops at the pre-grasp TCP pose and the tool
+            returns without proceeding to the grasp position. Defaults to False.
+
+        Sequence
+        --------
+        1. Robot moves the grasp center to approach_distance_m along the
+           approach vector away from the target, with the gripper open
+           (pre-grasp TCP pose).
+        2. If stop_at_pregrasp is True, returns here.
+        3. Robot moves the grasp center to the exact requested position
+           (grasp TCP pose). Gripper remains open.
+        4. Returns. Call grasp() on the gripper server to close the fingers.
+
+        Returns
+        -------
+        dict with keys:
+            ok : bool
+                True when all commanded motion steps completed successfully.
+            grasp_center_pose : dict
+                The requested grasp center expressed as a pose dict.
+            pre_grasp_tcp_pose : dict
+                Fixed TCP target for the staging position.
+            grasp_tcp_pose : dict
+                Fixed TCP target for the grasp position.
+            gripper_width_m : float
+                Effective width used for the TCP offset calculation.
+            approach_distance_m : float
+                Effective approach distance used.
+            approach_vector : dict
+                Normalized approach direction used, with keys x, y, z.
+            defaults_used : list of str
+                Names of parameters for which fallback values were applied.
+            pregrasp_motion_result : dict
+                Motion planner outcome for the move to the pre-grasp pose.
+            grasp_motion_result : dict
+                Motion planner outcome for the move to the grasp pose. Present
+                only when stop_at_pregrasp is False and the pre-grasp move
+                succeeded.
         """
 
         command = "execute_approach_and_preposition"
