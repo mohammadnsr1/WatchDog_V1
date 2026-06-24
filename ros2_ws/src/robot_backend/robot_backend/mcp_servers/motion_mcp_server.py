@@ -29,6 +29,7 @@ import rclpy
 from rclpy.node import Node
 
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
+from robot_backend.utils.geometry import make_pose
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
@@ -237,16 +238,44 @@ def _compute_approach_geometry(
     qw: Any,
     gripper_width_m: Any,
     approach_distance_m: Any,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], float, float, list[str]]:
+    approach_vec_x: Any,
+    approach_vec_y: Any,
+    approach_vec_z: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], float, float, dict[str, float], list[str]]:
     """Validate inputs and compute both TCP approach poses.
 
     Returns (grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose,
-             effective_width_m, effective_dist_m, defaults_used).
+             effective_width_m, effective_dist_m, approach_vector, defaults_used).
+
+    approach_vector is the normalized world-frame direction used for the offset.
     """
 
     gripper_width_m, approach_distance_m, defaults_used = _resolve_approach_defaults(
         gripper_width_m, approach_distance_m
     )
+
+    # Detect whether the caller supplied an approach vector at all.  All three
+    # components must be None for the [0, 0, 1] default to apply.
+    if approach_vec_x is None and approach_vec_y is None and approach_vec_z is None:
+        approach_vec_x = 0.0
+        approach_vec_y = 0.0
+        approach_vec_z = 1.0
+        defaults_used.append("approach_vector")
+        if _NODE is not None:
+            _NODE.get_logger().warning(
+                "approach_vec not supplied; using fallback [0, 0, 1] (world +Z)"
+            )
+
+    raw_x = _validate_float("approach_vec_x", 0.0 if approach_vec_x is None else approach_vec_x)
+    raw_y = _validate_float("approach_vec_y", 0.0 if approach_vec_y is None else approach_vec_y)
+    raw_z = _validate_float("approach_vec_z", 1.0 if approach_vec_z is None else approach_vec_z)
+    vec_norm = math.sqrt(raw_x ** 2 + raw_y ** 2 + raw_z ** 2)
+    if vec_norm < 1e-6:
+        raise ValueError(
+            "approach vector norm is too small; supply a non-zero direction."
+        )
+    ux, uy, uz = raw_x / vec_norm, raw_y / vec_norm, raw_z / vec_norm
+    approach_vector: dict[str, float] = {"x": ux, "y": uy, "z": uz}
 
     grasp_center_pose = _build_pose_dict(
         frame_id=frame_id,
@@ -258,36 +287,29 @@ def _compute_approach_geometry(
     if dist < 0.0:
         raise ValueError("approach_distance_m must be non-negative.")
 
-    # Rotate (0, 0, dist) by grasp_center orientation to get the approach offset
-    # in the world frame.  Formula: v' = q*(0,0,dist)*q_conj, expanded as
-    #   t = 2*cross(q_xyz, v);  v' = v + qw*t + cross(q_xyz, t)
-    # with v = (0, 0, dist) the cross products simplify to:
-    #   t = (2*qy*dist, -2*qx*dist, 0)
-    ox = grasp_center_pose["orientation"]["x"]
-    oy = grasp_center_pose["orientation"]["y"]
-    oz = grasp_center_pose["orientation"]["z"]
-    ow = grasp_center_pose["orientation"]["w"]
-    tx = 2.0 * oy * dist
-    ty = -2.0 * ox * dist
-    vpx = ow * tx - oz * ty
-    vpy = ow * ty + oz * tx
-    vpz = dist + ox * ty - oy * tx
-
     gcp = grasp_center_pose["position"]
-    pre_grasp_center_pose: dict[str, Any] = {
-        "frame_id": grasp_center_pose["frame_id"],
-        "position": {
-            "x": gcp["x"] - vpx,
-            "y": gcp["y"] - vpy,
-            "z": gcp["z"] - vpz,
+    pre_grasp_center_pose = make_pose(
+        position={
+            "x": gcp["x"] + ux * dist,
+            "y": gcp["y"] + uy * dist,
+            "z": gcp["z"] + uz * dist,
         },
-        "orientation": dict(grasp_center_pose["orientation"]),
-    }
+        orientation=grasp_center_pose["orientation"],
+        frame_id=grasp_center_pose.get("frame_id"),
+    )
 
     grasp_tcp_pose = tcp_target_from_grasp_center(grasp_center_pose, width)
     pre_grasp_tcp_pose = tcp_target_from_grasp_center(pre_grasp_center_pose, width)
 
-    return grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose, width, dist, defaults_used
+    return (
+        grasp_center_pose,
+        pre_grasp_tcp_pose,
+        grasp_tcp_pose,
+        width,
+        dist,
+        approach_vector,
+        defaults_used,
+    )
 
 
 if mcp is not None:
@@ -491,6 +513,9 @@ if mcp is not None:
         qw: float,
         gripper_width_m: float | None = None,
         approach_distance_m: float | None = None,
+        approach_vec_x: float | None = None,
+        approach_vec_y: float | None = None,
+        approach_vec_z: float | None = None,
     ) -> dict[str, Any]:
         """Compute pre-grasp and grasp TCP poses from a desired grasp-center pose.
 
@@ -499,6 +524,11 @@ if mcp is not None:
 
         `gripper_width_m` defaults to the fully-open RG2 width when omitted.
         `approach_distance_m` defaults to 0.05 m when omitted.
+        `approach_vec_x/y/z`: world-frame approach direction unit vector.
+          Default [0, 0, 1] = world +Z, correct for top-down grasps.
+          For a side grasp approaching from +X use approach_vec_x=1, others 0.
+          The vector is normalized internally; magnitude does not matter.
+          Omit all three to use the [0, 0, 1] default (recorded in defaults_used).
         `defaults_used` in the response lists any parameter that fell back to its
         default so the caller can detect when an explicit value was not supplied.
         """
@@ -511,6 +541,7 @@ if mcp is not None:
                 grasp_tcp_pose,
                 effective_width,
                 effective_dist,
+                approach_vector,
                 defaults_used,
             ) = _compute_approach_geometry(
                 frame_id=frame_id,
@@ -518,6 +549,9 @@ if mcp is not None:
                 qx=qx, qy=qy, qz=qz, qw=qw,
                 gripper_width_m=gripper_width_m,
                 approach_distance_m=approach_distance_m,
+                approach_vec_x=approach_vec_x,
+                approach_vec_y=approach_vec_y,
+                approach_vec_z=approach_vec_z,
             )
             return _ok(
                 command,
@@ -526,6 +560,7 @@ if mcp is not None:
                 grasp_tcp_pose=grasp_tcp_pose,
                 gripper_width_m=effective_width,
                 approach_distance_m=effective_dist,
+                approach_vector=approach_vector,
                 defaults_used=defaults_used,
             )
         except Exception as exc:
@@ -544,6 +579,9 @@ if mcp is not None:
         qw: float,
         gripper_width_m: float | None = None,
         approach_distance_m: float | None = None,
+        approach_vec_x: float | None = None,
+        approach_vec_y: float | None = None,
+        approach_vec_z: float | None = None,
         stop_at_pregrasp: bool = False,
     ) -> dict[str, Any]:
         """Move the arm through the pre-grasp pose and optionally into the grasp pose.
@@ -552,6 +590,11 @@ if mcp is not None:
         TCP poses are included in the response even when motion fails so the
         caller always sees what geometry was attempted.
 
+        `approach_vec_x/y/z`: world-frame approach direction unit vector.
+          Default [0, 0, 1] = world +Z, correct for top-down grasps.
+          For a side grasp approaching from +X use approach_vec_x=1, others 0.
+          The vector is normalized internally; magnitude does not matter.
+          Omit all three to use the [0, 0, 1] default (recorded in defaults_used).
         When `stop_at_pregrasp` is True the arm stops at the pre-grasp TCP pose
         and does not continue to the grasp TCP pose.
         """
@@ -562,6 +605,7 @@ if mcp is not None:
         grasp_tcp_pose: dict[str, Any] | None = None
         effective_width: float = 0.0
         effective_dist: float = 0.0
+        approach_vector: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 1.0}
         defaults_used: list[str] = []
 
         try:
@@ -571,6 +615,7 @@ if mcp is not None:
                 grasp_tcp_pose,
                 effective_width,
                 effective_dist,
+                approach_vector,
                 defaults_used,
             ) = _compute_approach_geometry(
                 frame_id=frame_id,
@@ -578,6 +623,9 @@ if mcp is not None:
                 qx=qx, qy=qy, qz=qz, qw=qw,
                 gripper_width_m=gripper_width_m,
                 approach_distance_m=approach_distance_m,
+                approach_vec_x=approach_vec_x,
+                approach_vec_y=approach_vec_y,
+                approach_vec_z=approach_vec_z,
             )
         except Exception as exc:
             return _error(command, exc, defaults_used=defaults_used)
@@ -599,6 +647,7 @@ if mcp is not None:
             grasp_tcp_pose=grasp_tcp_pose,
             gripper_width_m=effective_width,
             approach_distance_m=effective_dist,
+            approach_vector=approach_vector,
             defaults_used=defaults_used,
             stop_at_pregrasp=stop_at_pregrasp,
         )
