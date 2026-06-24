@@ -30,6 +30,7 @@ from rclpy.node import Node
 
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
+from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
 
 try:
@@ -46,6 +47,7 @@ _SAFE_NAMED_JOINT_POSES: dict[str, list[float]] = {
     "upright": [0.0, -1.2, 1.2, 0.0, 0.0, 0.0],
 }
 _DEFAULT_ALLOWED_PLANNING_TIME = 5.0
+_DEFAULT_APPROACH_DISTANCE_M = 0.05
 _DEFAULT_NUM_PLANNING_ATTEMPTS = 3
 _DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.3
 _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 0.3
@@ -192,6 +194,100 @@ def _build_pose_dict(
         "position": {"x": px, "y": py, "z": pz},
         "orientation": {"x": ox, "y": oy, "z": oz, "w": ow},
     }
+
+
+def _resolve_approach_defaults(
+    gripper_width_m: Any,
+    approach_distance_m: Any,
+) -> tuple[Any, Any, list[str]]:
+    """Apply fallback defaults when parameters are None and track which were substituted."""
+
+    defaults_used: list[str] = []
+
+    if gripper_width_m is None:
+        gripper_width_m = DEFAULT_RG2_CALIBRATION.width_open_m
+        defaults_used.append("gripper_width_m")
+        if _NODE is not None:
+            _NODE.get_logger().warning(
+                "gripper_width_m not supplied; "
+                f"using fallback {DEFAULT_RG2_CALIBRATION.width_open_m} m"
+            )
+
+    if approach_distance_m is None:
+        approach_distance_m = _DEFAULT_APPROACH_DISTANCE_M
+        defaults_used.append("approach_distance_m")
+        if _NODE is not None:
+            _NODE.get_logger().warning(
+                "approach_distance_m not supplied; "
+                f"using fallback {_DEFAULT_APPROACH_DISTANCE_M} m"
+            )
+
+    return gripper_width_m, approach_distance_m, defaults_used
+
+
+def _compute_approach_geometry(
+    *,
+    frame_id: str,
+    x: Any,
+    y: Any,
+    z: Any,
+    qx: Any,
+    qy: Any,
+    qz: Any,
+    qw: Any,
+    gripper_width_m: Any,
+    approach_distance_m: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], float, float, list[str]]:
+    """Validate inputs and compute both TCP approach poses.
+
+    Returns (grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose,
+             effective_width_m, effective_dist_m, defaults_used).
+    """
+
+    gripper_width_m, approach_distance_m, defaults_used = _resolve_approach_defaults(
+        gripper_width_m, approach_distance_m
+    )
+
+    grasp_center_pose = _build_pose_dict(
+        frame_id=frame_id,
+        x=x, y=y, z=z,
+        qx=qx, qy=qy, qz=qz, qw=qw,
+    )
+    width = _validate_width(gripper_width_m)
+    dist = _validate_float("approach_distance_m", approach_distance_m)
+    if dist < 0.0:
+        raise ValueError("approach_distance_m must be non-negative.")
+
+    # Rotate (0, 0, dist) by grasp_center orientation to get the approach offset
+    # in the world frame.  Formula: v' = q*(0,0,dist)*q_conj, expanded as
+    #   t = 2*cross(q_xyz, v);  v' = v + qw*t + cross(q_xyz, t)
+    # with v = (0, 0, dist) the cross products simplify to:
+    #   t = (2*qy*dist, -2*qx*dist, 0)
+    ox = grasp_center_pose["orientation"]["x"]
+    oy = grasp_center_pose["orientation"]["y"]
+    oz = grasp_center_pose["orientation"]["z"]
+    ow = grasp_center_pose["orientation"]["w"]
+    tx = 2.0 * oy * dist
+    ty = -2.0 * ox * dist
+    vpx = ow * tx - oz * ty
+    vpy = ow * ty + oz * tx
+    vpz = dist + ox * ty - oy * tx
+
+    gcp = grasp_center_pose["position"]
+    pre_grasp_center_pose: dict[str, Any] = {
+        "frame_id": grasp_center_pose["frame_id"],
+        "position": {
+            "x": gcp["x"] - vpx,
+            "y": gcp["y"] - vpy,
+            "z": gcp["z"] - vpz,
+        },
+        "orientation": dict(grasp_center_pose["orientation"]),
+    }
+
+    grasp_tcp_pose = tcp_target_from_grasp_center(grasp_center_pose, width)
+    pre_grasp_tcp_pose = tcp_target_from_grasp_center(pre_grasp_center_pose, width)
+
+    return grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose, width, dist, defaults_used
 
 
 if mcp is not None:
@@ -381,6 +477,150 @@ if mcp is not None:
                 },
                 gripper_width_m=gripper_width_m,
             )
+
+
+    @mcp.tool()
+    def compute_grasp_approach_poses(
+        frame_id: str,
+        x: float,
+        y: float,
+        z: float,
+        qx: float,
+        qy: float,
+        qz: float,
+        qw: float,
+        gripper_width_m: float | None = None,
+        approach_distance_m: float | None = None,
+    ) -> dict[str, Any]:
+        """Compute pre-grasp and grasp TCP poses from a desired grasp-center pose.
+
+        Pure geometry — no motion is commanded.  Both TCP poses are returned so
+        the caller can inspect them before deciding to execute.
+
+        `gripper_width_m` defaults to the fully-open RG2 width when omitted.
+        `approach_distance_m` defaults to 0.05 m when omitted.
+        `defaults_used` in the response lists any parameter that fell back to its
+        default so the caller can detect when an explicit value was not supplied.
+        """
+
+        command = "compute_grasp_approach_poses"
+        try:
+            (
+                grasp_center_pose,
+                pre_grasp_tcp_pose,
+                grasp_tcp_pose,
+                effective_width,
+                effective_dist,
+                defaults_used,
+            ) = _compute_approach_geometry(
+                frame_id=frame_id,
+                x=x, y=y, z=z,
+                qx=qx, qy=qy, qz=qz, qw=qw,
+                gripper_width_m=gripper_width_m,
+                approach_distance_m=approach_distance_m,
+            )
+            return _ok(
+                command,
+                grasp_center_pose=grasp_center_pose,
+                pre_grasp_tcp_pose=pre_grasp_tcp_pose,
+                grasp_tcp_pose=grasp_tcp_pose,
+                gripper_width_m=effective_width,
+                approach_distance_m=effective_dist,
+                defaults_used=defaults_used,
+            )
+        except Exception as exc:
+            return _error(command, exc)
+
+
+    @mcp.tool()
+    def execute_approach_and_preposition(
+        frame_id: str,
+        x: float,
+        y: float,
+        z: float,
+        qx: float,
+        qy: float,
+        qz: float,
+        qw: float,
+        gripper_width_m: float | None = None,
+        approach_distance_m: float | None = None,
+        stop_at_pregrasp: bool = False,
+    ) -> dict[str, Any]:
+        """Move the arm through the pre-grasp pose and optionally into the grasp pose.
+
+        Geometry is identical to `compute_grasp_approach_poses`.  Both computed
+        TCP poses are included in the response even when motion fails so the
+        caller always sees what geometry was attempted.
+
+        When `stop_at_pregrasp` is True the arm stops at the pre-grasp TCP pose
+        and does not continue to the grasp TCP pose.
+        """
+
+        command = "execute_approach_and_preposition"
+        grasp_center_pose: dict[str, Any] | None = None
+        pre_grasp_tcp_pose: dict[str, Any] | None = None
+        grasp_tcp_pose: dict[str, Any] | None = None
+        effective_width: float = 0.0
+        effective_dist: float = 0.0
+        defaults_used: list[str] = []
+
+        try:
+            (
+                grasp_center_pose,
+                pre_grasp_tcp_pose,
+                grasp_tcp_pose,
+                effective_width,
+                effective_dist,
+                defaults_used,
+            ) = _compute_approach_geometry(
+                frame_id=frame_id,
+                x=x, y=y, z=z,
+                qx=qx, qy=qy, qz=qz, qw=qw,
+                gripper_width_m=gripper_width_m,
+                approach_distance_m=approach_distance_m,
+            )
+        except Exception as exc:
+            return _error(command, exc, defaults_used=defaults_used)
+
+        def _motion_kwargs() -> dict[str, Any]:
+            return dict(
+                target_is_grasp_center=False,
+                position_tolerance_m=_DEFAULT_POSITION_TOLERANCE_M,
+                orientation_tolerance_rad=_DEFAULT_ORIENTATION_TOLERANCE_RAD,
+                allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
+                num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
+                max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
+                max_acceleration_scaling_factor=_DEFAULT_MAX_ACCELERATION_SCALING_FACTOR,
+            )
+
+        payload: dict[str, Any] = dict(
+            grasp_center_pose=grasp_center_pose,
+            pre_grasp_tcp_pose=pre_grasp_tcp_pose,
+            grasp_tcp_pose=grasp_tcp_pose,
+            gripper_width_m=effective_width,
+            approach_distance_m=effective_dist,
+            defaults_used=defaults_used,
+            stop_at_pregrasp=stop_at_pregrasp,
+        )
+
+        try:
+            backend = _ensure_backend()
+            pregrasp_result = backend.motion.move_to_pose(
+                pre_grasp_tcp_pose, **_motion_kwargs()
+            )
+            payload["pregrasp_motion_result"] = pregrasp_result
+
+            if stop_at_pregrasp:
+                return _ok(command, **payload)
+
+            grasp_result = backend.motion.move_to_pose(
+                grasp_tcp_pose, **_motion_kwargs()
+            )
+            payload["grasp_motion_result"] = grasp_result
+            return _ok(command, **payload)
+
+        except Exception as exc:
+            return _error(command, exc, **payload)
 
 
 def main() -> None:
