@@ -9,7 +9,7 @@ from rclpy.action import ActionClient
 
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.interfaces.robot_backend import RobotBackend
-from robot_backend_interfaces.action import GripperGuardedMove
+from isaac_trajectory_bridge_interfaces.action import GripperGuardedMove
 
 
 # All RG2 links that physically contact or surround a grasped object.

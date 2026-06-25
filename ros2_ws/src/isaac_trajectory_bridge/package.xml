@@ -13,7 +13,6 @@
   <depend>launch</depend>
   <depend>launch_ros</depend>
   <depend>rclpy</depend>
-  <depend>robot_backend_interfaces</depend>
   <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
