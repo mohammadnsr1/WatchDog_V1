@@ -34,8 +34,8 @@ class RG2Calibration:
 DEFAULT_RG2_CALIBRATION = RG2Calibration(
     width_open_m=0.104,
     width_closed_m=0.0,
-    position_open_rad=-0.5585053606381855,
-    position_closed_rad=0.7853981633974483,
+    position_open_rad=-0.558505,
+    position_closed_rad=0.7731809,
     tcp_to_grasp_center_open=make_pose(
         position={"x": 0.0, "y": 0.0, "z": 0.0256},
         orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
