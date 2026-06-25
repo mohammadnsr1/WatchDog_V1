@@ -1,0 +1,19 @@
+# Goal
+float64 target_width_m       # desired true finger gap in meters (0.0=closed, 0.10=open)
+float64 force_threshold      # stop when finger_joint effort exceeds this (default 0.45)
+string mode                  # "width": stop on width only; "force": stop on force only; "guarded": whichever first
+float64 width_tolerance_m    # success tolerance in meters (default 0.003)
+---
+# Result
+bool success
+string stop_reason           # "width_reached" | "force_threshold" | "timeout" | "asymmetry_detected" | "error"
+float64 final_width_m
+float64 final_effort
+bool asymmetry_detected
+string message
+---
+# Feedback
+float64 current_width_m
+float64 current_effort
+float64 asymmetry_m
+string phase                 # "closing" | "width_reached" | "contact"
