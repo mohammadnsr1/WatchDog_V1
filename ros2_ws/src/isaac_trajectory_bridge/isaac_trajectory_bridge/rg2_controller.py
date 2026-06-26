@@ -59,25 +59,31 @@ DEFAULT_TF_WIDTH_CLOSED_M = 0.0355
 DEFAULT_TRUE_WIDTH_OPEN_M = DEFAULT_TF_WIDTH_OPEN_M - 2.0 * DEFAULT_FINGER_LINK_OFFSET_M  # 0.100
 
 # ---------------------------------------------------------------------------
-# PD control gains
+# Proportional-monotonic motion parameters
 #
-# error     = target_width_m - current_true_width_m   (+ → need to open)
-# d_error   = (error - prev_error) / dt               (m/s)
-# delta_rad = -(Kp * error + Kd * d_error)
+# Each tick the controller moves commanded_master by:
+#   step = min(KP_RAD_PER_M × |error|, MAX_STEP_RAD)   [rad]
 #
-# Sign check (open_position < 0, close_position > 0):
-#   Need to open  → error > 0 → delta_rad < 0 → master decreases → fingers open  ✓
-#   Need to close → error < 0 → delta_rad > 0 → master increases → fingers close ✓
-#   Approaching target while closing → d_error > 0 → Kd term reduces delta_rad → damping ✓
+# Direction is locked at the START of each control call (from initial TF width
+# vs target) and never reversed — noise-induced sign flips in the error cannot
+# cause physical back-and-forth oscillation.
+#
+# Far from target:  |error| is large  → step saturates at MAX_STEP_RAD (full speed)
+# Near target:      |error| is small  → step shrinks proportionally (gentle creep)
+# Inside tolerance: commanding stops; joint holds; N_STABLE quiet ticks required
+#
+# Overshoot safety: at the tolerance boundary, step = KP × tol × 0.075.
+# With KP = 5 the remaining error after that step = tol × (1 − 0.375) = 0.625 × tol,
+# which is inside the band.  The gripper can never land outside the band on the
+# wrong side, so the locked-direction assumption is always valid (KP must stay < 13).
 # ---------------------------------------------------------------------------
 
-DEFAULT_KP_RAD_PER_M = 12.5     # proportional gain [rad/m]
-DEFAULT_KD_RAD_PER_M = 2.5       # derivative gain [rad·s/m]; tune down if oscillation persists
-DEFAULT_MAX_STEP_RAD = 0.020     # max |Δmaster| per 20 ms tick ≈ 1.0 rad/s
-DEFAULT_N_STABLE = 10             # consecutive in-band ticks to declare convergence
-DEFAULT_MAX_CONTROL_ITERS = 300  # 150 × 20 ms = 3 s timeout
+DEFAULT_KP_RAD_PER_M = 5.0      # proportional scale; controls slow-down near target
+DEFAULT_MAX_STEP_RAD = 0.016     # joint velocity cap: 0.016 × 50 Hz = 0.8 rad/s
+DEFAULT_N_STABLE = 5              # consecutive in-band ticks (5 × 20 ms = 100 ms settle)
+DEFAULT_MAX_CONTROL_ITERS = 200  # 200 × 20 ms = 4 s hard timeout
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_WIDTH_TOLERANCE_M = 0.001
+DEFAULT_WIDTH_TOLERANCE_M = 0.003  # 3 mm — well above typical TF noise floor
 
 # ---------------------------------------------------------------------------
 # Force / effort parameters
@@ -116,7 +122,6 @@ class RG2Controller(Node):
         self.declare_parameter("true_width_open_m", DEFAULT_TRUE_WIDTH_OPEN_M)
 
         self.declare_parameter("kp_rad_per_m", DEFAULT_KP_RAD_PER_M)
-        self.declare_parameter("kd_rad_per_m", DEFAULT_KD_RAD_PER_M)
         self.declare_parameter("max_step_rad", DEFAULT_MAX_STEP_RAD)
         self.declare_parameter("n_stable", DEFAULT_N_STABLE)
         self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
@@ -153,7 +158,6 @@ class RG2Controller(Node):
         self._true_width_open_m = float(self.get_parameter("true_width_open_m").value)
 
         self._kp_rad_per_m = float(self.get_parameter("kp_rad_per_m").value)
-        self._kd_rad_per_m = float(self.get_parameter("kd_rad_per_m").value)
         self._max_step_rad = float(self.get_parameter("max_step_rad").value)
         self._n_stable = int(self.get_parameter("n_stable").value)
         self._max_control_iters = int(self.get_parameter("max_control_iters").value)
@@ -216,11 +220,11 @@ class RG2Controller(Node):
         )
 
         self.get_logger().info(
-            f"RG2 closed-loop controller ready (PD) — "
+            f"RG2 controller ready (proportional-monotonic) — "
             f"services: {self._service_ns}/{{open,close,set_position}}  "
             f"action: {self._service_ns}/guarded_move  "
-            f"Kp={self._kp_rad_per_m:.1f} Kd={self._kd_rad_per_m:.2f} "
-            f"max_step={self._max_step_rad:.3f} n_stable={self._n_stable}"
+            f"Kp={self._kp_rad_per_m:.1f} max_step={self._max_step_rad:.3f} "
+            f"tol={self._width_tolerance_m:.3f} n_stable={self._n_stable}"
         )
 
     # =========================================================================
@@ -302,28 +306,6 @@ class RG2Controller(Node):
             return abs(self._latest_joint_efforts.get(self._master_joint_name, 0.0))
 
     # =========================================================================
-    # PD control kernel
-    # =========================================================================
-
-    def _pd_step(
-        self,
-        error: float,
-        prev_error: float,
-    ) -> float:
-        """Compute one PD delta [rad]. Caller adds this to the actual joint position.
-
-        Rebasing from actual each tick (not an accumulator) prevents lag buildup:
-        the command is always exactly one step ahead of wherever the joint is now,
-        so overshoot is bounded to ±max_step_rad regardless of sim latency.
-
-        error = target_width - current_width (positive → need to open)
-        delta_rad = -(Kp * error + Kd * d_error/dt)
-        """
-        d_error = (error - prev_error) / self._control_period_sec
-        delta_rad = -(self._kp_rad_per_m * error + self._kd_rad_per_m * d_error)
-        return max(-self._max_step_rad, min(self._max_step_rad, delta_rad))
-
-    # =========================================================================
     # Core closed-loop width controller (used by services)
     # =========================================================================
 
@@ -333,22 +315,37 @@ class RG2Controller(Node):
         width_tolerance: Optional[float] = None,
         max_iters: Optional[int] = None,
     ) -> Tuple[bool, float]:
-        """Drive the gripper to target_true_width_m with PD width control.
+        """Drive the gripper to target_true_width_m with proportional-monotonic control.
 
-        When outside the tolerance band: PD command is applied, rebased from the
-        actual joint position each tick so lag can never accumulate.
-        When inside the tolerance band: commanding stops immediately (no more
-        perturbation from the controller), and N_STABLE consecutive quiet ticks
-        are required before declaring convergence.
+        Direction (closing vs opening) is determined once from the initial TF width
+        and never reversed.  This prevents noise-induced sign flips in the error from
+        causing physical back-and-forth oscillation.
+
+        Step size scales with |error|, capped at max_step_rad:
+          step = min(Kp × |error|, max_step_rad)
+        Full speed when far, tiny creep steps when close — overshoot past the
+        tolerance band is mathematically impossible for Kp < 13 rad/m.
+
+        On the first tick inside the band: commanded_master is snapped to the actual
+        joint position (releases any accumulated lead).  No further commands while
+        inside the band.  N_STABLE consecutive quiet readings required for success.
 
         Returns (converged, final_true_width_m).
         """
         tol = width_tolerance if width_tolerance is not None else self._width_tolerance_m
         iters = max_iters if max_iters is not None else self._max_control_iters
 
-        prev_error: Optional[float] = None
+        commanded_master = self._get_master_position()
+        if commanded_master is None:
+            commanded_master = (self._open_position + self._close_position) / 2.0
+
+        # Lock direction from initial TF reading — never reversed mid-call.
+        initial_width = self._get_true_width()
+        closing = target_true_width_m < (initial_width if initial_width is not None else 0.05)
+
         stable_count = 0
-        final_width: float = self._get_true_width() or 0.0
+        band_entry_done = False
+        final_width: float = initial_width or 0.0
 
         for _ in range(iters):
             width = self._get_true_width()
@@ -359,24 +356,29 @@ class RG2Controller(Node):
             final_width = width
             error = target_true_width_m - width
 
-            if abs(error) < tol:
-                # Inside band: hold position, accumulate stable ticks.
-                # No new command — avoid perturbing the joint.
+            in_band = abs(error) < tol
+
+            if in_band:
+                if not band_entry_done:
+                    # Snap to actual joint position to release accumulated lead.
+                    actual = self._get_master_position()
+                    if actual is not None:
+                        commanded_master = actual
+                    self._publish_command(self._master_to_positions(commanded_master))
+                    band_entry_done = True
                 stable_count += 1
                 if stable_count >= self._n_stable:
                     return True, width
-            else:
+            elif not band_entry_done:
+                # Still approaching: step proportionally.
                 stable_count = 0
-                if prev_error is None:
-                    prev_error = error  # first active tick: derivative kick = 0
-
-                # Rebase from actual joint position to prevent lag accumulation.
-                actual = self._get_master_position()
-                base = actual if actual is not None else (self._open_position + self._close_position) / 2.0
-                delta_rad = self._pd_step(error, prev_error)
-                commanded = max(self._open_position, min(self._close_position, base + delta_rad))
-                prev_error = error
-                self._publish_command(self._master_to_positions(commanded))
+                step = min(self._kp_rad_per_m * abs(error), self._max_step_rad)
+                if closing:
+                    commanded_master = min(commanded_master + step, self._close_position)
+                else:
+                    commanded_master = max(commanded_master - step, self._open_position)
+                self._publish_command(self._master_to_positions(commanded_master))
+            # else: band_entry_done=True, slightly out-of-band due to noise → hold silently
 
             time.sleep(self._control_period_sec)
 
@@ -390,10 +392,16 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _open_cb(self, _req: Trigger.Request, resp: Trigger.Response) -> Trigger.Response:
-        return self._handle_svc(self._true_width_open_m, "open", resp)
+        # Mechanical stop tolerance: the TF reading at the physical open limit is never
+        # exactly true_width_open_m.  Use at least 5 mm so the stop is always in-band.
+        tol = max(self._width_tolerance_m, 0.005)
+        return self._handle_svc(self._true_width_open_m, "open", resp, width_tolerance=tol)
 
     def _close_cb(self, _req: Trigger.Request, resp: Trigger.Response) -> Trigger.Response:
-        return self._handle_svc(0.0, "close", resp)
+        # TF at the physical close stop reads ~0.010 m (10 mm), not 0.0 m.
+        # Use 15 mm tolerance so the band covers the actual mechanical stop position.
+        tol = max(self._width_tolerance_m, 0.015)
+        return self._handle_svc(0.0, "close", resp, width_tolerance=tol)
 
     def _set_position_cb(
         self,
@@ -406,13 +414,21 @@ class RG2Controller(Node):
         target_width = self._true_width_open_m * (1.0 - max(0.0, min(1.0, fraction)))
         return self._handle_svc(target_width, "set_position", resp)
 
-    def _handle_svc(self, target_width_m: float, label: str, resp) -> object:
+    def _handle_svc(
+        self,
+        target_width_m: float,
+        label: str,
+        resp,
+        width_tolerance: Optional[float] = None,
+    ) -> object:
         if not self._acquire():
             resp.success = False
             resp.message = "Busy."
             return resp
         try:
-            converged, final_width = self._closed_loop_control(target_width_m)
+            converged, final_width = self._closed_loop_control(
+                target_width_m, width_tolerance=width_tolerance
+            )
             resp.success = True
             resp.message = (
                 f"{label}: target={target_width_m:.4f}m "
@@ -432,13 +448,16 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _execute_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
-        """Guarded move with PD width control and plateau-confirmed force stop.
+        """Guarded move with proportional-monotonic width control and plateau-confirmed force stop.
 
         Force termination has two layers:
           1. Over-force guard (immediate): effort exceeds goal.force_threshold → stop now.
           2. Contact + plateau: effort crosses EFFORT_CONTACT_THRESHOLD, then
              abs(d_effort/dt) < EFFORT_PLATEAU_DERIV for EFFORT_PLATEAU_TICKS
              consecutive ticks → declares stable contact and stops.
+
+        Width control uses the same proportional-monotonic law as the services:
+        direction locked at start, step ∝ |error|, capped at max_step_rad.
         """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
@@ -451,17 +470,21 @@ class RG2Controller(Node):
         if commanded_master is None:
             commanded_master = self._open_position
 
+        # Lock direction from initial TF width — never reversed during this call.
+        initial_width = self._get_true_width()
+        closing = target_width < (initial_width if initial_width is not None else 0.05)
+        band_entry_done = False
+
         self.get_logger().info(
             f"GuardedMove: target={target_width:.4f}m force_threshold={force_threshold:.3f} "
-            f"mode={mode} tol={tol:.4f}m"
+            f"mode={mode} tol={tol:.4f}m direction={'closing' if closing else 'opening'}"
         )
 
         fb = GripperGuardedMove.Feedback()
         result = GripperGuardedMove.Result()
         stop_reason = "timeout"
 
-        # PD state
-        prev_error: Optional[float] = None
+        # Width convergence state
         stable_count = 0
 
         # Force state
@@ -544,7 +567,7 @@ class RG2Controller(Node):
                 stop_reason = "error"
                 break
 
-            # --- Width convergence: N_STABLE consecutive in-band ticks ---
+            # --- Width convergence: N_STABLE in-band ticks ---
             error = target_width - width
             in_band = abs(error) < tol
 
@@ -554,27 +577,32 @@ class RG2Controller(Node):
                     if stable_count >= self._n_stable:
                         stop_reason = "width_reached"
                         break
-                else:
+                elif not band_entry_done:
+                    # Reset only during approach — not after band entry, so that
+                    # noise-induced out-of-band readings don't discard progress.
                     stable_count = 0
 
-            # --- PD step ---
-            # "force" mode: always command (keep closing until effort stops us).
-            # "width"/"guarded": only command when outside band; hold quietly when inside
-            # so the joint settles and stable_count can accumulate without perturbation.
-            should_command = (mode == "force") or (not in_band)
-            if should_command:
-                if prev_error is None:
-                    prev_error = error  # first active tick: derivative kick = 0
-
-                # Rebase from actual joint position each tick to prevent lag accumulation.
-                actual = self._get_master_position()
-                base = actual if actual is not None else commanded_master
-                delta_rad = self._pd_step(error, prev_error)
-                commanded_master = max(
-                    self._open_position, min(self._close_position, base + delta_rad)
-                )
-                prev_error = error
+            # --- Proportional-monotonic step ---
+            # "force": always command (closed-loop force stop handles termination).
+            # "width"/"guarded": command only while still approaching (not yet in
+            # band).  Once band_entry_done is True, hold silently — noise-induced
+            # out-of-band readings must NOT trigger more steps, since each extra
+            # step in the locked direction drifts the gripper toward mechanical stop.
+            if mode == "force" or (not in_band and not band_entry_done):
+                step = min(self._kp_rad_per_m * abs(error), self._max_step_rad)
+                if closing:
+                    commanded_master = min(commanded_master + step, self._close_position)
+                else:
+                    commanded_master = max(commanded_master - step, self._open_position)
                 self._publish_command(self._master_to_positions(commanded_master))
+            elif not band_entry_done:
+                # First tick inside band: snap to actual to release accumulated lead.
+                actual = self._get_master_position()
+                if actual is not None:
+                    commanded_master = actual
+                self._publish_command(self._master_to_positions(commanded_master))
+                band_entry_done = True
+            # else: band_entry_done=True → hold silently, no command
 
             time.sleep(dt)
 
