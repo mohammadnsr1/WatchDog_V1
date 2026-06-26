@@ -32,7 +32,7 @@ from isaac_trajectory_bridge_interfaces.action import GripperGuardedMove
 
 
 # ---------------------------------------------------------------------------
-# Defaults
+# Calibration / geometry
 # ---------------------------------------------------------------------------
 
 DEFAULT_GRIPPER_JOINT_NAMES = [
@@ -58,18 +58,43 @@ DEFAULT_TF_WIDTH_OPEN_M = 0.1420
 DEFAULT_TF_WIDTH_CLOSED_M = 0.0355
 DEFAULT_TRUE_WIDTH_OPEN_M = DEFAULT_TF_WIDTH_OPEN_M - 2.0 * DEFAULT_FINGER_LINK_OFFSET_M  # 0.100
 
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10
-DEFAULT_WIDTH_TOLERANCE_M = 0.003
-DEFAULT_MAX_CONTROL_ITERS = 80
+# ---------------------------------------------------------------------------
+# PD control gains
+#
+# error     = target_width_m - current_true_width_m   (+ → need to open)
+# d_error   = (error - prev_error) / dt               (m/s)
+# delta_rad = -(Kp * error + Kd * d_error)
+#
+# Sign check (open_position < 0, close_position > 0):
+#   Need to open  → error > 0 → delta_rad < 0 → master decreases → fingers open  ✓
+#   Need to close → error < 0 → delta_rad > 0 → master increases → fingers close ✓
+#   Approaching target while closing → d_error > 0 → Kd term reduces delta_rad → damping ✓
+# ---------------------------------------------------------------------------
+
+DEFAULT_KP_RAD_PER_M = 12.5      # proportional gain [rad/m]
+DEFAULT_KD_RAD_PER_M = 2.5       # derivative gain [rad·s/m]; tune down if oscillation persists
+DEFAULT_MAX_STEP_RAD = 0.020     # max |Δmaster| per 20 ms tick ≈ 1.0 rad/s
+DEFAULT_N_STABLE = 3              # consecutive in-band ticks to declare convergence
+DEFAULT_MAX_CONTROL_ITERS = 150  # 150 × 20 ms = 3 s timeout
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_CONTROL_FRACTION = 0.5  # P-gain fraction per step (0.5 → ~7 steps to converge)
+DEFAULT_WIDTH_TOLERANCE_M = 0.003
+
+# ---------------------------------------------------------------------------
+# Force / effort parameters
+# ---------------------------------------------------------------------------
+
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10   # effort level that triggers contact detection
+DEFAULT_EFFORT_PLATEAU_DERIV = 0.05       # |d_effort/dt| must be below this to confirm plateau
+DEFAULT_EFFORT_PLATEAU_TICKS = 2          # consecutive stable ticks to confirm steady contact
+DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
+DEFAULT_ENABLE_ASYMMETRY_FAULT = False
 
 
 class RG2Controller(Node):
     def __init__(self) -> None:
         super().__init__("rg2_controller")
 
-        # ---- parameters -----------------------------------------------------
+        # ---- parameters --------------------------------------------------------
         self.declare_parameter("joint_state_topic", "/joint_states")
         self.declare_parameter("joint_command_topic", "/joint_command")
         self.declare_parameter("service_namespace", "/rg2_controller")
@@ -77,7 +102,7 @@ class RG2Controller(Node):
         self.declare_parameter("open_position", DEFAULT_OPEN_POSITION)
         self.declare_parameter("close_position", DEFAULT_CLOSE_POSITION)
         self.declare_parameter("command_rate_hz", DEFAULT_CONTROL_HZ)
-        self.declare_parameter("command_duration_sec", 1.0)  # accepted from launch; unused by CL control
+        self.declare_parameter("command_duration_sec", 1.0)  # accepted from launch; unused
         self.declare_parameter("gripper_joint_names", DEFAULT_GRIPPER_JOINT_NAMES)
         self.declare_parameter("gripper_joint_multipliers", DEFAULT_GRIPPER_JOINT_MULTIPLIERS)
         self.declare_parameter("gripper_joint_offsets", DEFAULT_GRIPPER_JOINT_OFFSETS)
@@ -90,11 +115,20 @@ class RG2Controller(Node):
         self.declare_parameter("tf_width_closed_m", DEFAULT_TF_WIDTH_CLOSED_M)
         self.declare_parameter("true_width_open_m", DEFAULT_TRUE_WIDTH_OPEN_M)
 
-        self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
-        self.declare_parameter("width_tolerance_m", DEFAULT_WIDTH_TOLERANCE_M)
+        self.declare_parameter("kp_rad_per_m", DEFAULT_KP_RAD_PER_M)
+        self.declare_parameter("kd_rad_per_m", DEFAULT_KD_RAD_PER_M)
+        self.declare_parameter("max_step_rad", DEFAULT_MAX_STEP_RAD)
+        self.declare_parameter("n_stable", DEFAULT_N_STABLE)
         self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
+        self.declare_parameter("width_tolerance_m", DEFAULT_WIDTH_TOLERANCE_M)
 
-        # ---- read -----------------------------------------------------------
+        self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
+        self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
+        self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
+        self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
+        self.declare_parameter("enable_asymmetry_fault", DEFAULT_ENABLE_ASYMMETRY_FAULT)
+
+        # ---- read --------------------------------------------------------------
         self._joint_state_topic = str(self.get_parameter("joint_state_topic").value)
         self._joint_command_topic = str(self.get_parameter("joint_command_topic").value)
         self._service_ns = self._normalize_ns(str(self.get_parameter("service_namespace").value))
@@ -103,8 +137,12 @@ class RG2Controller(Node):
         self._close_position = float(self.get_parameter("close_position").value)
         self._control_hz = max(1.0, float(self.get_parameter("command_rate_hz").value))
         self._gripper_joint_names = list(self.get_parameter("gripper_joint_names").value)
-        self._gripper_joint_multipliers = [float(v) for v in self.get_parameter("gripper_joint_multipliers").value]
-        self._gripper_joint_offsets = [float(v) for v in self.get_parameter("gripper_joint_offsets").value]
+        self._gripper_joint_multipliers = [
+            float(v) for v in self.get_parameter("gripper_joint_multipliers").value
+        ]
+        self._gripper_joint_offsets = [
+            float(v) for v in self.get_parameter("gripper_joint_offsets").value
+        ]
 
         self._left_finger_frame = str(self.get_parameter("left_finger_frame").value)
         self._right_finger_frame = str(self.get_parameter("right_finger_frame").value)
@@ -114,25 +152,27 @@ class RG2Controller(Node):
         self._tf_width_closed_m = float(self.get_parameter("tf_width_closed_m").value)
         self._true_width_open_m = float(self.get_parameter("true_width_open_m").value)
 
-        self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
-        self._width_tolerance_m = float(self.get_parameter("width_tolerance_m").value)
+        self._kp_rad_per_m = float(self.get_parameter("kp_rad_per_m").value)
+        self._kd_rad_per_m = float(self.get_parameter("kd_rad_per_m").value)
+        self._max_step_rad = float(self.get_parameter("max_step_rad").value)
+        self._n_stable = int(self.get_parameter("n_stable").value)
         self._max_control_iters = int(self.get_parameter("max_control_iters").value)
+        self._width_tolerance_m = float(self.get_parameter("width_tolerance_m").value)
         self._control_period_sec = 1.0 / self._control_hz
 
-        # Gain: how many radians of master joint = 1 metre of true width change.
-        # Derived from the linear TF calibration (not the corrected true-width range
-        # because that is clamped at 0 and would underestimate the actual joint travel).
-        tf_width_range = self._tf_width_open_m - self._tf_width_closed_m  # 0.1065 m
-        joint_range = self._close_position - self._open_position           # 1.3317 rad
-        self._gain_rad_per_m: float = joint_range / tf_width_range         # ≈ 12.5
+        self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
+        self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
+        self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
+        self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
+        self._enable_asymmetry_fault = bool(self.get_parameter("enable_asymmetry_fault").value)
 
-        # ---- validate -------------------------------------------------------
+        # ---- validate ----------------------------------------------------------
         if len(self._gripper_joint_names) != 6:
             raise ValueError("gripper_joint_names must contain exactly 6 joints.")
         if self._master_joint_name not in self._gripper_joint_names:
             raise ValueError("master_joint_name must be in gripper_joint_names.")
 
-        # ---- state ----------------------------------------------------------
+        # ---- state -------------------------------------------------------------
         self._state_lock = threading.Lock()
         self._command_lock = threading.Lock()
         self._busy = False
@@ -140,21 +180,25 @@ class RG2Controller(Node):
         self._latest_joint_efforts: Dict[str, float] = {}
         self._last_known_width: Optional[float] = None
 
-        # ---- TF -------------------------------------------------------------
+        # ---- TF ----------------------------------------------------------------
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
 
-        # ---- publishers / subscribers ---------------------------------------
+        # ---- publishers / subscribers ------------------------------------------
         self._joint_pub = self.create_publisher(JointState, self._joint_command_topic, 10)
         self._width_pub = self.create_publisher(Float64, "/gripper_width_true", 10)
 
         self.create_subscription(JointState, self._joint_state_topic, self._joint_state_cb, 50)
         self.create_timer(self._control_period_sec, self._width_timer_cb)
 
-        # ---- services -------------------------------------------------------
+        # ---- services ----------------------------------------------------------
         svc_group = MutuallyExclusiveCallbackGroup()
-        self.create_service(Trigger, f"{self._service_ns}/open", self._open_cb, callback_group=svc_group)
-        self.create_service(Trigger, f"{self._service_ns}/close", self._close_cb, callback_group=svc_group)
+        self.create_service(
+            Trigger, f"{self._service_ns}/open", self._open_cb, callback_group=svc_group
+        )
+        self.create_service(
+            Trigger, f"{self._service_ns}/close", self._close_cb, callback_group=svc_group
+        )
         self.create_service(
             SetGripperPosition,
             f"{self._service_ns}/set_position",
@@ -162,7 +206,7 @@ class RG2Controller(Node):
             callback_group=svc_group,
         )
 
-        # ---- action server --------------------------------------------------
+        # ---- action server -----------------------------------------------------
         ActionServer(
             self,
             GripperGuardedMove,
@@ -172,14 +216,15 @@ class RG2Controller(Node):
         )
 
         self.get_logger().info(
-            f"RG2 closed-loop controller ready — "
+            f"RG2 closed-loop controller ready (PD) — "
             f"services: {self._service_ns}/{{open,close,set_position}}  "
             f"action: {self._service_ns}/guarded_move  "
-            f"gain: {self._gain_rad_per_m:.2f} rad/m"
+            f"Kp={self._kp_rad_per_m:.1f} Kd={self._kd_rad_per_m:.2f} "
+            f"max_step={self._max_step_rad:.3f} n_stable={self._n_stable}"
         )
 
     # =========================================================================
-    # Callbacks
+    # ROS callbacks
     # =========================================================================
 
     def _joint_state_cb(self, msg: JointState) -> None:
@@ -216,12 +261,16 @@ class RG2Controller(Node):
         """Return (true_width_m, left_y, right_y) or None on TF failure."""
         try:
             left_tf = self._tf_buffer.lookup_transform(
-                self._gripper_base_frame, self._left_finger_frame,
-                Time(), timeout=Duration(seconds=0.05),
+                self._gripper_base_frame,
+                self._left_finger_frame,
+                Time(),
+                timeout=Duration(seconds=0.05),
             )
             right_tf = self._tf_buffer.lookup_transform(
-                self._gripper_base_frame, self._right_finger_frame,
-                Time(), timeout=Duration(seconds=0.05),
+                self._gripper_base_frame,
+                self._right_finger_frame,
+                Time(),
+                timeout=Duration(seconds=0.05),
             )
             left_y = left_tf.transform.translation.y
             right_y = right_tf.transform.translation.y
@@ -253,7 +302,32 @@ class RG2Controller(Node):
             return abs(self._latest_joint_efforts.get(self._master_joint_name, 0.0))
 
     # =========================================================================
-    # Core closed-loop width controller
+    # PD control kernel
+    # =========================================================================
+
+    def _pd_step(
+        self,
+        commanded_master: float,
+        error: float,
+        prev_error: float,
+    ) -> Tuple[float, float]:
+        """One PD tick. Returns (new_commanded_master, error_as_new_prev_error).
+
+        error = target_width - current_width (positive → need to open)
+        delta_rad = -(Kp * error + Kd * d_error/dt)
+        Clamped to ±max_step_rad then to [open_position, close_position].
+        """
+        d_error = (error - prev_error) / self._control_period_sec
+        delta_rad = -(self._kp_rad_per_m * error + self._kd_rad_per_m * d_error)
+        delta_rad = max(-self._max_step_rad, min(self._max_step_rad, delta_rad))
+        new_master = max(
+            self._open_position,
+            min(self._close_position, commanded_master + delta_rad),
+        )
+        return new_master, error
+
+    # =========================================================================
+    # Core closed-loop width controller (used by services)
     # =========================================================================
 
     def _closed_loop_control(
@@ -262,24 +336,21 @@ class RG2Controller(Node):
         width_tolerance: Optional[float] = None,
         max_iters: Optional[int] = None,
     ) -> Tuple[bool, float]:
-        """Incrementally drive the commanded master joint until TF width reaches target.
+        """Drive the gripper to target_true_width_m with PD width control.
 
-        Key design choice: we track `commanded_master` internally (seeded once
-        from the actual position), rather than reading actual position each step.
-        This prevents stalling when the sim lags behind our command rate.
-        The TF width measurement drives when to stop.
-
+        Declares convergence after N_STABLE consecutive ticks inside tolerance.
         Returns (converged, final_true_width_m).
         """
         tol = width_tolerance if width_tolerance is not None else self._width_tolerance_m
         iters = max_iters if max_iters is not None else self._max_control_iters
 
-        # Seed commanded position from actual, fall back to midpoint
         commanded_master = self._get_master_position()
         if commanded_master is None:
             commanded_master = (self._open_position + self._close_position) / 2.0
 
-        final_width: float = self._get_true_width() or commanded_master  # placeholder
+        prev_error: Optional[float] = None
+        stable_count = 0
+        final_width: float = self._get_true_width() or 0.0
 
         for _ in range(iters):
             width = self._get_true_width()
@@ -291,23 +362,22 @@ class RG2Controller(Node):
             error = target_true_width_m - width
 
             if abs(error) < tol:
-                return True, width
+                stable_count += 1
+                if stable_count >= self._n_stable:
+                    return True, width
+            else:
+                stable_count = 0
 
-            # P-control: increasing master closes gripper (decreases width),
-            # so the sign of the correction is inverted.
-            nudge = -self._gain_rad_per_m * error * DEFAULT_CONTROL_FRACTION
-            commanded_master = max(
-                self._open_position,
-                min(self._close_position, commanded_master + nudge),
-            )
+            if prev_error is None:
+                prev_error = error  # first tick: d_error = 0
+
+            commanded_master, prev_error = self._pd_step(commanded_master, error, prev_error)
             self._publish_command(self._master_to_positions(commanded_master))
             time.sleep(self._control_period_sec)
 
-        # Final check after loop
         width = self._get_true_width()
         if width is not None:
             final_width = width
-
         return abs(target_true_width_m - final_width) < tol, final_width
 
     # =========================================================================
@@ -357,6 +427,14 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _execute_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
+        """Guarded move with PD width control and plateau-confirmed force stop.
+
+        Force termination has two layers:
+          1. Over-force guard (immediate): effort exceeds goal.force_threshold → stop now.
+          2. Contact + plateau: effort crosses EFFORT_CONTACT_THRESHOLD, then
+             abs(d_effort/dt) < EFFORT_PLATEAU_DERIV for EFFORT_PLATEAU_TICKS
+             consecutive ticks → declares stable contact and stops.
+        """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
         target_width = float(goal.target_width_m)
@@ -364,22 +442,34 @@ class RG2Controller(Node):
         mode = str(goal.mode) if goal.mode else "guarded"
         tol = float(goal.width_tolerance_m) if goal.width_tolerance_m > 0.0 else self._width_tolerance_m
 
+        commanded_master = self._get_master_position()
+        if commanded_master is None:
+            commanded_master = self._open_position
+
         self.get_logger().info(
-            f"GuardedMove: target={target_width:.4f}m "
-            f"force_threshold={force_threshold:.3f} mode={mode}"
+            f"GuardedMove: target={target_width:.4f}m force_threshold={force_threshold:.3f} "
+            f"mode={mode} tol={tol:.4f}m"
         )
 
         fb = GripperGuardedMove.Feedback()
         result = GripperGuardedMove.Result()
-
-        # Seed commanded master from actual position
-        commanded_master = self._get_master_position()
-        if commanded_master is None:
-            commanded_master = (self._open_position + self._close_position) / 2.0
-
         stop_reason = "timeout"
-        final_width = self._get_true_width() or 0.0
-        final_effort = self._get_master_effort()
+
+        # PD state
+        prev_error: Optional[float] = None
+        stable_count = 0
+
+        # Force state
+        prev_effort: float = 0.0
+        contact_detected = False
+        plateau_count = 0
+
+        # Asymmetry tracking (diagnostic only by default)
+        asymmetry_ever_exceeded = False
+
+        final_width: float = self._get_true_width() or 0.0
+        final_effort: float = self._get_master_effort()
+        dt = self._control_period_sec
 
         for _ in range(self._max_control_iters):
             if goal_handle.is_cancel_requested:
@@ -388,64 +478,98 @@ class RG2Controller(Node):
                 result.stop_reason = "cancelled"
                 result.final_width_m = final_width
                 result.final_effort = final_effort
-                result.asymmetry_detected = False
+                result.asymmetry_detected = asymmetry_ever_exceeded
                 result.message = "Cancelled."
                 return result
 
-            width = self._get_true_width()
-            if width is None:
-                time.sleep(self._control_period_sec)
+            # --- Read sensors ---
+            tf_result = self._read_tf_width()
+            if tf_result is None:
+                time.sleep(dt)
                 continue
 
+            width, left_y, right_y = tf_result
+            with self._state_lock:
+                self._last_known_width = width
+
             effort = self._get_master_effort()
+            d_effort = (effort - prev_effort) / dt
+            prev_effort = effort
+
+            # Asymmetry: symmetric gripper → left_y + right_y ≈ 0 in base frame
+            asymmetry_m = abs(left_y + right_y)
+            if asymmetry_m > self._asymmetry_threshold_m:
+                asymmetry_ever_exceeded = True
+
             final_width = width
             final_effort = effort
-            error = target_width - width
 
-            # Feedback
+            # --- Feedback ---
+            phase = (
+                "contact" if contact_detected
+                else ("closing" if target_width < width else "opening")
+            )
             fb.current_width_m = width
             fb.current_effort = effort
-            fb.asymmetry_m = 0.0
-            fb.phase = "closing"
+            fb.asymmetry_m = asymmetry_m
+            fb.phase = phase
             goal_handle.publish_feedback(fb)
 
-            # Termination
-            width_reached = abs(error) < tol
-            force_hit = effort > force_threshold
-
-            if mode == "width" and width_reached:
-                stop_reason = "width_reached"
-                break
-            elif mode == "force" and force_hit:
+            # --- Force: over-force guard (immediate stop, any effort spike) ---
+            if mode in ("force", "guarded") and effort > force_threshold:
                 stop_reason = "force_threshold"
                 break
-            elif mode == "guarded":
-                if width_reached:
-                    stop_reason = "width_reached"
-                    break
-                if force_hit:
-                    stop_reason = "force_threshold"
-                    break
 
-            # Control step (same P-control as service, tracks commanded_master)
-            nudge = -self._gain_rad_per_m * error * DEFAULT_CONTROL_FRACTION
-            commanded_master = max(
-                self._open_position,
-                min(self._close_position, commanded_master + nudge),
-            )
+            # --- Force: contact detection + plateau confirmation ---
+            if mode in ("force", "guarded"):
+                if not contact_detected and effort > self._effort_contact_threshold:
+                    contact_detected = True
+                    plateau_count = 0
+                if contact_detected:
+                    if abs(d_effort) < self._effort_plateau_deriv:
+                        plateau_count += 1
+                        if plateau_count >= self._effort_plateau_ticks:
+                            stop_reason = "force_threshold"
+                            break
+                    else:
+                        plateau_count = 0  # effort still rising; wait for it to settle
+
+            # --- Asymmetry fault (only when explicitly enabled) ---
+            if self._enable_asymmetry_fault and asymmetry_m > self._asymmetry_threshold_m:
+                stop_reason = "error"
+                break
+
+            # --- Width convergence: N_STABLE consecutive in-band ticks ---
+            error = target_width - width
+
+            if mode in ("width", "guarded"):
+                if abs(error) < tol:
+                    stable_count += 1
+                    if stable_count >= self._n_stable:
+                        stop_reason = "width_reached"
+                        break
+                else:
+                    stable_count = 0
+
+            # --- PD step (always, even while inside band — small corrections are fine) ---
+            if prev_error is None:
+                prev_error = error  # first tick: derivative kick = 0
+
+            commanded_master, prev_error = self._pd_step(commanded_master, error, prev_error)
             self._publish_command(self._master_to_positions(commanded_master))
-            time.sleep(self._control_period_sec)
+            time.sleep(dt)
 
-        fb.phase = "contact" if stop_reason == "force_threshold" else "width_reached"
+        fb.phase = "contact" if stop_reason == "force_threshold" else stop_reason
         goal_handle.publish_feedback(fb)
 
         result.success = stop_reason in ("width_reached", "force_threshold")
         result.stop_reason = stop_reason
         result.final_width_m = final_width
         result.final_effort = final_effort
-        result.asymmetry_detected = False
+        result.asymmetry_detected = asymmetry_ever_exceeded
         result.message = (
-            f"stop={stop_reason} final_width={final_width:.4f}m effort={final_effort:.3f}"
+            f"stop={stop_reason} final_width={final_width:.4f}m "
+            f"effort={final_effort:.3f} asymmetry_detected={asymmetry_ever_exceeded}"
         )
         self.get_logger().info(result.message)
         goal_handle.succeed()
