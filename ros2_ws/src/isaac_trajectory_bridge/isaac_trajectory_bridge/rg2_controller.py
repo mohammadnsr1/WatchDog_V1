@@ -71,13 +71,13 @@ DEFAULT_TRUE_WIDTH_OPEN_M = DEFAULT_TF_WIDTH_OPEN_M - 2.0 * DEFAULT_FINGER_LINK_
 #   Approaching target while closing → d_error > 0 → Kd term reduces delta_rad → damping ✓
 # ---------------------------------------------------------------------------
 
-DEFAULT_KP_RAD_PER_M = 12.5      # proportional gain [rad/m]
+DEFAULT_KP_RAD_PER_M = 12.5     # proportional gain [rad/m]
 DEFAULT_KD_RAD_PER_M = 2.5       # derivative gain [rad·s/m]; tune down if oscillation persists
 DEFAULT_MAX_STEP_RAD = 0.020     # max |Δmaster| per 20 ms tick ≈ 1.0 rad/s
-DEFAULT_N_STABLE = 3              # consecutive in-band ticks to declare convergence
-DEFAULT_MAX_CONTROL_ITERS = 150  # 150 × 20 ms = 3 s timeout
+DEFAULT_N_STABLE = 10             # consecutive in-band ticks to declare convergence
+DEFAULT_MAX_CONTROL_ITERS = 300  # 150 × 20 ms = 3 s timeout
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_WIDTH_TOLERANCE_M = 0.003
+DEFAULT_WIDTH_TOLERANCE_M = 0.001
 
 # ---------------------------------------------------------------------------
 # Force / effort parameters
@@ -307,24 +307,21 @@ class RG2Controller(Node):
 
     def _pd_step(
         self,
-        commanded_master: float,
         error: float,
         prev_error: float,
-    ) -> Tuple[float, float]:
-        """One PD tick. Returns (new_commanded_master, error_as_new_prev_error).
+    ) -> float:
+        """Compute one PD delta [rad]. Caller adds this to the actual joint position.
+
+        Rebasing from actual each tick (not an accumulator) prevents lag buildup:
+        the command is always exactly one step ahead of wherever the joint is now,
+        so overshoot is bounded to ±max_step_rad regardless of sim latency.
 
         error = target_width - current_width (positive → need to open)
         delta_rad = -(Kp * error + Kd * d_error/dt)
-        Clamped to ±max_step_rad then to [open_position, close_position].
         """
         d_error = (error - prev_error) / self._control_period_sec
         delta_rad = -(self._kp_rad_per_m * error + self._kd_rad_per_m * d_error)
-        delta_rad = max(-self._max_step_rad, min(self._max_step_rad, delta_rad))
-        new_master = max(
-            self._open_position,
-            min(self._close_position, commanded_master + delta_rad),
-        )
-        return new_master, error
+        return max(-self._max_step_rad, min(self._max_step_rad, delta_rad))
 
     # =========================================================================
     # Core closed-loop width controller (used by services)
@@ -338,15 +335,16 @@ class RG2Controller(Node):
     ) -> Tuple[bool, float]:
         """Drive the gripper to target_true_width_m with PD width control.
 
-        Declares convergence after N_STABLE consecutive ticks inside tolerance.
+        When outside the tolerance band: PD command is applied, rebased from the
+        actual joint position each tick so lag can never accumulate.
+        When inside the tolerance band: commanding stops immediately (no more
+        perturbation from the controller), and N_STABLE consecutive quiet ticks
+        are required before declaring convergence.
+
         Returns (converged, final_true_width_m).
         """
         tol = width_tolerance if width_tolerance is not None else self._width_tolerance_m
         iters = max_iters if max_iters is not None else self._max_control_iters
-
-        commanded_master = self._get_master_position()
-        if commanded_master is None:
-            commanded_master = (self._open_position + self._close_position) / 2.0
 
         prev_error: Optional[float] = None
         stable_count = 0
@@ -362,17 +360,24 @@ class RG2Controller(Node):
             error = target_true_width_m - width
 
             if abs(error) < tol:
+                # Inside band: hold position, accumulate stable ticks.
+                # No new command — avoid perturbing the joint.
                 stable_count += 1
                 if stable_count >= self._n_stable:
                     return True, width
             else:
                 stable_count = 0
+                if prev_error is None:
+                    prev_error = error  # first active tick: derivative kick = 0
 
-            if prev_error is None:
-                prev_error = error  # first tick: d_error = 0
+                # Rebase from actual joint position to prevent lag accumulation.
+                actual = self._get_master_position()
+                base = actual if actual is not None else (self._open_position + self._close_position) / 2.0
+                delta_rad = self._pd_step(error, prev_error)
+                commanded = max(self._open_position, min(self._close_position, base + delta_rad))
+                prev_error = error
+                self._publish_command(self._master_to_positions(commanded))
 
-            commanded_master, prev_error = self._pd_step(commanded_master, error, prev_error)
-            self._publish_command(self._master_to_positions(commanded_master))
             time.sleep(self._control_period_sec)
 
         width = self._get_true_width()
@@ -541,9 +546,10 @@ class RG2Controller(Node):
 
             # --- Width convergence: N_STABLE consecutive in-band ticks ---
             error = target_width - width
+            in_band = abs(error) < tol
 
             if mode in ("width", "guarded"):
-                if abs(error) < tol:
+                if in_band:
                     stable_count += 1
                     if stable_count >= self._n_stable:
                         stop_reason = "width_reached"
@@ -551,12 +557,25 @@ class RG2Controller(Node):
                 else:
                     stable_count = 0
 
-            # --- PD step (always, even while inside band — small corrections are fine) ---
-            if prev_error is None:
-                prev_error = error  # first tick: derivative kick = 0
+            # --- PD step ---
+            # "force" mode: always command (keep closing until effort stops us).
+            # "width"/"guarded": only command when outside band; hold quietly when inside
+            # so the joint settles and stable_count can accumulate without perturbation.
+            should_command = (mode == "force") or (not in_band)
+            if should_command:
+                if prev_error is None:
+                    prev_error = error  # first active tick: derivative kick = 0
 
-            commanded_master, prev_error = self._pd_step(commanded_master, error, prev_error)
-            self._publish_command(self._master_to_positions(commanded_master))
+                # Rebase from actual joint position each tick to prevent lag accumulation.
+                actual = self._get_master_position()
+                base = actual if actual is not None else commanded_master
+                delta_rad = self._pd_step(error, prev_error)
+                commanded_master = max(
+                    self._open_position, min(self._close_position, base + delta_rad)
+                )
+                prev_error = error
+                self._publish_command(self._master_to_positions(commanded_master))
+
             time.sleep(dt)
 
         fb.phase = "contact" if stop_reason == "force_threshold" else stop_reason
