@@ -13,6 +13,7 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/launch", ["launch/trajectory_bridge.launch.py"]),
         ("share/" + package_name, ["README.md", "README_RG2_CONTROLLER.md"]),
+        ("share/" + package_name + "/config", ["config/rg2_width_table.csv"]),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
@@ -24,6 +25,7 @@ setup(
         "console_scripts": [
             "follow_joint_trajectory_server = isaac_trajectory_bridge.follow_joint_trajectory_server:main",
             "rg2_controller = isaac_trajectory_bridge.rg2_controller:main",
+            "calibrate_rg2_width = isaac_trajectory_bridge.calibrate_rg2_width:main",
         ],
     },
 )

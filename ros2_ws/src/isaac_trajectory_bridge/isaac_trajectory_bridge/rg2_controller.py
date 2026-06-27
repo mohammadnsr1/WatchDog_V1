@@ -1,20 +1,34 @@
 #!/usr/bin/env python3
-"""Closed-loop RG2 gripper controller with TF-measured finger width feedback.
+"""Feedforward RG2 gripper controller with calibration-table width lookup.
 
-Exposes the same three services as the previous open-loop controller
-(/rg2_controller/open, /rg2_controller/close, /rg2_controller/set_position)
-so ROSGripperBackend requires no changes.
+Command path for open / close / set_position:
+  1. target_true_width_m  →  angle_for_width() (numpy.interp on the CSV table)
+  2. Publish the calibrated joint angle ONCE — Isaac's inner drive holds it.
+  3. Verify loop: wait until TF width is stable (or timeout) without issuing
+     any further commands.  Report success / miss; do NOT nudge on miss.
 
-Adds:
-- /rg2_controller/guarded_move action (GripperGuardedMove) for force-guarded grasps
-- /gripper_width_true topic (Float64, 50 Hz) for external width monitoring
+Command path for guarded_move (force/guarded mode):
+  Incremental probe-close at probe_step_rad per tick until effort crosses the
+  contact threshold OR measured width reaches target.  No width outer-loop.
+
+Exposes the same three services and one action as the previous controller:
+  /rg2_controller/open
+  /rg2_controller/close
+  /rg2_controller/set_position
+  /rg2_controller/guarded_move (GripperGuardedMove action)
 """
 
+import csv
+import math
 import threading
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+import numpy as np
+
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from rclpy.action import ActionServer
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.duration import Duration
@@ -32,7 +46,7 @@ from isaac_trajectory_bridge_interfaces.action import GripperGuardedMove
 
 
 # ---------------------------------------------------------------------------
-# Calibration / geometry
+# Geometry / hardware constants
 # ---------------------------------------------------------------------------
 
 DEFAULT_GRIPPER_JOINT_NAMES = [
@@ -54,46 +68,42 @@ DEFAULT_LEFT_FINGER_FRAME = "onrobot_rg2_left_inner_finger"
 DEFAULT_RIGHT_FINGER_FRAME = "onrobot_rg2_right_inner_finger"
 DEFAULT_GRIPPER_BASE_FRAME = "onrobot_rg2_base_link"
 DEFAULT_FINGER_LINK_OFFSET_M = 0.021
-DEFAULT_TF_WIDTH_OPEN_M = 0.1420
-DEFAULT_TF_WIDTH_CLOSED_M = 0.0355
-DEFAULT_TRUE_WIDTH_OPEN_M = DEFAULT_TF_WIDTH_OPEN_M - 2.0 * DEFAULT_FINGER_LINK_OFFSET_M  # 0.100
 
 # ---------------------------------------------------------------------------
-# Proportional-monotonic motion parameters
-#
-# Each tick the controller moves commanded_master by:
-#   step = min(KP_RAD_PER_M × |error|, MAX_STEP_RAD)   [rad]
-#
-# Direction is locked at the START of each control call (from initial TF width
-# vs target) and never reversed — noise-induced sign flips in the error cannot
-# cause physical back-and-forth oscillation.
-#
-# Far from target:  |error| is large  → step saturates at MAX_STEP_RAD (full speed)
-# Near target:      |error| is small  → step shrinks proportionally (gentle creep)
-# Inside tolerance: commanding stops; joint holds; N_STABLE quiet ticks required
-#
-# Overshoot safety: at the tolerance boundary, step = KP × tol × 0.075.
-# With KP = 5 the remaining error after that step = tol × (1 − 0.375) = 0.625 × tol,
-# which is inside the band.  The gripper can never land outside the band on the
-# wrong side, so the locked-direction assumption is always valid (KP must stay < 13).
+# Calibration table
 # ---------------------------------------------------------------------------
 
-DEFAULT_KP_RAD_PER_M = 5.0      # proportional scale; controls slow-down near target
-DEFAULT_MAX_STEP_RAD = 0.016     # joint velocity cap: 0.016 × 50 Hz = 0.8 rad/s
-DEFAULT_N_STABLE = 5              # consecutive in-band ticks (5 × 20 ms = 100 ms settle)
-DEFAULT_MAX_CONTROL_ITERS = 200  # 200 × 20 ms = 4 s hard timeout
+def _default_table_path() -> str:
+    try:
+        share = get_package_share_directory("isaac_trajectory_bridge")
+        return str(Path(share) / "config" / "rg2_width_table.csv")
+    except Exception:
+        return str(Path(__file__).resolve().parent.parent / "config" / "rg2_width_table.csv")
+
+
+DEFAULT_WIDTH_TABLE_PATH = _default_table_path()
+
+# ---------------------------------------------------------------------------
+# Verify-after-command parameters
+# ---------------------------------------------------------------------------
+
+DEFAULT_VERIFY_TOLERANCE_M = 0.003     # 3 mm — acceptable final error
+DEFAULT_VERIFY_STABLE_DELTA = 0.0005   # 0.5 mm max change between ticks to call "stable"
+DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive stable ticks required
+DEFAULT_VERIFY_TIMEOUT_SEC = 2.0
+
+# ---------------------------------------------------------------------------
+# Force / effort parameters (guarded move only)
+# ---------------------------------------------------------------------------
+
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_WIDTH_TOLERANCE_M = 0.003  # 3 mm — well above typical TF noise floor
-
-# ---------------------------------------------------------------------------
-# Force / effort parameters
-# ---------------------------------------------------------------------------
-
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10   # effort level that triggers contact detection
-DEFAULT_EFFORT_PLATEAU_DERIV = 0.05       # |d_effort/dt| must be below this to confirm plateau
-DEFAULT_EFFORT_PLATEAU_TICKS = 2          # consecutive stable ticks to confirm steady contact
+DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10
+DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
+DEFAULT_EFFORT_PLATEAU_TICKS = 2
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
 DEFAULT_ENABLE_ASYMMETRY_FAULT = False
+DEFAULT_MAX_CONTROL_ITERS = 200        # 200 × 20 ms = 4 s hard timeout
 
 
 class RG2Controller(Node):
@@ -108,7 +118,7 @@ class RG2Controller(Node):
         self.declare_parameter("open_position", DEFAULT_OPEN_POSITION)
         self.declare_parameter("close_position", DEFAULT_CLOSE_POSITION)
         self.declare_parameter("command_rate_hz", DEFAULT_CONTROL_HZ)
-        self.declare_parameter("command_duration_sec", 1.0)  # accepted from launch; unused
+        self.declare_parameter("command_duration_sec", 1.0)   # kept for launch compat; unused
         self.declare_parameter("gripper_joint_names", DEFAULT_GRIPPER_JOINT_NAMES)
         self.declare_parameter("gripper_joint_multipliers", DEFAULT_GRIPPER_JOINT_MULTIPLIERS)
         self.declare_parameter("gripper_joint_offsets", DEFAULT_GRIPPER_JOINT_OFFSETS)
@@ -117,21 +127,21 @@ class RG2Controller(Node):
         self.declare_parameter("right_finger_frame", DEFAULT_RIGHT_FINGER_FRAME)
         self.declare_parameter("gripper_base_frame", DEFAULT_GRIPPER_BASE_FRAME)
         self.declare_parameter("finger_link_offset_m", DEFAULT_FINGER_LINK_OFFSET_M)
-        self.declare_parameter("tf_width_open_m", DEFAULT_TF_WIDTH_OPEN_M)
-        self.declare_parameter("tf_width_closed_m", DEFAULT_TF_WIDTH_CLOSED_M)
-        self.declare_parameter("true_width_open_m", DEFAULT_TRUE_WIDTH_OPEN_M)
 
-        self.declare_parameter("kp_rad_per_m", DEFAULT_KP_RAD_PER_M)
-        self.declare_parameter("max_step_rad", DEFAULT_MAX_STEP_RAD)
-        self.declare_parameter("n_stable", DEFAULT_N_STABLE)
-        self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
-        self.declare_parameter("width_tolerance_m", DEFAULT_WIDTH_TOLERANCE_M)
+        self.declare_parameter("width_table_path", DEFAULT_WIDTH_TABLE_PATH)
 
+        self.declare_parameter("verify_tolerance_m", DEFAULT_VERIFY_TOLERANCE_M)
+        self.declare_parameter("verify_stable_delta", DEFAULT_VERIFY_STABLE_DELTA)
+        self.declare_parameter("verify_stable_ticks", DEFAULT_VERIFY_STABLE_TICKS)
+        self.declare_parameter("verify_timeout_sec", DEFAULT_VERIFY_TIMEOUT_SEC)
+
+        self.declare_parameter("probe_step_rad", DEFAULT_PROBE_STEP_RAD)
         self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
         self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
         self.declare_parameter("enable_asymmetry_fault", DEFAULT_ENABLE_ASYMMETRY_FAULT)
+        self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
 
         # ---- read --------------------------------------------------------------
         self._joint_state_topic = str(self.get_parameter("joint_state_topic").value)
@@ -141,6 +151,7 @@ class RG2Controller(Node):
         self._open_position = float(self.get_parameter("open_position").value)
         self._close_position = float(self.get_parameter("close_position").value)
         self._control_hz = max(1.0, float(self.get_parameter("command_rate_hz").value))
+        self._control_period_sec = 1.0 / self._control_hz
         self._gripper_joint_names = list(self.get_parameter("gripper_joint_names").value)
         self._gripper_joint_multipliers = [
             float(v) for v in self.get_parameter("gripper_joint_multipliers").value
@@ -153,28 +164,33 @@ class RG2Controller(Node):
         self._right_finger_frame = str(self.get_parameter("right_finger_frame").value)
         self._gripper_base_frame = str(self.get_parameter("gripper_base_frame").value)
         self._finger_link_offset_m = float(self.get_parameter("finger_link_offset_m").value)
-        self._tf_width_open_m = float(self.get_parameter("tf_width_open_m").value)
-        self._tf_width_closed_m = float(self.get_parameter("tf_width_closed_m").value)
-        self._true_width_open_m = float(self.get_parameter("true_width_open_m").value)
 
-        self._kp_rad_per_m = float(self.get_parameter("kp_rad_per_m").value)
-        self._max_step_rad = float(self.get_parameter("max_step_rad").value)
-        self._n_stable = int(self.get_parameter("n_stable").value)
-        self._max_control_iters = int(self.get_parameter("max_control_iters").value)
-        self._width_tolerance_m = float(self.get_parameter("width_tolerance_m").value)
-        self._control_period_sec = 1.0 / self._control_hz
+        self._width_table_path = str(self.get_parameter("width_table_path").value)
 
+        self._verify_tolerance_m = float(self.get_parameter("verify_tolerance_m").value)
+        self._verify_stable_delta = float(self.get_parameter("verify_stable_delta").value)
+        self._verify_stable_ticks = int(self.get_parameter("verify_stable_ticks").value)
+        self._verify_timeout_sec = float(self.get_parameter("verify_timeout_sec").value)
+
+        self._probe_step_rad = float(self.get_parameter("probe_step_rad").value)
         self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
         self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
         self._enable_asymmetry_fault = bool(self.get_parameter("enable_asymmetry_fault").value)
+        self._max_control_iters = int(self.get_parameter("max_control_iters").value)
 
         # ---- validate ----------------------------------------------------------
         if len(self._gripper_joint_names) != 6:
             raise ValueError("gripper_joint_names must contain exactly 6 joints.")
         if self._master_joint_name not in self._gripper_joint_names:
             raise ValueError("master_joint_name must be in gripper_joint_names.")
+
+        # ---- load calibration table -------------------------------------------
+        self._table_angles: np.ndarray
+        self._table_widths: np.ndarray
+        self._table_loaded = False
+        self._load_width_table()
 
         # ---- state -------------------------------------------------------------
         self._state_lock = threading.Lock()
@@ -220,12 +236,102 @@ class RG2Controller(Node):
         )
 
         self.get_logger().info(
-            f"RG2 controller ready (proportional-monotonic) — "
+            f"RG2 feedforward controller ready — "
             f"services: {self._service_ns}/{{open,close,set_position}}  "
             f"action: {self._service_ns}/guarded_move  "
-            f"Kp={self._kp_rad_per_m:.1f} max_step={self._max_step_rad:.3f} "
-            f"tol={self._width_tolerance_m:.3f} n_stable={self._n_stable}"
+            f"table_loaded={self._table_loaded}  "
+            f"verify_tol={self._verify_tolerance_m*1000:.0f} mm"
         )
+
+    # =========================================================================
+    # Calibration table
+    # =========================================================================
+
+    def _load_width_table(self) -> None:
+        """Load rg2_width_table.csv and build monotonic angle↔width interpolators.
+
+        Uses only the open_to_close direction rows (or all rows if no direction
+        column) to guarantee the angle→width mapping is monotonic decreasing.
+        Rows with invalid/NaN width are dropped.  If the file is missing or
+        has fewer than 2 valid rows the node falls back to a linear map and
+        logs a clear instruction to run calibrate_rg2_width first.
+        """
+        path = Path(self._width_table_path)
+        if not path.exists():
+            self.get_logger().error(
+                f"Width table not found: {path}\n"
+                "  Run:  ros2 run isaac_trajectory_bridge calibrate_rg2_width\n"
+                "  then restart this controller.  Falling back to linear map."
+            )
+            self._build_linear_fallback()
+            return
+
+        rows: List[Tuple[float, float]] = []
+        try:
+            with open(path, newline="") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    direction = row.get("direction", "open_to_close")
+                    if direction not in ("open_to_close", ""):
+                        continue
+                    angle = float(row["master_angle_rad"])
+                    width = float(row["true_width_m"])
+                    if math.isfinite(angle) and math.isfinite(width) and width >= 0.0:
+                        rows.append((angle, width))
+        except Exception as exc:
+            self.get_logger().error(f"Failed to read width table: {exc} — using linear fallback.")
+            self._build_linear_fallback()
+            return
+
+        if len(rows) < 2:
+            self.get_logger().error(
+                "Width table has fewer than 2 valid rows — using linear fallback."
+            )
+            self._build_linear_fallback()
+            return
+
+        rows.sort(key=lambda r: r[0])
+        angles = np.array([r[0] for r in rows])
+        widths = np.array([r[1] for r in rows])
+
+        # Smooth out any local non-monotonicities from noise by enforcing a
+        # monotone-decreasing width with respect to increasing angle.
+        for i in range(1, len(widths)):
+            if widths[i] > widths[i - 1]:
+                widths[i] = widths[i - 1]
+
+        self._table_angles = angles
+        self._table_widths = widths
+        self._table_loaded = True
+
+        self.get_logger().info(
+            f"Width table loaded: {len(rows)} rows  "
+            f"angle [{angles[0]:.4f}, {angles[-1]:.4f}] rad  "
+            f"width [{widths[-1]*1000:.1f}, {widths[0]*1000:.1f}] mm"
+        )
+
+    def _build_linear_fallback(self) -> None:
+        """Fallback: linear angle→width based on hardware limits only."""
+        n = 200
+        self._table_angles = np.linspace(DEFAULT_OPEN_POSITION, DEFAULT_CLOSE_POSITION, n)
+        # At open angle: ~100 mm; at close angle: ~0 mm (linear approximation)
+        self._table_widths = np.linspace(0.100, 0.0, n)
+        self._table_loaded = False
+
+    def angle_for_width(self, width_m: float) -> float:
+        """Return master joint angle [rad] for the given true width [m].
+
+        Clamps to the table's angle range so extreme requests still produce a
+        valid command (open/close stops).
+        """
+        # _table_widths is monotone decreasing vs _table_angles increasing.
+        # np.interp requires xp increasing, so flip the arrays.
+        angle = float(np.interp(width_m, self._table_widths[::-1], self._table_angles[::-1]))
+        return float(np.clip(angle, self._open_position, self._close_position))
+
+    def width_for_angle(self, angle_rad: float) -> float:
+        """Return predicted true width [m] for a given master joint angle [rad]."""
+        return float(np.interp(angle_rad, self._table_angles, self._table_widths))
 
     # =========================================================================
     # ROS callbacks
@@ -306,133 +412,165 @@ class RG2Controller(Node):
             return abs(self._latest_joint_efforts.get(self._master_joint_name, 0.0))
 
     # =========================================================================
-    # Core closed-loop width controller (used by services)
+    # Feedforward command + verify
     # =========================================================================
 
-    def _closed_loop_control(
+    def _command_angle(self, angle_rad: float) -> None:
+        """Publish a single joint command for the given master angle (all joints)."""
+        positions = [
+            off + mult * angle_rad
+            for mult, off in zip(self._gripper_joint_multipliers, self._gripper_joint_offsets)
+        ]
+        self._publish_command(positions)
+
+    def _feedforward_move(
         self,
-        target_true_width_m: float,
-        width_tolerance: Optional[float] = None,
-        max_iters: Optional[int] = None,
+        target_width_m: float,
+        label: str = "",
     ) -> Tuple[bool, float]:
-        """Drive the gripper to target_true_width_m with proportional-monotonic control.
+        """Command the calibrated angle for target_width_m, then verify via TF.
 
-        Direction (closing vs opening) is determined once from the initial TF width
-        and never reversed.  This prevents noise-induced sign flips in the error from
-        causing physical back-and-forth oscillation.
+        Steps:
+          1. Look up target_angle from the width table.
+          2. Publish ONE joint command.
+          3. Wait until TF width is stable (change < verify_stable_delta over
+             verify_stable_ticks consecutive ticks) or verify_timeout_sec elapses.
+          4. Return (converged, final_width_m).
+             converged = abs(final_width - target_width_m) <= verify_tolerance_m.
 
-        Step size scales with |error|, capped at max_step_rad:
-          step = min(Kp × |error|, max_step_rad)
-        Full speed when far, tiny creep steps when close — overshoot past the
-        tolerance band is mathematically impossible for Kp < 13 rad/m.
-
-        On the first tick inside the band: commanded_master is snapped to the actual
-        joint position (releases any accumulated lead).  No further commands while
-        inside the band.  N_STABLE consecutive quiet readings required for success.
-
-        Returns (converged, final_true_width_m).
+        Does NOT retry or nudge on failure.  A persistent miss means the table
+        needs to be recalibrated.
         """
-        tol = width_tolerance if width_tolerance is not None else self._width_tolerance_m
-        iters = max_iters if max_iters is not None else self._max_control_iters
+        target_angle = self.angle_for_width(target_width_m)
 
-        commanded_master = self._get_master_position()
-        if commanded_master is None:
-            commanded_master = (self._open_position + self._close_position) / 2.0
+        if label:
+            self.get_logger().info(
+                f"{label}: target_width={target_width_m*1000:.1f} mm  "
+                f"→ angle={target_angle:.4f} rad"
+            )
 
-        # Lock direction from initial TF reading — never reversed mid-call.
-        initial_width = self._get_true_width()
-        closing = target_true_width_m < (initial_width if initial_width is not None else 0.05)
+        self._command_angle(target_angle)
 
+        # Verify loop — read TF until stable or timeout
+        deadline = time.time() + self._verify_timeout_sec
+        prev_width: Optional[float] = None
         stable_count = 0
-        band_entry_done = False
-        final_width: float = initial_width or 0.0
+        final_width: float = target_width_m  # optimistic default for logging
 
-        for _ in range(iters):
+        while time.time() < deadline:
             width = self._get_true_width()
             if width is None:
                 time.sleep(self._control_period_sec)
                 continue
 
             final_width = width
-            error = target_true_width_m - width
 
-            in_band = abs(error) < tol
-
-            if in_band:
-                if not band_entry_done:
-                    # Snap to actual joint position to release accumulated lead.
-                    actual = self._get_master_position()
-                    if actual is not None:
-                        commanded_master = actual
-                    self._publish_command(self._master_to_positions(commanded_master))
-                    band_entry_done = True
+            if prev_width is not None and abs(width - prev_width) < self._verify_stable_delta:
                 stable_count += 1
-                if stable_count >= self._n_stable:
-                    return True, width
-            elif not band_entry_done:
-                # Still approaching: step proportionally.
+                if stable_count >= self._verify_stable_ticks:
+                    break
+            else:
                 stable_count = 0
-                step = min(self._kp_rad_per_m * abs(error), self._max_step_rad)
-                if closing:
-                    commanded_master = min(commanded_master + step, self._close_position)
-                else:
-                    commanded_master = max(commanded_master - step, self._open_position)
-                self._publish_command(self._master_to_positions(commanded_master))
-            # else: band_entry_done=True, slightly out-of-band due to noise → hold silently
 
+            prev_width = width
             time.sleep(self._control_period_sec)
 
-        width = self._get_true_width()
-        if width is not None:
-            final_width = width
-        return abs(target_true_width_m - final_width) < tol, final_width
+        converged = abs(final_width - target_width_m) <= self._verify_tolerance_m
+
+        if not converged:
+            self.get_logger().warn(
+                f"{label}: target={target_width_m*1000:.1f} mm  "
+                f"final={final_width*1000:.1f} mm  "
+                f"error={abs(final_width-target_width_m)*1000:.1f} mm  "
+                f"(table may need recalibration)"
+            )
+
+        return converged, final_width
 
     # =========================================================================
     # Service callbacks
     # =========================================================================
 
     def _open_cb(self, _req: Trigger.Request, resp: Trigger.Response) -> Trigger.Response:
-        # Mechanical stop tolerance: the TF reading at the physical open limit is never
-        # exactly true_width_open_m.  Use at least 5 mm so the stop is always in-band.
-        tol = max(self._width_tolerance_m, 0.005)
-        return self._handle_svc(self._true_width_open_m, "open", resp, width_tolerance=tol)
+        return self._handle_svc(self._table_widths[0], "open", resp)
 
     def _close_cb(self, _req: Trigger.Request, resp: Trigger.Response) -> Trigger.Response:
-        # TF at the physical close stop reads ~0.010 m (10 mm), not 0.0 m.
-        # Use 15 mm tolerance so the band covers the actual mechanical stop position.
-        tol = max(self._width_tolerance_m, 0.015)
-        return self._handle_svc(0.0, "close", resp, width_tolerance=tol)
+        return self._handle_svc(self._table_widths[-1], "close", resp)
 
     def _set_position_cb(
         self,
         req: SetGripperPosition.Request,
         resp: SetGripperPosition.Response,
     ) -> SetGripperPosition.Response:
-        # Convert master joint radians → true width via linear calibration
-        joint_span = self._close_position - self._open_position
-        fraction = (req.position - self._open_position) / joint_span
-        target_width = self._true_width_open_m * (1.0 - max(0.0, min(1.0, fraction)))
-        return self._handle_svc(target_width, "set_position", resp)
+        """Accept a master joint angle from ROSGripperBackend and command it directly.
+
+        ROSGripperBackend sends a joint angle (not a width) via set_position.
+        We command the angle as-is and report the table-predicted width for it.
+        """
+        angle = float(req.position)
+        angle = float(np.clip(angle, self._open_position, self._close_position))
+        predicted_width = self.width_for_angle(angle)
+
+        if not self._acquire():
+            resp.success = False
+            resp.message = "Busy."
+            return resp
+        try:
+            self._command_angle(angle)
+
+            # Verify
+            deadline = time.time() + self._verify_timeout_sec
+            prev_width: Optional[float] = None
+            stable_count = 0
+            final_width: float = predicted_width
+
+            while time.time() < deadline:
+                width = self._get_true_width()
+                if width is None:
+                    time.sleep(self._control_period_sec)
+                    continue
+                final_width = width
+                if prev_width is not None and abs(width - prev_width) < self._verify_stable_delta:
+                    stable_count += 1
+                    if stable_count >= self._verify_stable_ticks:
+                        break
+                else:
+                    stable_count = 0
+                prev_width = width
+                time.sleep(self._control_period_sec)
+
+            converged = abs(final_width - predicted_width) <= self._verify_tolerance_m
+            resp.success = True
+            resp.message = (
+                f"set_position: angle={angle:.4f} rad  "
+                f"predicted_width={predicted_width*1000:.1f} mm  "
+                f"final_width={final_width*1000:.1f} mm  converged={converged}"
+            )
+            self.get_logger().info(resp.message)
+        except Exception as exc:
+            resp.success = False
+            resp.message = str(exc)
+            self.get_logger().error(f"set_position failed: {exc}")
+        finally:
+            self._release()
+        return resp
 
     def _handle_svc(
         self,
         target_width_m: float,
         label: str,
         resp,
-        width_tolerance: Optional[float] = None,
     ) -> object:
         if not self._acquire():
             resp.success = False
             resp.message = "Busy."
             return resp
         try:
-            converged, final_width = self._closed_loop_control(
-                target_width_m, width_tolerance=width_tolerance
-            )
+            converged, final_width = self._feedforward_move(target_width_m, label=label)
             resp.success = True
             resp.message = (
-                f"{label}: target={target_width_m:.4f}m "
-                f"final={final_width:.4f}m converged={converged}"
+                f"{label}: target={target_width_m*1000:.1f} mm  "
+                f"final={final_width*1000:.1f} mm  converged={converged}"
             )
             self.get_logger().info(resp.message)
         except Exception as exc:
@@ -448,55 +586,89 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _execute_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
-        """Guarded move with proportional-monotonic width control and plateau-confirmed force stop.
+        """Guarded move action.
 
-        Force termination has two layers:
-          1. Over-force guard (immediate): effort exceeds goal.force_threshold → stop now.
-          2. Contact + plateau: effort crosses EFFORT_CONTACT_THRESHOLD, then
-             abs(d_effort/dt) < EFFORT_PLATEAU_DERIV for EFFORT_PLATEAU_TICKS
-             consecutive ticks → declares stable contact and stops.
+        mode "width":
+            Command angle_for_width(target_width_m) once, then verify.
+            No effort involvement.  stop_reason = "width_reached" / "timeout".
 
-        Width control uses the same proportional-monotonic law as the services:
-        direction locked at start, step ∝ |error|, capped at max_step_rad.
+        mode "force" / "guarded":
+            Probe-close: increment commanded_angle by probe_step_rad per tick
+            from the current joint angle toward CLOSE_POSITION.  After each
+            step read effort_finger from /joint_states.
+
+            PRIMARY STOP — effort > effort_contact_threshold:
+                Hold current angle.  stop_reason = "force_threshold".
+
+            For "guarded": ALSO stop if measured TF width reaches
+                target_width_m ± verify_tolerance_m before contact.
+                stop_reason = "width_reached".
+
+            Over-force guard: effort > goal.force_threshold → stop immediately.
+
+            Plateau confirm (optional, after contact detected):
+                require |d_effort/dt| < effort_plateau_deriv for
+                effort_plateau_ticks consecutive ticks before declaring success.
+
+        Asymmetry (left_y + right_y in base frame) is published in feedback as
+        a diagnostic only; it never triggers a stop unless enable_asymmetry_fault.
         """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
         target_width = float(goal.target_width_m)
         force_threshold = float(goal.force_threshold) if goal.force_threshold > 0.0 else 0.45
         mode = str(goal.mode) if goal.mode else "guarded"
-        tol = float(goal.width_tolerance_m) if goal.width_tolerance_m > 0.0 else self._width_tolerance_m
-
-        commanded_master = self._get_master_position()
-        if commanded_master is None:
-            commanded_master = self._open_position
-
-        # Lock direction from initial TF width — never reversed during this call.
-        initial_width = self._get_true_width()
-        closing = target_width < (initial_width if initial_width is not None else 0.05)
-        band_entry_done = False
+        tol = (
+            float(goal.width_tolerance_m)
+            if goal.width_tolerance_m > 0.0
+            else self._verify_tolerance_m
+        )
 
         self.get_logger().info(
-            f"GuardedMove: target={target_width:.4f}m force_threshold={force_threshold:.3f} "
-            f"mode={mode} tol={tol:.4f}m direction={'closing' if closing else 'opening'}"
+            f"GuardedMove: target={target_width*1000:.1f} mm  "
+            f"force_threshold={force_threshold:.3f}  mode={mode}  tol={tol*1000:.1f} mm"
         )
 
         fb = GripperGuardedMove.Feedback()
         result = GripperGuardedMove.Result()
         stop_reason = "timeout"
 
-        # Width convergence state
-        stable_count = 0
+        asymmetry_ever_exceeded = False
+        final_width: float = self._get_true_width() or target_width
+        final_effort: float = self._get_master_effort()
 
-        # Force state
+        # ------------------------------------------------------------------
+        # mode "width" — pure feedforward, no effort loop
+        # ------------------------------------------------------------------
+        if mode == "width":
+            converged, final_width = self._feedforward_move(target_width, label="guarded_width")
+            stop_reason = "width_reached" if converged else "timeout"
+
+            result.success = converged
+            result.stop_reason = stop_reason
+            result.final_width_m = final_width
+            result.final_effort = self._get_master_effort()
+            result.asymmetry_detected = False
+            result.message = (
+                f"stop={stop_reason}  final_width={final_width*1000:.1f} mm"
+            )
+            self.get_logger().info(result.message)
+            goal_handle.succeed()
+            return result
+
+        # ------------------------------------------------------------------
+        # mode "force" / "guarded" — incremental probe toward contact
+        # ------------------------------------------------------------------
+
+        # Start from current joint angle, probe toward CLOSE_POSITION.
+        current_angle = self._get_master_position()
+        if current_angle is None:
+            current_angle = self._open_position
+        commanded_angle = current_angle
+
         prev_effort: float = 0.0
         contact_detected = False
         plateau_count = 0
-
-        # Asymmetry tracking (diagnostic only by default)
-        asymmetry_ever_exceeded = False
-
-        final_width: float = self._get_true_width() or 0.0
-        final_effort: float = self._get_master_effort()
         dt = self._control_period_sec
 
         for _ in range(self._max_control_iters):
@@ -524,7 +696,6 @@ class RG2Controller(Node):
             d_effort = (effort - prev_effort) / dt
             prev_effort = effort
 
-            # Asymmetry: symmetric gripper → left_y + right_y ≈ 0 in base frame
             asymmetry_m = abs(left_y + right_y)
             if asymmetry_m > self._asymmetry_threshold_m:
                 asymmetry_ever_exceeded = True
@@ -532,77 +703,46 @@ class RG2Controller(Node):
             final_width = width
             final_effort = effort
 
-            # --- Feedback ---
-            phase = (
-                "contact" if contact_detected
-                else ("closing" if target_width < width else "opening")
-            )
+            # Feedback
+            phase = "contact" if contact_detected else "closing"
             fb.current_width_m = width
             fb.current_effort = effort
             fb.asymmetry_m = asymmetry_m
             fb.phase = phase
             goal_handle.publish_feedback(fb)
 
-            # --- Force: over-force guard (immediate stop, any effort spike) ---
-            if mode in ("force", "guarded") and effort > force_threshold:
+            # Over-force guard (immediate)
+            if effort > force_threshold:
                 stop_reason = "force_threshold"
                 break
 
-            # --- Force: contact detection + plateau confirmation ---
-            if mode in ("force", "guarded"):
-                if not contact_detected and effort > self._effort_contact_threshold:
-                    contact_detected = True
-                    plateau_count = 0
-                if contact_detected:
-                    if abs(d_effort) < self._effort_plateau_deriv:
-                        plateau_count += 1
-                        if plateau_count >= self._effort_plateau_ticks:
-                            stop_reason = "force_threshold"
-                            break
-                    else:
-                        plateau_count = 0  # effort still rising; wait for it to settle
+            # Contact detection + plateau confirmation
+            if not contact_detected and effort > self._effort_contact_threshold:
+                contact_detected = True
+                plateau_count = 0
 
-            # --- Asymmetry fault (only when explicitly enabled) ---
+            if contact_detected:
+                if abs(d_effort) < self._effort_plateau_deriv:
+                    plateau_count += 1
+                    if plateau_count >= self._effort_plateau_ticks:
+                        stop_reason = "force_threshold"
+                        break
+                else:
+                    plateau_count = 0
+
+            # "guarded" mode: also stop when width target reached before contact
+            if mode == "guarded" and abs(width - target_width) <= tol:
+                stop_reason = "width_reached"
+                break
+
+            # Asymmetry fault (disabled by default)
             if self._enable_asymmetry_fault and asymmetry_m > self._asymmetry_threshold_m:
                 stop_reason = "error"
                 break
 
-            # --- Width convergence: N_STABLE in-band ticks ---
-            error = target_width - width
-            in_band = abs(error) < tol
-
-            if mode in ("width", "guarded"):
-                if in_band:
-                    stable_count += 1
-                    if stable_count >= self._n_stable:
-                        stop_reason = "width_reached"
-                        break
-                elif not band_entry_done:
-                    # Reset only during approach — not after band entry, so that
-                    # noise-induced out-of-band readings don't discard progress.
-                    stable_count = 0
-
-            # --- Proportional-monotonic step ---
-            # "force": always command (closed-loop force stop handles termination).
-            # "width"/"guarded": command only while still approaching (not yet in
-            # band).  Once band_entry_done is True, hold silently — noise-induced
-            # out-of-band readings must NOT trigger more steps, since each extra
-            # step in the locked direction drifts the gripper toward mechanical stop.
-            if mode == "force" or (not in_band and not band_entry_done):
-                step = min(self._kp_rad_per_m * abs(error), self._max_step_rad)
-                if closing:
-                    commanded_master = min(commanded_master + step, self._close_position)
-                else:
-                    commanded_master = max(commanded_master - step, self._open_position)
-                self._publish_command(self._master_to_positions(commanded_master))
-            elif not band_entry_done:
-                # First tick inside band: snap to actual to release accumulated lead.
-                actual = self._get_master_position()
-                if actual is not None:
-                    commanded_master = actual
-                self._publish_command(self._master_to_positions(commanded_master))
-                band_entry_done = True
-            # else: band_entry_done=True → hold silently, no command
+            # Probe one step toward CLOSE_POSITION
+            commanded_angle = min(commanded_angle + self._probe_step_rad, self._close_position)
+            self._command_angle(commanded_angle)
 
             time.sleep(dt)
 
@@ -615,8 +755,8 @@ class RG2Controller(Node):
         result.final_effort = final_effort
         result.asymmetry_detected = asymmetry_ever_exceeded
         result.message = (
-            f"stop={stop_reason} final_width={final_width:.4f}m "
-            f"effort={final_effort:.3f} asymmetry_detected={asymmetry_ever_exceeded}"
+            f"stop={stop_reason}  final_width={final_width*1000:.1f} mm  "
+            f"effort={final_effort:.3f}  asymmetry={asymmetry_ever_exceeded}"
         )
         self.get_logger().info(result.message)
         goal_handle.succeed()
@@ -625,12 +765,6 @@ class RG2Controller(Node):
     # =========================================================================
     # Helpers
     # =========================================================================
-
-    def _master_to_positions(self, master: float) -> List[float]:
-        return [
-            off + mult * master
-            for mult, off in zip(self._gripper_joint_multipliers, self._gripper_joint_offsets)
-        ]
 
     def _publish_command(self, positions: Sequence[float]) -> None:
         msg = JointState()
