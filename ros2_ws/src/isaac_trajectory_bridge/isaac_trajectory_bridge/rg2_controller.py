@@ -87,7 +87,7 @@ DEFAULT_WIDTH_TABLE_PATH = _default_table_path()
 # Verify-after-command parameters
 # ---------------------------------------------------------------------------
 
-DEFAULT_VERIFY_TOLERANCE_M = 0.003     # 3 mm — acceptable final error
+DEFAULT_VERIFY_TOLERANCE_M = 0.001     # 3 mm — acceptable final error
 DEFAULT_VERIFY_STABLE_DELTA = 0.0005   # 0.5 mm max change between ticks to call "stable"
 DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive stable ticks required
 DEFAULT_VERIFY_TIMEOUT_SEC = 2.0
@@ -455,7 +455,7 @@ class RG2Controller(Node):
         deadline = time.time() + self._verify_timeout_sec
         prev_width: Optional[float] = None
         stable_count = 0
-        final_width: float = target_width_m  # optimistic default for logging
+        final_width: float = self._get_true_width() or target_width_m
 
         while time.time() < deadline:
             width = self._get_true_width()
@@ -740,9 +740,12 @@ class RG2Controller(Node):
                 stop_reason = "error"
                 break
 
-            # Probe one step toward CLOSE_POSITION
-            commanded_angle = min(commanded_angle + self._probe_step_rad, self._close_position)
-            self._command_angle(commanded_angle)
+            # Probe one step toward CLOSE_POSITION — only while no contact yet.
+            # Once contact is detected, hold the current angle while the plateau
+            # confirmation ticks accumulate.
+            if not contact_detected:
+                commanded_angle = min(commanded_angle + self._probe_step_rad, self._close_position)
+                self._command_angle(commanded_angle)
 
             time.sleep(dt)
 

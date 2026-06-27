@@ -1,17 +1,18 @@
 """ROS-backed RG2 gripper backend.
 
-The workspace confirms these default RG2 controller services:
+The workspace confirms these default RG2 controller interfaces:
 - `/rg2_controller/open` using `std_srvs.srv.Trigger`
 - `/rg2_controller/close` using `std_srvs.srv.Trigger`
 - `/rg2_controller/set_position` using
   `isaac_trajectory_bridge_interfaces.srv.SetGripperPosition`
+- `/rg2_controller/guarded_move` using
+  `isaac_trajectory_bridge_interfaces.action.GripperGuardedMove`
 """
 
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from dataclasses import field
 from typing import Any
 from typing import Callable
 
@@ -23,6 +24,8 @@ from isaac_trajectory_bridge_interfaces.srv import SetGripperPosition
 from robot_backend.interfaces.gripper_backend import GripperBackend
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import RG2Calibration
+from robot_backend.utils.rg2_geometry import RG2WidthLookup
+from robot_backend.utils.rg2_geometry import load_rg2_width_lookup
 from robot_backend.utils.rg2_geometry import width_to_joint_position
 
 
@@ -50,9 +53,11 @@ class ROSGripperBackend(GripperBackend):
         node: Node | None = None,
         *,
         calibration: RG2Calibration = DEFAULT_RG2_CALIBRATION,
+        width_lookup: RG2WidthLookup | None = None,
         open_binding: ServiceBinding | None = None,
         close_binding: ServiceBinding | None = None,
         set_position_binding: ServiceBinding | None = None,
+        guarded_move_action_name: str | None = None,
         joint_states_topic: str = "/joint_states",
     ) -> None:
         self._owns_node = node is None
@@ -73,6 +78,11 @@ class ROSGripperBackend(GripperBackend):
             srv_type=SetGripperPosition,
             request_builder=self._build_set_position_request,
         )
+        self._guarded_move_action_name = (
+            guarded_move_action_name
+            or self._derive_guarded_move_action_name(self._open_binding.name)
+        )
+        self._width_lookup = width_lookup or load_rg2_width_lookup()
         self._joint_states_topic = joint_states_topic
         self._joint_state_sub = None
         self._latest_joint_state: Any = None
@@ -82,6 +92,12 @@ class ROSGripperBackend(GripperBackend):
         """Return the shared ROS node used for service calls."""
 
         return self._node
+
+    @property
+    def guarded_move_action_name(self) -> str:
+        """Return the RG2 guarded-move action endpoint name."""
+
+        return self._guarded_move_action_name
 
     def open(self) -> dict[str, Any]:
         """Call the RG2 open service."""
@@ -99,11 +115,15 @@ class ROSGripperBackend(GripperBackend):
         """Command a physical RG2 opening width in meters.
 
         This converts the requested physical width to the RG2 master joint
-        target in radians using the configured calibration, then calls the
-        controller's `/rg2_controller/set_position` service.
+        target in radians using the same calibration table consumed by the
+        controller when available, then calls `/rg2_controller/set_position`.
         """
 
-        position_rad = width_to_joint_position(width_m, self._calibration)
+        position_rad = width_to_joint_position(
+            width_m,
+            self._calibration,
+            width_lookup=self._width_lookup,
+        )
         return self.set_joint_position(position_rad)
 
     def set_joint_position(self, position_rad: float) -> dict[str, Any]:
@@ -134,6 +154,29 @@ class ROSGripperBackend(GripperBackend):
                 "set_position": (
                     "isaac_trajectory_bridge_interfaces/srv/"
                     "SetGripperPosition"
+                ),
+            },
+            "action_names": {
+                "guarded_move": self._guarded_move_action_name,
+            },
+            "action_types": {
+                "guarded_move": (
+                    "isaac_trajectory_bridge_interfaces/action/"
+                    "GripperGuardedMove"
+                ),
+            },
+            "width_mapping": {
+                "mode": "table" if self._width_lookup is not None else "linear_fallback",
+                "table_loaded": self._width_lookup is not None,
+                "table_path": (
+                    self._width_lookup.table_path
+                    if self._width_lookup is not None
+                    else None
+                ),
+                "table_rows": (
+                    len(self._width_lookup.angles_rad)
+                    if self._width_lookup is not None
+                    else 0
                 ),
             },
             "calibration": {
@@ -256,6 +299,17 @@ class ROSGripperBackend(GripperBackend):
             )
 
         return response
+
+    @staticmethod
+    def _derive_guarded_move_action_name(open_service_name: str) -> str:
+        """Infer the guarded-move endpoint from the open service name."""
+
+        if not open_service_name:
+            return "/rg2_controller/guarded_move"
+        service_name = open_service_name.rstrip("/")
+        if service_name.endswith("/open"):
+            return f"{service_name[:-5]}/guarded_move"
+        return "/rg2_controller/guarded_move"
 
     @staticmethod
     def _build_trigger_request() -> Trigger.Request:

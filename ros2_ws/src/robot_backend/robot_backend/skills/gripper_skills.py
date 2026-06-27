@@ -69,19 +69,30 @@ def set_gripper_width_skill(backend: RobotBackend, width_m: float) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_guarded_move_action_name(backend: RobotBackend) -> str:
+    """Resolve the guarded-move endpoint from the backend when available."""
+
+    action_name = getattr(backend.gripper, "guarded_move_action_name", None)
+    if isinstance(action_name, str) and action_name.strip():
+        return action_name.strip()
+    return GUARDED_MOVE_ACTION
+
+
 def _call_guarded_move(
     node,
+    *,
+    action_name: str,
     target_width_m: float,
     force_threshold: float,
     mode: str = "guarded",
     width_tolerance_m: float = DEFAULT_WIDTH_TOLERANCE_M,
 ) -> GripperGuardedMove.Result:
-    """Send a GripperGuardedMove goal and block until result. Returns the Result."""
-    action_client = ActionClient(node, GripperGuardedMove, GUARDED_MOVE_ACTION)
+    """Send a GripperGuardedMove goal and block until a result arrives."""
+    action_client = ActionClient(node, GripperGuardedMove, action_name)
 
     if not action_client.wait_for_server(timeout_sec=ACTION_SERVER_TIMEOUT_SEC):
         raise RuntimeError(
-            f"GripperGuardedMove action server not available at {GUARDED_MOVE_ACTION} "
+            f"GripperGuardedMove action server not available at {action_name} "
             f"within {ACTION_SERVER_TIMEOUT_SEC}s."
         )
 
@@ -163,9 +174,12 @@ def grasp_skill(
             "steps": steps_log,
         }
 
+    action_name = _resolve_guarded_move_action_name(backend)
+
     try:
         action_result = _call_guarded_move(
             node,
+            action_name=action_name,
             target_width_m=expected_width_m,
             force_threshold=force_threshold,
             mode="guarded",
@@ -189,7 +203,7 @@ def grasp_skill(
             "command": "grasp",
             "object_id": object_id,
             "reason": f"GripperGuardedMove action failed: {exc}",
-            "provenance": {"expected_width_m": expected_width_m},
+            "provenance": {"action_name": action_name, "expected_width_m": expected_width_m},
             "steps": steps_log,
         }
 
@@ -203,6 +217,7 @@ def grasp_skill(
 
     provenance: dict[str, Any] = {
         "force_mode": "guarded_move_action",
+        "action_name": action_name,
         "stop_reason": stop_reason,
         "final_width_m": final_width,
         "final_effort": final_effort,

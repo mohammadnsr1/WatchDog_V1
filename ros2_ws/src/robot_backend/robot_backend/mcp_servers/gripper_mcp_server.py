@@ -197,7 +197,11 @@ if mcp is not None:
 
     @mcp.tool()
     def set_gripper_width(width_m: float) -> dict[str, Any]:
-        """Set physical RG2 finger gap in meters via the backend skill API."""
+        """Set physical RG2 finger gap in meters via the backend skill API.
+
+        The backend converts width to the raw RG2 joint target using the same
+        calibration-table semantics as the controller when that CSV is available.
+        """
 
         command = "set_gripper_width"
         try:
@@ -215,7 +219,7 @@ if mcp is not None:
 
     @mcp.tool()
     def get_gripper_state() -> dict[str, Any]:
-        """Return backend gripper state and active RG2 calibration metadata."""
+        """Return backend gripper bindings, width-mapping mode, and calibration metadata."""
 
         command = "get_gripper_state"
         try:
@@ -228,15 +232,14 @@ if mcp is not None:
 
     @mcp.tool()
     def grasp(object_id: str) -> dict[str, Any]:
-        """Force-controlled guarded close that attaches object_id on confirmed contact.
+        """Run the RG2 guarded-move action and attach object_id on confirmed contact.
 
-        Closes the RG2 incrementally while monitoring finger_joint effort from
-        /joint_states. Stops when effort plateaus above the empirical air-close
-        floor AND the measured finger width corresponds to a plausible object size
-        per the registry spec. Attaches object_id to the robot link on success.
-        Returns structured provenance (plateau effort, measured width, expected
-        width, pass/fail per criterion) on both success and failure paths.
-        Does not verify whether the object remains grasped through subsequent motion.
+        The backend opens first, sends a `GripperGuardedMove` goal to the
+        controller's guarded action endpoint, and treats stop reasons
+        `width_reached` or `force_threshold` as contact. The resulting width is
+        then checked against the registry spec before the object is attached.
+        Returns structured provenance on both success and failure paths and does
+        not verify that the object remains grasped through later motion.
 
         Parameters
         ----------
