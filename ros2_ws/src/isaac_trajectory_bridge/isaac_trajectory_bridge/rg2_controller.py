@@ -94,7 +94,7 @@ DEFAULT_VERIFY_STABLE_DELTA = 0.0005   # kept for launch compatibility; verify u
 DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive in-band ticks required
 DEFAULT_VERIFY_TIMEOUT_SEC = 3.0
 DEFAULT_NO_MOTION_EPSILON_M = 0.002
-DEFAULT_RAMP_TIME_SEC = 1.0
+DEFAULT_RAMP_TIME_SEC = 1.5
 
 # ---------------------------------------------------------------------------
 # Force / effort parameters (guarded move only)
