@@ -94,9 +94,10 @@ DEFAULT_WIDTH_TABLE_PATH = _default_table_path()
 # Verify-after-command parameters
 # ---------------------------------------------------------------------------
 
-DEFAULT_VERIFY_TOLERANCE_M = 0.003     # 3 mm — acceptable final error
+DEFAULT_VERIFY_TOLERANCE_M = 0.0005     # 3 mm — acceptable final error
 DEFAULT_VERIFY_STABLE_DELTA = 0.0005   # kept for launch compatibility; verify uses target band
 DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive in-band ticks required
+DEFAULT_VERIFY_SETTLE_EPSILON_M = 0.001  # max tick-to-tick change to be considered settled
 DEFAULT_VERIFY_TIMEOUT_SEC = 3.0
 DEFAULT_NO_MOTION_EPSILON_M = 0.002
 DEFAULT_RAMP_TIME_SEC = 1.5
@@ -145,6 +146,7 @@ class RG2Controller(Node):
         self.declare_parameter("verify_tolerance_m", DEFAULT_VERIFY_TOLERANCE_M)
         self.declare_parameter("verify_stable_delta", DEFAULT_VERIFY_STABLE_DELTA)
         self.declare_parameter("verify_stable_ticks", DEFAULT_VERIFY_STABLE_TICKS)
+        self.declare_parameter("verify_settle_epsilon_m", DEFAULT_VERIFY_SETTLE_EPSILON_M)
         self.declare_parameter("verify_timeout_sec", DEFAULT_VERIFY_TIMEOUT_SEC)
         self.declare_parameter("no_motion_epsilon_m", DEFAULT_NO_MOTION_EPSILON_M)
         self.declare_parameter("ramp_time_sec", DEFAULT_RAMP_TIME_SEC)
@@ -190,6 +192,7 @@ class RG2Controller(Node):
         self._verify_tolerance_m = float(self.get_parameter("verify_tolerance_m").value)
         self._verify_stable_delta = float(self.get_parameter("verify_stable_delta").value)
         self._verify_stable_ticks = int(self.get_parameter("verify_stable_ticks").value)
+        self._verify_settle_epsilon_m = float(self.get_parameter("verify_settle_epsilon_m").value)
         self._verify_timeout_sec = float(self.get_parameter("verify_timeout_sec").value)
         self._no_motion_epsilon_m = float(self.get_parameter("no_motion_epsilon_m").value)
         self._ramp_time_sec = max(0.0, float(self.get_parameter("ramp_time_sec").value))
@@ -484,7 +487,14 @@ class RG2Controller(Node):
         label: str = "",
         tolerance_m: Optional[float] = None,
     ) -> Tuple[bool, float, Optional[float]]:
-        """Verify the live published width reaches and settles in target band."""
+        """Verify the live published width reaches and settles in target band.
+
+        stable_count increments only when BOTH conditions hold on the same tick:
+          1. abs(width - target) <= tol           (in-band)
+          2. abs(width - prev_width) <= settle_epsilon_m  (no longer moving)
+        Either failure resets stable_count to 0, so convergence requires the
+        gripper to be simultaneously on-target and motionless.
+        """
         tol = self._verify_tolerance_m if tolerance_m is None else float(tolerance_m)
         start_time = time.time()
         deadline = start_time + self._verify_timeout_sec
@@ -494,6 +504,7 @@ class RG2Controller(Node):
         max_motion = 0.0
         warned_no_motion = False
         stable_count = 0
+        prev_width: Optional[float] = start_width
 
         if label and start_width is not None:
             self.get_logger().info(
@@ -508,6 +519,8 @@ class RG2Controller(Node):
                 continue
 
             final_width = width
+            delta = abs(width - prev_width) if prev_width is not None else float("inf")
+
             if start_width is not None:
                 max_motion = max(max_motion, abs(width - start_width))
 
@@ -529,13 +542,16 @@ class RG2Controller(Node):
                 )
                 warned_no_motion = True
 
-            if abs(width - target_width_m) <= tol:
+            in_band = abs(width - target_width_m) <= tol
+            settled = delta <= self._verify_settle_epsilon_m
+            if in_band and settled:
                 stable_count += 1
                 if stable_count >= self._verify_stable_ticks:
                     return True, final_width, start_width
             else:
                 stable_count = 0
 
+            prev_width = width
             time.sleep(self._control_period_sec)
 
         return False, final_width, start_width
