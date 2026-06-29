@@ -45,6 +45,21 @@ class RG2WidthLookup:
     widths_m: tuple[float, ...]
 
 
+@dataclass(frozen=True)
+class RG2GraspOffsetLookup:
+    """Width-indexed grasp-center offset lookup from the unified calibration CSV.
+
+    widths_m is sorted ascending.  gc_{x,y,z}_m are the corresponding
+    tcp-frame grasp-center coordinates measured at each calibration step.
+    """
+
+    table_path: str
+    widths_m: tuple[float, ...]
+    gc_x_m: tuple[float, ...]
+    gc_y_m: tuple[float, ...]
+    gc_z_m: tuple[float, ...]
+
+
 DEFAULT_RG2_CALIBRATION = RG2Calibration(
     width_open_m=0.10,
     width_closed_m=0.0,
@@ -66,13 +81,13 @@ def _default_width_table_path() -> str:
         from ament_index_python.packages import get_package_share_directory
 
         share = get_package_share_directory("isaac_trajectory_bridge")
-        return str(Path(share) / "config" / "rg2_width_table.csv")
+        return str(Path(share) / "config" / "rg2_calibration_table.csv")
     except Exception:
         return str(
             Path(__file__).resolve().parents[3]
             / "isaac_trajectory_bridge"
             / "config"
-            / "rg2_width_table.csv"
+            / "rg2_calibration_table.csv"
         )
 
 
@@ -170,6 +185,53 @@ def load_rg2_width_lookup(
     )
 
 
+@lru_cache(maxsize=4)
+def load_rg2_grasp_offset_lookup(
+    table_path: str = DEFAULT_RG2_WIDTH_TABLE_PATH,
+) -> RG2GraspOffsetLookup | None:
+    """Load the tcp→grasp-center offset indexed by width from the calibration CSV.
+
+    Reads tcp_to_gc_{x,y,z}_m columns alongside true_width_m.  Uses only
+    open_to_close rows (same filter as load_rg2_width_lookup) and sorts
+    ascending by width so _interpolate can be applied directly.
+    """
+    path = Path(table_path)
+    if not path.exists():
+        return None
+
+    rows: list[tuple[float, float, float, float]] = []
+    try:
+        with path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                direction = row.get("direction", "open_to_close")
+                if direction not in ("open_to_close", ""):
+                    continue
+                try:
+                    width = float(row["true_width_m"])
+                    gc_x = float(row["tcp_to_gc_x_m"])
+                    gc_y = float(row["tcp_to_gc_y_m"])
+                    gc_z = float(row["tcp_to_gc_z_m"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if all(math.isfinite(v) for v in (width, gc_x, gc_y, gc_z)) and width >= 0.0:
+                    rows.append((width, gc_x, gc_y, gc_z))
+    except OSError:
+        return None
+
+    if len(rows) < 2:
+        return None
+
+    rows.sort(key=lambda r: r[0])
+    return RG2GraspOffsetLookup(
+        table_path=str(path),
+        widths_m=tuple(r[0] for r in rows),
+        gc_x_m=tuple(r[1] for r in rows),
+        gc_y_m=tuple(r[2] for r in rows),
+        gc_z_m=tuple(r[3] for r in rows),
+    )
+
+
 def closure_fraction_from_width(
     width_m: float,
     calibration: RG2Calibration = DEFAULT_RG2_CALIBRATION,
@@ -254,11 +316,23 @@ def tcp_offset_from_width(
 ) -> PoseDict:
     """Return the fixed-TCP to logical grasp-center transform for a width.
 
-    Orientation interpolation is unnecessary for the current calibration
-    because the logical grasp-center frame is assumed to remain aligned with
-    the fixed TCP frame.
-    """
+    Interpolates x/y/z from the unified calibration table (rg2_calibration_table.csv)
+    keyed on true_width_m.  Falls back to linear endpoint interpolation via
+    closure_fraction_from_width if the table is unavailable.
 
+    Orientation is identity in both paths (grasp-center frame remains aligned
+    with the TCP frame throughout the finger range of motion).
+    """
+    offset_lookup = load_rg2_grasp_offset_lookup()
+    if offset_lookup is not None and len(offset_lookup.widths_m) >= 2:
+        gc_x = _interpolate(width_m, offset_lookup.widths_m, offset_lookup.gc_x_m)
+        gc_y = _interpolate(width_m, offset_lookup.widths_m, offset_lookup.gc_y_m)
+        gc_z = _interpolate(width_m, offset_lookup.widths_m, offset_lookup.gc_z_m)
+        position = {"x": gc_x, "y": gc_y, "z": gc_z}
+        orientation = {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
+        return make_pose(position=position, orientation=orientation)
+
+    # Linear fallback using calibration endpoint poses.
     fraction = closure_fraction_from_width(width_m, calibration)
     open_position = calibration.tcp_to_grasp_center_open["position"]
     closed_position = calibration.tcp_to_grasp_center_closed["position"]

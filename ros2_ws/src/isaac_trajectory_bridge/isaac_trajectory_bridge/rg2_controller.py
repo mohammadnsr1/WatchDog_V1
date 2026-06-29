@@ -69,7 +69,12 @@ DEFAULT_CLOSE_POSITION = 0.7731809
 DEFAULT_LEFT_FINGER_FRAME = "onrobot_rg2_left_inner_finger"
 DEFAULT_RIGHT_FINGER_FRAME = "onrobot_rg2_right_inner_finger"
 DEFAULT_GRIPPER_BASE_FRAME = "onrobot_rg2_base_link"
-DEFAULT_FINGER_LINK_OFFSET_M = 0.021
+DEFAULT_FINGER_LINK_OFFSET_M = 0.021  # kept for launch compatibility; unused in live width path
+
+# Contact frames rigidly fixed to the true contact surface of each finger.
+# Width is the raw lateral separation — no inset subtraction needed.
+DEFAULT_LEFT_CONTACT_FRAME = "left_contact_frame"
+DEFAULT_RIGHT_CONTACT_FRAME = "right_contact_frame"
 
 # ---------------------------------------------------------------------------
 # Calibration table
@@ -78,9 +83,9 @@ DEFAULT_FINGER_LINK_OFFSET_M = 0.021
 def _default_table_path() -> str:
     try:
         share = get_package_share_directory("isaac_trajectory_bridge")
-        return str(Path(share) / "config" / "rg2_width_table.csv")
+        return str(Path(share) / "config" / "rg2_calibration_table.csv")
     except Exception:
-        return str(Path(__file__).resolve().parent.parent / "config" / "rg2_width_table.csv")
+        return str(Path(__file__).resolve().parent.parent / "config" / "rg2_calibration_table.csv")
 
 
 DEFAULT_WIDTH_TABLE_PATH = _default_table_path()
@@ -131,7 +136,9 @@ class RG2Controller(Node):
         self.declare_parameter("left_finger_frame", DEFAULT_LEFT_FINGER_FRAME)
         self.declare_parameter("right_finger_frame", DEFAULT_RIGHT_FINGER_FRAME)
         self.declare_parameter("gripper_base_frame", DEFAULT_GRIPPER_BASE_FRAME)
-        self.declare_parameter("finger_link_offset_m", DEFAULT_FINGER_LINK_OFFSET_M)
+        self.declare_parameter("finger_link_offset_m", DEFAULT_FINGER_LINK_OFFSET_M)  # accepted but unused
+        self.declare_parameter("left_contact_frame", DEFAULT_LEFT_CONTACT_FRAME)
+        self.declare_parameter("right_contact_frame", DEFAULT_RIGHT_CONTACT_FRAME)
 
         self.declare_parameter("width_table_path", DEFAULT_WIDTH_TABLE_PATH)
 
@@ -174,7 +181,9 @@ class RG2Controller(Node):
         self._left_finger_frame = str(self.get_parameter("left_finger_frame").value)
         self._right_finger_frame = str(self.get_parameter("right_finger_frame").value)
         self._gripper_base_frame = str(self.get_parameter("gripper_base_frame").value)
-        self._finger_link_offset_m = float(self.get_parameter("finger_link_offset_m").value)
+        self._finger_link_offset_m = float(self.get_parameter("finger_link_offset_m").value)  # unused in width path
+        self._left_contact_frame = str(self.get_parameter("left_contact_frame").value)
+        self._right_contact_frame = str(self.get_parameter("right_contact_frame").value)
 
         self._width_table_path = str(self.get_parameter("width_table_path").value)
 
@@ -262,7 +271,7 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _load_width_table(self) -> None:
-        """Load rg2_width_table.csv and build monotonic angle↔width interpolators.
+        """Load rg2_calibration_table.csv and build monotonic angle↔width interpolators.
 
         Uses only the open_to_close direction rows (or all rows if no direction
         column) to guarantee the angle→width mapping is monotonic decreasing.
@@ -383,23 +392,29 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _read_tf_width(self) -> Optional[Tuple[float, float, float]]:
-        """Return (true_width_m, left_y, right_y) or None on TF failure."""
+        """Return (true_width_m, left_y, right_y) or None on TF failure.
+
+        Looks up left_contact_frame and right_contact_frame (fixed to the true
+        contact surface) relative to the gripper base frame. Width is the raw
+        lateral separation — no inset subtraction. left_y + right_y is kept for
+        the asymmetry diagnostic; the contact frames are symmetric about y=0.
+        """
         try:
             left_tf = self._tf_buffer.lookup_transform(
                 self._gripper_base_frame,
-                self._left_finger_frame,
+                self._left_contact_frame,
                 Time(),
                 timeout=Duration(seconds=0.05),
             )
             right_tf = self._tf_buffer.lookup_transform(
                 self._gripper_base_frame,
-                self._right_finger_frame,
+                self._right_contact_frame,
                 Time(),
                 timeout=Duration(seconds=0.05),
             )
             left_y = left_tf.transform.translation.y
             right_y = right_tf.transform.translation.y
-            true_width = max(0.0, abs(right_y - left_y) - 2.0 * self._finger_link_offset_m)
+            true_width = max(0.0, abs(right_y - left_y))
             return true_width, left_y, right_y
         except Exception as exc:
             self.get_logger().warn(f"TF lookup failed: {exc}", throttle_duration_sec=2.0)
