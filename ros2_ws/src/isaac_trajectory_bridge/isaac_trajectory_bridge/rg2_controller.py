@@ -107,7 +107,8 @@ DEFAULT_RAMP_TIME_SEC = 1.5
 # ---------------------------------------------------------------------------
 
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search
+DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search (width mode)
+DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # gentler increment for torque-mode contact probing
 DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
@@ -152,6 +153,7 @@ class RG2Controller(Node):
         self.declare_parameter("ramp_time_sec", DEFAULT_RAMP_TIME_SEC)
 
         self.declare_parameter("probe_step_rad", DEFAULT_PROBE_STEP_RAD)
+        self.declare_parameter("torque_probe_step_rad", DEFAULT_TORQUE_PROBE_STEP_RAD)
         self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
@@ -198,6 +200,7 @@ class RG2Controller(Node):
         self._ramp_time_sec = max(0.0, float(self.get_parameter("ramp_time_sec").value))
 
         self._probe_step_rad = float(self.get_parameter("probe_step_rad").value)
+        self._torque_probe_step_rad = float(self.get_parameter("torque_probe_step_rad").value)
         self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
@@ -223,6 +226,7 @@ class RG2Controller(Node):
         self._busy = False
         self._latest_joint_positions: Dict[str, float] = {}
         self._latest_joint_efforts: Dict[str, float] = {}
+        self._latest_joint_state_stamp: Optional[Tuple[int, int]] = None  # (sec, nanosec)
         self._last_known_width: Optional[float] = None
         self._latest_published_width: Optional[float] = None
 
@@ -375,9 +379,11 @@ class RG2Controller(Node):
             if msg.effort and i < len(msg.effort):
                 eff[jname] = msg.effort[i]
         if pos:
+            stamp = (msg.header.stamp.sec, msg.header.stamp.nanosec)
             with self._state_lock:
                 self._latest_joint_positions = pos
                 self._latest_joint_efforts = eff
+                self._latest_joint_state_stamp = stamp
 
     def _width_timer_cb(self) -> None:
         result = self._read_tf_width()
@@ -687,38 +693,49 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _execute_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
-        """Guarded move action.
+        """Guarded move action — two mutually isolated modes.
 
         mode "width":
-            Command angle_for_width(target_width_m) once, then verify.
-            No effort involvement.  stop_reason = "width_reached" / "timeout".
+            Pure feedforward.  Command angle_for_width(target_width_m) once,
+            then verify settle exactly as the width path does.  No effort code
+            path executes.  stop_reason = "width_reached" / "timeout".
 
-        mode "force" / "guarded":
-            Probe-close: increment commanded_angle by probe_step_rad per tick
-            from the current joint angle toward CLOSE_POSITION.  After each
-            step read effort_finger from /joint_states.
+        mode "torque":
+            Pure effort-based probe-close, independent of width as a stop
+            condition.  Starting from the current joint angle, increment
+            commanded_angle by torque_probe_step_rad per tick toward
+            CLOSE_POSITION.
 
-            PRIMARY STOP — effort > effort_contact_threshold:
-                Hold current angle.  stop_reason = "force_threshold".
+            PRIMARY STOP — effort >= effort_contact_threshold:
+                STOP immediately and HOLD the current commanded_angle.
+                stop_reason = "force_threshold".
 
-            For "guarded": ALSO stop if the live published width remains
-                within target_width_m ± verify_tolerance_m before contact.
-                stop_reason = "width_reached".
+            HARD GUARD — effort >= goal.force_threshold:
+                Stop immediately.  stop_reason = "force_threshold".
 
-            Over-force guard: effort > goal.force_threshold → stop immediately.
+            PLATEAU CONFIRM (secondary):
+                Tracks |d_effort/dt| independently.  Fires if effort rises and
+                plateaus before crossing the primary threshold.
+                stop_reason = "force_threshold".
 
-            Plateau confirm (optional, after contact detected):
-                require |d_effort/dt| < effort_plateau_deriv for
-                effort_plateau_ticks consecutive ticks before declaring success.
+            target_width_m is a safety floor only: commanded_angle is capped at
+            angle_for_width(target_width_m) so the gripper never closes tighter
+            than expected.  It does NOT produce a "width_reached" stop.
 
-        Asymmetry (left_y + right_y in base frame) is published in feedback as
-        a diagnostic only; it never triggers a stop unless enable_asymmetry_fault.
+            Fresh-effort safety: before each probe step, a joint_state message
+            with a newer header.stamp than the one used in the previous step is
+            required.  If none arrives within 2× control_period, the step is
+            skipped and the commanded angle is held.
+
+            Asymmetry (left_y + right_y in base frame) is a feedback diagnostic
+            only; never a stop condition (unless enable_asymmetry_fault).
+            timeout after max_control_iters.  stop_reason = "timeout".
         """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
         target_width = float(goal.target_width_m)
         force_threshold = float(goal.force_threshold) if goal.force_threshold > 0.0 else 0.45
-        mode = str(goal.mode) if goal.mode else "guarded"
+        mode = str(goal.mode) if goal.mode else "torque"
         tol = (
             float(goal.width_tolerance_m)
             if goal.width_tolerance_m > 0.0
@@ -739,7 +756,7 @@ class RG2Controller(Node):
         final_effort: float = self._get_master_effort()
 
         # ------------------------------------------------------------------
-        # mode "width" — pure feedforward, no effort loop
+        # mode "width" — pure feedforward, no effort involvement whatsoever
         # ------------------------------------------------------------------
         if mode == "width":
             converged, final_width = self._feedforward_move(
@@ -754,128 +771,163 @@ class RG2Controller(Node):
             result.final_width_m = final_width
             result.final_effort = self._get_master_effort()
             result.asymmetry_detected = False
-            result.message = (
-                f"stop={stop_reason}  final_width={final_width*1000:.1f} mm"
-            )
+            result.message = f"stop={stop_reason}  final_width={final_width*1000:.1f} mm"
             self.get_logger().info(result.message)
             goal_handle.succeed()
             return result
 
         # ------------------------------------------------------------------
-        # mode "force" / "guarded" — incremental probe toward contact
+        # mode "torque" — pure effort-based probe-close
         # ------------------------------------------------------------------
+        if mode == "torque":
+            current_angle = self._get_master_position()
+            if current_angle is None:
+                current_angle = self._open_position
+            commanded_angle = current_angle
 
-        # Start from current joint angle, probe toward CLOSE_POSITION.
-        current_angle = self._get_master_position()
-        if current_angle is None:
-            current_angle = self._open_position
-        commanded_angle = current_angle
+            # Safety floor: never command tighter than the expected grasp width.
+            # This is a clamp on commanded_angle, not a stop condition.
+            floor_angle = self.angle_for_width(target_width)
 
-        prev_effort: float = 0.0
-        contact_detected = False
-        plateau_count = 0
-        width_reached_count = 0
-        dt = self._control_period_sec
+            prev_effort: float = 0.0
+            plateau_count = 0
+            dt = self._control_period_sec
+            # Max time to wait for a fresh joint_state before holding position.
+            fresh_wait_sec = 2.0 * dt
 
-        for _ in range(self._max_control_iters):
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                result.success = False
-                result.stop_reason = "cancelled"
-                result.final_width_m = final_width
-                result.final_effort = final_effort
-                result.asymmetry_detected = asymmetry_ever_exceeded
-                result.message = "Cancelled."
-                return result
-
-            # --- Read sensors ---
-            tf_result = self._read_tf_width()
-            if tf_result is None:
-                time.sleep(dt)
-                continue
-
-            width, left_y, right_y = tf_result
             with self._state_lock:
-                self._last_known_width = width
+                last_used_stamp = self._latest_joint_state_stamp
 
-            effort = self._get_master_effort()
-            d_effort = (effort - prev_effort) / dt
-            prev_effort = effort
+            for _ in range(self._max_control_iters):
+                if goal_handle.is_cancel_requested:
+                    goal_handle.canceled()
+                    result.success = False
+                    result.stop_reason = "cancelled"
+                    result.final_width_m = final_width
+                    result.final_effort = final_effort
+                    result.asymmetry_detected = asymmetry_ever_exceeded
+                    result.message = "Cancelled."
+                    return result
 
-            asymmetry_m = abs(left_y + right_y)
-            if asymmetry_m > self._asymmetry_threshold_m:
-                asymmetry_ever_exceeded = True
-
-            final_width = width
-            final_effort = effort
-
-            # Feedback
-            phase = "contact" if contact_detected else "closing"
-            fb.current_width_m = width
-            fb.current_effort = effort
-            fb.asymmetry_m = asymmetry_m
-            fb.phase = phase
-            goal_handle.publish_feedback(fb)
-
-            # Over-force guard (immediate)
-            if effort > force_threshold:
-                stop_reason = "force_threshold"
-                break
-
-            # Contact detection + plateau confirmation
-            if not contact_detected and effort > self._effort_contact_threshold:
-                contact_detected = True
-                plateau_count = 0
-
-            if contact_detected:
-                if abs(d_effort) < self._effort_plateau_deriv:
-                    plateau_count += 1
-                    if plateau_count >= self._effort_plateau_ticks:
-                        stop_reason = "force_threshold"
+                # --- Require a fresh joint_state before each probe step ---
+                # /joint_states averages 50 Hz but can stall ~286 ms; never
+                # advance the probe on a stale effort reading.
+                wait_deadline = time.time() + fresh_wait_sec
+                got_fresh = False
+                while time.time() < wait_deadline:
+                    with self._state_lock:
+                        current_stamp = self._latest_joint_state_stamp
+                    if current_stamp is not None and current_stamp != last_used_stamp:
+                        got_fresh = True
                         break
+                    time.sleep(0.001)
+
+                if not got_fresh:
+                    self.get_logger().warn(
+                        "torque mode: no fresh joint_state — holding position",
+                        throttle_duration_sec=1.0,
+                    )
+                    fb.current_width_m = final_width
+                    fb.current_effort = final_effort
+                    fb.asymmetry_m = 0.0
+                    fb.phase = "hold_stale"
+                    goal_handle.publish_feedback(fb)
+                    continue
+
+                # --- Read fresh effort (stamp-gated) ---
+                with self._state_lock:
+                    last_used_stamp = self._latest_joint_state_stamp
+                    effort = abs(self._latest_joint_efforts.get(self._master_joint_name, 0.0))
+
+                d_effort = (effort - prev_effort) / dt
+                prev_effort = effort
+                final_effort = effort
+
+                # --- Asymmetry diagnostic (TF-based, feedback only) ---
+                asymmetry_m = 0.0
+                tf_result = self._read_tf_width()
+                if tf_result is not None:
+                    width, left_y, right_y = tf_result
+                    final_width = width
+                    with self._state_lock:
+                        self._last_known_width = width
+                    asymmetry_m = abs(left_y + right_y)
+                    if asymmetry_m > self._asymmetry_threshold_m:
+                        asymmetry_ever_exceeded = True
+
+                fb.current_width_m = final_width
+                fb.current_effort = effort
+                fb.asymmetry_m = asymmetry_m
+                fb.phase = "closing"
+                goal_handle.publish_feedback(fb)
+
+                # HARD GUARD: over-force — stop immediately
+                if effort >= force_threshold:
+                    stop_reason = "force_threshold"
+                    break
+
+                # PRIMARY STOP: instant contact — hold commanded angle, stop
+                if effort >= self._effort_contact_threshold:
+                    self._command_angle(commanded_angle)
+                    stop_reason = "force_threshold"
+                    break
+
+                # PLATEAU CONFIRM (secondary): catches gradual contact build-up
+                # that plateaus below the primary threshold.
+                if effort > self._effort_contact_threshold * 0.2:
+                    if abs(d_effort) < self._effort_plateau_deriv:
+                        plateau_count += 1
+                        if plateau_count >= self._effort_plateau_ticks:
+                            self._command_angle(commanded_angle)
+                            stop_reason = "force_threshold"
+                            break
+                    else:
+                        plateau_count = 0
                 else:
                     plateau_count = 0
 
-            # "guarded" mode: also stop when the live published width reaches
-            # and remains inside the target band before contact.
-            if mode == "guarded":
-                live_width = self._get_latest_published_width()
-                if live_width is not None and abs(live_width - target_width) <= tol:
-                    width_reached_count += 1
-                    final_width = live_width
-                    if width_reached_count >= self._verify_stable_ticks:
-                        stop_reason = "width_reached"
-                        break
-                else:
-                    width_reached_count = 0
+                # Asymmetry fault (diagnostic only by default)
+                if self._enable_asymmetry_fault and asymmetry_m > self._asymmetry_threshold_m:
+                    stop_reason = "error"
+                    break
 
-            # Asymmetry fault (disabled by default)
-            if self._enable_asymmetry_fault and asymmetry_m > self._asymmetry_threshold_m:
-                stop_reason = "error"
-                break
+                # Probe one step toward CLOSE_POSITION (safety floor applied).
+                # Asymmetry is never a stop; floor is never a stop condition.
+                next_angle = min(
+                    commanded_angle + self._torque_probe_step_rad,
+                    self._close_position,
+                    floor_angle,
+                )
+                if next_angle > commanded_angle:
+                    commanded_angle = next_angle
+                    self._command_angle(commanded_angle)
 
-            # Probe one step toward CLOSE_POSITION — only while no contact yet.
-            # Once contact is detected, hold the current angle while the plateau
-            # confirmation ticks accumulate.
-            if not contact_detected:
-                commanded_angle = min(commanded_angle + self._probe_step_rad, self._close_position)
-                self._command_angle(commanded_angle)
+                time.sleep(dt)
 
-            time.sleep(dt)
+            fb.phase = "contact" if stop_reason == "force_threshold" else stop_reason
+            goal_handle.publish_feedback(fb)
 
-        fb.phase = "contact" if stop_reason == "force_threshold" else stop_reason
-        goal_handle.publish_feedback(fb)
+            result.success = stop_reason == "force_threshold"
+            result.stop_reason = stop_reason
+            result.final_width_m = final_width
+            result.final_effort = final_effort
+            result.asymmetry_detected = asymmetry_ever_exceeded
+            result.message = (
+                f"stop={stop_reason}  final_width={final_width*1000:.1f} mm  "
+                f"effort={final_effort:.3f}  asymmetry={asymmetry_ever_exceeded}"
+            )
+            self.get_logger().info(result.message)
+            goal_handle.succeed()
+            return result
 
-        result.success = stop_reason in ("width_reached", "force_threshold")
-        result.stop_reason = stop_reason
+        # Unknown mode
+        result.success = False
+        result.stop_reason = "error"
         result.final_width_m = final_width
         result.final_effort = final_effort
-        result.asymmetry_detected = asymmetry_ever_exceeded
-        result.message = (
-            f"stop={stop_reason}  final_width={final_width*1000:.1f} mm  "
-            f"effort={final_effort:.3f}  asymmetry={asymmetry_ever_exceeded}"
-        )
-        self.get_logger().info(result.message)
+        result.asymmetry_detected = False
+        result.message = f"Unknown mode '{mode}'. Supported modes: 'width', 'torque'."
+        self.get_logger().error(result.message)
         goal_handle.succeed()
         return result
 

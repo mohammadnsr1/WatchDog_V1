@@ -84,7 +84,7 @@ def _call_guarded_move(
     action_name: str,
     target_width_m: float,
     force_threshold: float,
-    mode: str = "guarded",
+    mode: str = "torque",
     width_tolerance_m: float = DEFAULT_WIDTH_TOLERANCE_M,
 ) -> GripperGuardedMove.Result:
     """Send a GripperGuardedMove goal and block until a result arrives."""
@@ -144,11 +144,11 @@ def grasp_skill(
     air_close_floor: float = 0.05,
     grasp_width_tolerance_m: float = GRASP_WIDTH_TOLERANCE_M,
 ) -> dict[str, Any]:
-    """Force-guarded grasp via the GripperGuardedMove action server.
+    """Torque-probed grasp via the GripperGuardedMove action server (mode='torque').
 
-    Stop reasons "width_reached" or "force_threshold" are both treated as
-    successful contact. The final width is checked against the spec's
-    expected grasp_width_m (±grasp_width_tolerance_m).
+    A successful grasp stops on 'force_threshold' (effort-based contact).
+    The final width is checked against the spec's expected grasp_width_m
+    (±grasp_width_tolerance_m) as a sanity bound, not a stop condition.
     """
     steps_log: list[dict[str, Any]] = []
 
@@ -182,7 +182,7 @@ def grasp_skill(
             action_name=action_name,
             target_width_m=expected_width_m,
             force_threshold=force_threshold,
-            mode="guarded",
+            mode="torque",
             width_tolerance_m=DEFAULT_WIDTH_TOLERANCE_M,
         )
         steps_log.append({
@@ -212,7 +212,8 @@ def grasp_skill(
     stop_reason = action_result.stop_reason
 
     # --- Success criteria ---
-    criterion_contact = stop_reason in ("width_reached", "force_threshold")
+    # torque mode: contact is confirmed only by effort-threshold; width is a sanity bound only.
+    criterion_contact = stop_reason == "force_threshold"
     criterion_width_plausible = abs(final_width - expected_width_m) <= grasp_width_tolerance_m
 
     provenance: dict[str, Any] = {
@@ -235,7 +236,7 @@ def grasp_skill(
         if not criterion_contact:
             reason_parts.append(
                 f"stop_reason '{stop_reason}' indicates no confirmed contact "
-                f"(expected 'width_reached' or 'force_threshold')"
+                f"(expected 'force_threshold')"
             )
         if not criterion_width_plausible:
             reason_parts.append(
