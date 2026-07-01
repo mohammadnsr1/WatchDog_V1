@@ -25,6 +25,9 @@ RG2_TOUCH_LINKS: list[str] = [
 ]
 
 GRASP_WIDTH_TOLERANCE_M: float = 0.010   # ±10 mm post-grasp width check
+# Clearance applied to the safety-floor target so the floor sits inside the
+# object, guaranteeing mechanical contact before the floor clamp stops progress.
+GRASP_CLEARANCE_M: float = 0.003
 DEFAULT_FORCE_THRESHOLD: float = 0.45
 DEFAULT_WIDTH_TOLERANCE_M: float = 0.003
 GUARDED_MOVE_ACTION = "/rg2_controller/guarded_move"
@@ -180,7 +183,7 @@ def grasp_skill(
         action_result = _call_guarded_move(
             node,
             action_name=action_name,
-            target_width_m=expected_width_m,
+            target_width_m=max(0.0, expected_width_m - GRASP_CLEARANCE_M),
             force_threshold=force_threshold,
             mode="torque",
             width_tolerance_m=DEFAULT_WIDTH_TOLERANCE_M,

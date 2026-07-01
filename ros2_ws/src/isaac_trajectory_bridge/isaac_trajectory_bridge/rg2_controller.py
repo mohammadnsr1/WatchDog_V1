@@ -109,17 +109,19 @@ DEFAULT_RAMP_TIME_SEC = 1.5
 DEFAULT_CONTROL_HZ = 50.0
 DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search (width mode)
 DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # uniform step size for the entire torque-mode close
-# Measured no-contact noise floor ≈ 0.026–0.028; floor param adds a small margin.
+# Measured idle magnitude peaks at ~0.027 across orientations; floor adds a margin.
 DEFAULT_EFFORT_NOISE_FLOOR = 0.03
-# Contact threshold must sit above the noise floor.
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.05
+# Contact threshold: above worst-case idle (~0.027) with margin, below fast-rising
+# hard-contact effort (~0.05–0.1).  Comparisons use abs(effort) — idle ranges
+# from about -0.026 to +0.027 depending on gripper orientation/gravity loading.
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.04
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
 DEFAULT_ENABLE_ASYMMETRY_FAULT = False
 DEFAULT_MAX_CONTROL_ITERS = 400        # used by width mode; torque mode uses wall-clock timeout
 # Wall-clock timeout for torque mode: 15 s >> ~5.3 s worst-case full traverse at 50 Hz.
-DEFAULT_TORQUE_MAX_DURATION_SEC = 15.0
+DEFAULT_TORQUE_MAX_DURATION_SEC = 30.0
 # Max wall-clock gap since the last fresh joint_state before the probe holds.
 DEFAULT_TORQUE_STALE_HOLD_SEC = 0.060  # 60 ms ≈ 3× the 50 Hz period
 
@@ -899,12 +901,13 @@ class RG2Controller(Node):
                 goal_handle.publish_feedback(fb)
 
                 # ── 2. HARD GUARD: over-force ─────────────────────────────
-                if effort >= force_threshold:
+                # abs(): idle effort ranges -0.026..+0.027 across orientations.
+                if abs(effort) >= force_threshold:
                     stop_reason = "force_threshold"
                     break
 
                 # ── 3. PRIMARY STOP: instant contact ──────────────────────
-                if effort >= self._effort_contact_threshold:
+                if abs(effort) >= self._effort_contact_threshold:
                     self._command_angle(commanded_angle)  # hold
                     stop_reason = "force_threshold"
                     break
@@ -912,10 +915,9 @@ class RG2Controller(Node):
                 # ── 4. PLATEAU CONFIRM (secondary) ────────────────────────
                 # Catches slow effort build-up that stalls just below the
                 # primary threshold without ever crossing it.  Gate requires
-                # effort clearly above the noise floor AND close to the primary
-                # threshold — prevents false-positive trips on resting noise
-                # (noise floor ~0.028 would satisfy the old * 0.2 gate at rest).
-                if effort > max(self._effort_noise_floor, self._effort_contact_threshold * 0.8):
+                # abs(effort) clearly above noise AND close to the primary
+                # threshold.  d_effort keeps its sign for the derivative check.
+                if abs(effort) > max(self._effort_noise_floor, self._effort_contact_threshold * 0.8):
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:
