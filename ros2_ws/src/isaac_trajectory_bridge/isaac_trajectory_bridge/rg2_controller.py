@@ -108,7 +108,7 @@ DEFAULT_RAMP_TIME_SEC = 1.5
 
 DEFAULT_CONTROL_HZ = 50.0
 DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search (width mode)
-DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # gentler increment for torque-mode contact probing
+DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # uniform step size for the entire torque-mode close
 # Measured no-contact noise floor ≈ 0.026–0.028; floor param adds a small margin.
 DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # Contact threshold must sit above the noise floor.
@@ -117,7 +117,9 @@ DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
 DEFAULT_ENABLE_ASYMMETRY_FAULT = False
-DEFAULT_MAX_CONTROL_ITERS = 200        # 200 × 20 ms = 4 s hard timeout
+DEFAULT_MAX_CONTROL_ITERS = 400        # used by width mode; torque mode uses wall-clock timeout
+# Wall-clock timeout for torque mode: 15 s >> ~5.3 s worst-case full traverse at 50 Hz.
+DEFAULT_TORQUE_MAX_DURATION_SEC = 15.0
 # Max wall-clock gap since the last fresh joint_state before the probe holds.
 DEFAULT_TORQUE_STALE_HOLD_SEC = 0.060  # 60 ms ≈ 3× the 50 Hz period
 
@@ -166,6 +168,7 @@ class RG2Controller(Node):
         self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
         self.declare_parameter("enable_asymmetry_fault", DEFAULT_ENABLE_ASYMMETRY_FAULT)
         self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
+        self.declare_parameter("torque_max_duration_sec", DEFAULT_TORQUE_MAX_DURATION_SEC)
         self.declare_parameter("torque_stale_hold_sec", DEFAULT_TORQUE_STALE_HOLD_SEC)
 
         # ---- read --------------------------------------------------------------
@@ -215,6 +218,7 @@ class RG2Controller(Node):
         self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
         self._enable_asymmetry_fault = bool(self.get_parameter("enable_asymmetry_fault").value)
         self._max_control_iters = int(self.get_parameter("max_control_iters").value)
+        self._torque_max_duration_sec = float(self.get_parameter("torque_max_duration_sec").value)
         self._torque_stale_hold_sec = float(self.get_parameter("torque_stale_hold_sec").value)
 
         # ---- validate ----------------------------------------------------------
@@ -752,7 +756,8 @@ class RG2Controller(Node):
 
             Asymmetry (left_y + right_y in base frame) is a feedback diagnostic
             only; never a stop condition unless enable_asymmetry_fault.
-            Timeout after max_control_iters → stop_reason = "timeout".
+            Timeout after torque_max_duration_sec wall-clock seconds →
+            stop_reason = "timeout".
         """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
@@ -819,11 +824,12 @@ class RG2Controller(Node):
             # iteration must wait for a genuinely new joint_state.
             with self._state_lock:
                 last_used_stamp = self._latest_joint_state_stamp
-            # Wall-clock time when the last fresh sample was consumed.
-            # Initialised to now so the stale window begins at loop entry.
-            last_fresh_wall_time: float = time.time()
+            # Wall-clock references: stale-hold window and overall timeout both
+            # measure elapsed real time, consistent with torque_stale_hold_sec.
+            start_wall_time: float = time.time()
+            last_fresh_wall_time: float = start_wall_time
 
-            for _ in range(self._max_control_iters):
+            while time.time() - start_wall_time < self._torque_max_duration_sec:
                 if goal_handle.is_cancel_requested:
                     goal_handle.canceled()
                     result.success = False
@@ -927,8 +933,8 @@ class RG2Controller(Node):
                     break
 
                 # ── 5. PROBE STEP ─────────────────────────────────────────
-                # Advance toward CLOSE_POSITION; floor_angle is a clamp only,
-                # never a stop.
+                # Uniform fine step for the entire close — no speed switching.
+                # Consistent granularity avoids overshoot right as effort rises.
                 next_angle = min(
                     commanded_angle + self._torque_probe_step_rad,
                     self._close_position,
