@@ -109,12 +109,17 @@ DEFAULT_RAMP_TIME_SEC = 1.5
 DEFAULT_CONTROL_HZ = 50.0
 DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search (width mode)
 DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # gentler increment for torque-mode contact probing
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.10
+# Measured no-contact noise floor ≈ 0.026–0.028; floor param adds a small margin.
+DEFAULT_EFFORT_NOISE_FLOOR = 0.03
+# Contact threshold must sit above the noise floor.
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.05
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
 DEFAULT_ENABLE_ASYMMETRY_FAULT = False
 DEFAULT_MAX_CONTROL_ITERS = 200        # 200 × 20 ms = 4 s hard timeout
+# Max wall-clock gap since the last fresh joint_state before the probe holds.
+DEFAULT_TORQUE_STALE_HOLD_SEC = 0.060  # 60 ms ≈ 3× the 50 Hz period
 
 
 class RG2Controller(Node):
@@ -154,12 +159,14 @@ class RG2Controller(Node):
 
         self.declare_parameter("probe_step_rad", DEFAULT_PROBE_STEP_RAD)
         self.declare_parameter("torque_probe_step_rad", DEFAULT_TORQUE_PROBE_STEP_RAD)
+        self.declare_parameter("effort_noise_floor", DEFAULT_EFFORT_NOISE_FLOOR)
         self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
         self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
         self.declare_parameter("enable_asymmetry_fault", DEFAULT_ENABLE_ASYMMETRY_FAULT)
         self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
+        self.declare_parameter("torque_stale_hold_sec", DEFAULT_TORQUE_STALE_HOLD_SEC)
 
         # ---- read --------------------------------------------------------------
         self._joint_state_topic = str(self.get_parameter("joint_state_topic").value)
@@ -201,18 +208,31 @@ class RG2Controller(Node):
 
         self._probe_step_rad = float(self.get_parameter("probe_step_rad").value)
         self._torque_probe_step_rad = float(self.get_parameter("torque_probe_step_rad").value)
+        self._effort_noise_floor = float(self.get_parameter("effort_noise_floor").value)
         self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
         self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
         self._enable_asymmetry_fault = bool(self.get_parameter("enable_asymmetry_fault").value)
         self._max_control_iters = int(self.get_parameter("max_control_iters").value)
+        self._torque_stale_hold_sec = float(self.get_parameter("torque_stale_hold_sec").value)
 
         # ---- validate ----------------------------------------------------------
         if len(self._gripper_joint_names) != 6:
             raise ValueError("gripper_joint_names must contain exactly 6 joints.")
         if self._master_joint_name not in self._gripper_joint_names:
             raise ValueError("master_joint_name must be in gripper_joint_names.")
+
+        if self._effort_contact_threshold <= self._effort_noise_floor:
+            clamped = self._effort_noise_floor * 1.5
+            self.get_logger().error(
+                f"effort_contact_threshold ({self._effort_contact_threshold:.4f}) is not above "
+                f"effort_noise_floor ({self._effort_noise_floor:.4f}) — every torque-mode close "
+                f"will false-trigger on sensor noise.  Clamping contact threshold to "
+                f"{clamped:.4f} (noise_floor × 1.5).  Set effort_contact_threshold > "
+                f"effort_noise_floor in your launch config."
+            )
+            self._effort_contact_threshold = clamped
 
         # ---- load calibration table -------------------------------------------
         self._table_angles: np.ndarray
@@ -706,35 +726,38 @@ class RG2Controller(Node):
             commanded_angle by torque_probe_step_rad per tick toward
             CLOSE_POSITION.
 
-            PRIMARY STOP — effort >= effort_contact_threshold:
-                STOP immediately and HOLD the current commanded_angle.
-                stop_reason = "force_threshold".
+            On every iteration the order is strictly:
+              1. FRESHNESS GATE — require a joint_state with a newer
+                 header.stamp than the one consumed on the prior iteration.
+                 If the wall-clock gap since the last fresh sample exceeds
+                 torque_stale_hold_sec, hold the current commanded angle and
+                 skip all further checks for this iteration.  A stale sample
+                 is never treated as safe-to-continue.
+              2. HARD GUARD — effort >= goal.force_threshold → stop immediately.
+                 stop_reason = "force_threshold".
+              3. PRIMARY STOP — effort >= effort_contact_threshold → HOLD the
+                 current commanded_angle and stop immediately (no further step).
+                 stop_reason = "force_threshold".
+              4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
+                 effort_plateau_ticks while effort is non-negligible.  Catches
+                 slow contact build-up below the primary threshold.
+                 stop_reason = "force_threshold".
+              5. PROBE STEP — advance commanded_angle by torque_probe_step_rad
+                 toward CLOSE_POSITION, clamped to floor_angle (safety floor,
+                 never a stop condition).
 
-            HARD GUARD — effort >= goal.force_threshold:
-                Stop immediately.  stop_reason = "force_threshold".
-
-            PLATEAU CONFIRM (secondary):
-                Tracks |d_effort/dt| independently.  Fires if effort rises and
-                plateaus before crossing the primary threshold.
-                stop_reason = "force_threshold".
-
-            target_width_m is a safety floor only: commanded_angle is capped at
-            angle_for_width(target_width_m) so the gripper never closes tighter
-            than expected.  It does NOT produce a "width_reached" stop.
-
-            Fresh-effort safety: before each probe step, a joint_state message
-            with a newer header.stamp than the one used in the previous step is
-            required.  If none arrives within 2× control_period, the step is
-            skipped and the commanded angle is held.
+            target_width_m is a safety floor ONLY: commanded_angle is capped at
+            angle_for_width(target_width_m).  It does NOT produce a
+            "width_reached" stop.
 
             Asymmetry (left_y + right_y in base frame) is a feedback diagnostic
-            only; never a stop condition (unless enable_asymmetry_fault).
-            timeout after max_control_iters.  stop_reason = "timeout".
+            only; never a stop condition unless enable_asymmetry_fault.
+            Timeout after max_control_iters → stop_reason = "timeout".
         """
         goal: GripperGuardedMove.Goal = goal_handle.request
 
         target_width = float(goal.target_width_m)
-        force_threshold = float(goal.force_threshold) if goal.force_threshold > 0.0 else 0.45
+        force_threshold = float(goal.force_threshold) if goal.force_threshold > 0.0 else 0.18
         mode = str(goal.mode) if goal.mode else "torque"
         tol = (
             float(goal.width_tolerance_m)
@@ -785,18 +808,20 @@ class RG2Controller(Node):
                 current_angle = self._open_position
             commanded_angle = current_angle
 
-            # Safety floor: never command tighter than the expected grasp width.
-            # This is a clamp on commanded_angle, not a stop condition.
+            # Safety floor: cap commanded_angle here, never a stop condition.
             floor_angle = self.angle_for_width(target_width)
 
             prev_effort: float = 0.0
             plateau_count = 0
             dt = self._control_period_sec
-            # Max time to wait for a fresh joint_state before holding position.
-            fresh_wait_sec = 2.0 * dt
 
+            # Snapshot the current stamp as "already used" so the first
+            # iteration must wait for a genuinely new joint_state.
             with self._state_lock:
                 last_used_stamp = self._latest_joint_state_stamp
+            # Wall-clock time when the last fresh sample was consumed.
+            # Initialised to now so the stale window begins at loop entry.
+            last_fresh_wall_time: float = time.time()
 
             for _ in range(self._max_control_iters):
                 if goal_handle.is_cancel_requested:
@@ -809,41 +834,47 @@ class RG2Controller(Node):
                     result.message = "Cancelled."
                     return result
 
-                # --- Require a fresh joint_state before each probe step ---
-                # /joint_states averages 50 Hz but can stall ~286 ms; never
-                # advance the probe on a stale effort reading.
-                wait_deadline = time.time() + fresh_wait_sec
-                got_fresh = False
-                while time.time() < wait_deadline:
-                    with self._state_lock:
-                        current_stamp = self._latest_joint_state_stamp
-                    if current_stamp is not None and current_stamp != last_used_stamp:
-                        got_fresh = True
-                        break
-                    time.sleep(0.001)
+                # ── 1. FRESHNESS GATE ─────────────────────────────────────
+                # /joint_states averages 50 Hz but can stall ~286 ms.  Read
+                # the latest stamp non-blocking; if it is the same as the
+                # one already consumed, no new data has arrived.
+                with self._state_lock:
+                    current_stamp = self._latest_joint_state_stamp
+                    candidate_effort = abs(
+                        self._latest_joint_efforts.get(self._master_joint_name, 0.0)
+                    )
+
+                got_fresh = (
+                    current_stamp is not None and current_stamp != last_used_stamp
+                )
 
                 if not got_fresh:
-                    self.get_logger().warn(
-                        "torque mode: no fresh joint_state — holding position",
-                        throttle_duration_sec=1.0,
-                    )
+                    # No new sample — check how long we have been stale.
+                    stale_sec = time.time() - last_fresh_wall_time
+                    if stale_sec >= self._torque_stale_hold_sec:
+                        self.get_logger().warn(
+                            f"torque mode: no fresh joint_state for "
+                            f"{stale_sec*1000:.0f} ms — holding position",
+                            throttle_duration_sec=1.0,
+                        )
                     fb.current_width_m = final_width
                     fb.current_effort = final_effort
                     fb.asymmetry_m = 0.0
                     fb.phase = "hold_stale"
                     goal_handle.publish_feedback(fb)
+                    time.sleep(dt)
                     continue
 
-                # --- Read fresh effort (stamp-gated) ---
-                with self._state_lock:
-                    last_used_stamp = self._latest_joint_state_stamp
-                    effort = abs(self._latest_joint_efforts.get(self._master_joint_name, 0.0))
+                # Fresh sample confirmed — consume it.
+                last_used_stamp = current_stamp
+                last_fresh_wall_time = time.time()
+                effort = candidate_effort
 
                 d_effort = (effort - prev_effort) / dt
                 prev_effort = effort
                 final_effort = effort
 
-                # --- Asymmetry diagnostic (TF-based, feedback only) ---
+                # ── Asymmetry diagnostic (TF-based, feedback only) ────────
                 asymmetry_m = 0.0
                 tf_result = self._read_tf_width()
                 if tf_result is not None:
@@ -861,24 +892,28 @@ class RG2Controller(Node):
                 fb.phase = "closing"
                 goal_handle.publish_feedback(fb)
 
-                # HARD GUARD: over-force — stop immediately
+                # ── 2. HARD GUARD: over-force ─────────────────────────────
                 if effort >= force_threshold:
                     stop_reason = "force_threshold"
                     break
 
-                # PRIMARY STOP: instant contact — hold commanded angle, stop
+                # ── 3. PRIMARY STOP: instant contact ──────────────────────
                 if effort >= self._effort_contact_threshold:
-                    self._command_angle(commanded_angle)
+                    self._command_angle(commanded_angle)  # hold
                     stop_reason = "force_threshold"
                     break
 
-                # PLATEAU CONFIRM (secondary): catches gradual contact build-up
-                # that plateaus below the primary threshold.
-                if effort > self._effort_contact_threshold * 0.2:
+                # ── 4. PLATEAU CONFIRM (secondary) ────────────────────────
+                # Catches slow effort build-up that stalls just below the
+                # primary threshold without ever crossing it.  Gate requires
+                # effort clearly above the noise floor AND close to the primary
+                # threshold — prevents false-positive trips on resting noise
+                # (noise floor ~0.028 would satisfy the old * 0.2 gate at rest).
+                if effort > max(self._effort_noise_floor, self._effort_contact_threshold * 0.8):
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:
-                            self._command_angle(commanded_angle)
+                            self._command_angle(commanded_angle)  # hold
                             stop_reason = "force_threshold"
                             break
                     else:
@@ -891,8 +926,9 @@ class RG2Controller(Node):
                     stop_reason = "error"
                     break
 
-                # Probe one step toward CLOSE_POSITION (safety floor applied).
-                # Asymmetry is never a stop; floor is never a stop condition.
+                # ── 5. PROBE STEP ─────────────────────────────────────────
+                # Advance toward CLOSE_POSITION; floor_angle is a clamp only,
+                # never a stop.
                 next_angle = min(
                     commanded_angle + self._torque_probe_step_rad,
                     self._close_position,

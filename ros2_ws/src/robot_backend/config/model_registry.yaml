@@ -82,7 +82,7 @@ objects:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
         grasp_width_m: 0.04      # expected contact width [m]; verification input, not a command
-        force_threshold_n: 0.4  # effort cap: smaller 4 cm cube; slightly below the rigid plateau
+        force_threshold_n: 0.18  # effort cap: smaller 4 cm cube; slightly below the rigid plateau
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
