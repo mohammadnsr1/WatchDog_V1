@@ -53,11 +53,7 @@ DEFAULT_MOVE_GROUP_ACTION = "/move_action"
 DEFAULT_IK_SERVICE_NAME = "/compute_ik"
 DEFAULT_JOINT_STATE_TOPIC = "/joint_states"
 DEFAULT_GET_PLANNING_SCENE_SERVICE = "/get_planning_scene"
-_DEFAULT_ALLOWED_PLANNING_TIME = 10.0
-_DEFAULT_NUM_PLANNING_ATTEMPTS = 10
 _DEFAULT_ACTION_TIMEOUT = 30.0
-_DEFAULT_GOAL_POSITION_TOLERANCE_M = 0.005
-_DEFAULT_GOAL_ORIENTATION_TOLERANCE_RAD = 0.01
 _DEFAULT_IK_TIMEOUT = 5.0
 _INITIAL_JOINT_STATE_TIMEOUT = 1.0
 _DEFAULT_TF_LOOKUP_TIMEOUT_SEC = 2.0
@@ -226,26 +222,22 @@ class ROSMoveItMotionBackend(MotionBackend):
                 "response": joint_result["response"],
             }
 
-        allowed_planning_time = float(
-            kwargs.get("allowed_planning_time", _DEFAULT_ALLOWED_PLANNING_TIME)
-        )
-        num_planning_attempts = int(
-            kwargs.get("num_planning_attempts", _DEFAULT_NUM_PLANNING_ATTEMPTS)
-        )
+        # Policy defaults for these tunables live in motion_mcp_server.py, which
+        # always passes them explicitly; the literals below are only a
+        # last-resort mechanism default for direct backend callers.
+        allowed_planning_time = float(kwargs.get("allowed_planning_time", 10.0))
+        num_planning_attempts = int(kwargs.get("num_planning_attempts", 10))
         max_velocity_scaling_factor = float(
-            kwargs.get("max_velocity_scaling_factor", 1.0)
+            kwargs.get("max_velocity_scaling_factor", 0.3)
         )
         max_acceleration_scaling_factor = float(
-            kwargs.get("max_acceleration_scaling_factor", 1.0)
+            kwargs.get("max_acceleration_scaling_factor", 0.1)
         )
-        position_tolerance_m = float(
-            kwargs.get("position_tolerance_m", _DEFAULT_GOAL_POSITION_TOLERANCE_M)
-        )
+        # 0.001 matches the single owned value in motion_mcp_server.py
+        # (_DEFAULT_POSITION_TOLERANCE_M); this is not a second tuning knob.
+        position_tolerance_m = float(kwargs.get("position_tolerance_m", 0.001))
         orientation_tolerance_rad = float(
-            kwargs.get(
-                "orientation_tolerance_rad",
-                _DEFAULT_GOAL_ORIENTATION_TOLERANCE_RAD,
-            )
+            kwargs.get("orientation_tolerance_rad", 0.01)
         )
         action_timeout_sec = float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT))
         collision_retreat_distance_m = float(
@@ -327,18 +319,17 @@ class ROSMoveItMotionBackend(MotionBackend):
         """Plan and execute a motion to explicit joint targets."""
 
         normalized_joint_positions = self._normalize_joint_positions(joint_positions)
-        allowed_planning_time = float(
-            kwargs.get("allowed_planning_time", _DEFAULT_ALLOWED_PLANNING_TIME)
-        )
+        # Policy defaults for these tunables live in motion_mcp_server.py, which
+        # always passes them explicitly; the literals below are only a
+        # last-resort mechanism default for direct backend callers.
+        allowed_planning_time = float(kwargs.get("allowed_planning_time", 10.0))
 
         goal = MoveGroup.Goal()
         goal.request = self._build_joint_motion_plan_request(
             joint_positions=normalized_joint_positions,
             planning_group=planning_group,
             allowed_planning_time=allowed_planning_time,
-            num_planning_attempts=int(
-                kwargs.get("num_planning_attempts", _DEFAULT_NUM_PLANNING_ATTEMPTS)
-            ),
+            num_planning_attempts=int(kwargs.get("num_planning_attempts", 10)),
             max_velocity_scaling_factor=float(
                 kwargs.get("max_velocity_scaling_factor", 1.0)
             ),
