@@ -24,11 +24,20 @@ RG2_TOUCH_LINKS: list[str] = [
     "tcp",
 ]
 
+# Post-grasp width sanity check: how far final_width_m may deviate from the
+# registry's expected grasp_width_m before a "successful" contact is rejected
+# as implausible. Distinct from DEFAULT_WIDTH_TOLERANCE_M below, which is the
+# GripperGuardedMove goal's own position tolerance, not a grasp outcome check.
 GRASP_WIDTH_TOLERANCE_M: float = 0.010   # ±10 mm post-grasp width check
 # Clearance applied to the safety-floor target so the floor sits inside the
 # object, guaranteeing mechanical contact before the floor clamp stops progress.
 GRASP_CLEARANCE_M: float = 0.003
-DEFAULT_FORCE_THRESHOLD: float = 0.45
+# Fallback only, used when the registry entry lacks force_threshold_n.
+# Matches the controller's hard-guard default in rg2_controller.py; per-object
+# tuned overrides belong in the registry's spec.grasp.force_threshold_n, not here.
+DEFAULT_FORCE_THRESHOLD: float = 0.18
+# Guarded-move goal position tolerance (width_tolerance_m on the action goal),
+# not a post-grasp sanity check — see GRASP_WIDTH_TOLERANCE_M above for that.
 DEFAULT_WIDTH_TOLERANCE_M: float = 0.003
 GUARDED_MOVE_ACTION = "/rg2_controller/guarded_move"
 ACTION_SERVER_TIMEOUT_SEC: float = 5.0
@@ -137,14 +146,6 @@ def grasp_skill(
     registry: dict[str, Any],
     attach_link_name: str = "tcp",
     touch_links: Sequence[str] | None = None,
-    # Legacy params kept for call-site compatibility; not used in action path
-    joint_name: str = "finger_joint",
-    n_steps: int = 20,
-    step_pause_sec: float = 0.10,
-    plateau_window: int = 4,
-    plateau_effort_delta: float = 0.02,
-    plateau_position_delta_rad: float = 0.002,
-    air_close_floor: float = 0.05,
     grasp_width_tolerance_m: float = GRASP_WIDTH_TOLERANCE_M,
 ) -> dict[str, Any]:
     """Torque-probed grasp via the GripperGuardedMove action server (mode='torque').

@@ -234,12 +234,14 @@ if mcp is not None:
     def grasp(object_id: str) -> dict[str, Any]:
         """Run the RG2 guarded-move action and attach object_id on confirmed contact.
 
-        The backend opens first, sends a `GripperGuardedMove` goal to the
-        controller's guarded action endpoint, and treats stop reasons
-        `width_reached` or `force_threshold` as contact. The resulting width is
-        then checked against the registry spec before the object is attached.
-        Returns structured provenance on both success and failure paths and does
-        not verify that the object remains grasped through later motion.
+        The backend opens the gripper, then sends a torque-mode
+        `GripperGuardedMove` goal that closes the fingers until measured
+        effort crosses the contact threshold; only the `force_threshold` stop
+        reason counts as confirmed contact. The resulting width is then
+        checked against the registry spec as a sanity bound before the object
+        is attached. Returns structured provenance on both success and
+        failure paths and does not verify that the object remains grasped
+        through later motion.
 
         Parameters
         ----------
