@@ -114,7 +114,7 @@ DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # Contact threshold: above worst-case idle (~0.027) with margin, below fast-rising
 # hard-contact effort (~0.05–0.1).  Comparisons use abs(effort) — idle ranges
 # from about -0.026 to +0.027 depending on gripper orientation/gravity loading.
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.1
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.18
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
