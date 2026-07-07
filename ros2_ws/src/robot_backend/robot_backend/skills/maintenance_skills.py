@@ -13,9 +13,14 @@ Ownership model reminder:
   Neither state  — object is absent from MoveIt (needs a sync to re-appear).
 
 Recovery contract:
-  reset_object_state  — single-object reset to WORLD_TRACKED, idempotent.
-  recover_scene       — reset every tracked object + clear the octomap.
-  get_scene_summary   — read-only audit of MoveIt's current beliefs.
+  reset_object_state       — single-object reset to WORLD_TRACKED, idempotent.
+  recover_scene            — reset every tracked object + clear the octomap.
+  get_scene_summary        — read-only audit of MoveIt's current beliefs.
+  set_permitted_contacts   — apply registry-declared permitted-contact pairs
+                             to MoveIt's Allowed Collision Matrix, once per
+                             session (not a recovery primitive, but lives
+                             here alongside the other scene-backend-only
+                             skills).
 """
 
 from __future__ import annotations
@@ -166,4 +171,45 @@ def get_scene_summary(
         "world_object_count": len(world_objects),
         "attached_object_count": len(attached_objects),
         "octomap_voxel_count": None,
+    }
+
+
+@emit_skill_events
+def set_permitted_contacts(
+    backend: RobotBackend,
+    *,
+    registry: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply the registry's declared permitted-contact pairs to the ACM.
+
+    Reads registry["permitted_contacts"] (defaulting to an empty list when
+    absent), validates each pair references two known registry object IDs,
+    and applies them via backend.scene.set_permitted_contacts(). A typo'd
+    object_id raises immediately rather than silently being a no-op.
+    """
+    known_object_ids = set(registry.get("objects", {}).keys())
+    raw_pairs = registry.get("permitted_contacts") or []
+
+    pairs: list[tuple[str, str]] = []
+    for raw_pair in raw_pairs:
+        if not isinstance(raw_pair, (list, tuple)) or len(raw_pair) != 2:
+            raise ValueError(
+                f"permitted_contacts entry must be a 2-element list, got {raw_pair!r}."
+            )
+        a, b = raw_pair
+        for object_id in (a, b):
+            if object_id not in known_object_ids:
+                raise ValueError(
+                    f"permitted_contacts references unknown object_id {object_id!r}; "
+                    f"known objects are {sorted(known_object_ids)}."
+                )
+        pairs.append((a, b))
+
+    result = backend.scene.set_permitted_contacts(pairs=pairs)
+
+    return {
+        "ok": result.get("ok", False),
+        "command": "set_permitted_contacts",
+        "pairs": [[a, b] for a, b in pairs],
+        "result": result,
     }

@@ -33,6 +33,18 @@
 #   limits.max_contact_force_n — invariant upper bound on contact force [N]
 #                                (hardware safety limit; distinct from force_threshold_n)
 
+# permitted_contacts: object pairs that are allowed to physically touch
+# for the duration of a run (e.g. because the assembly plan requires
+# them to be in contact at some point). Declared once here and applied
+# to MoveIt's Allowed Collision Matrix at task start — persistent for
+# the session, not re-detected per attach/detach. This does NOT mean any
+# contact between the pair is automatically conformant: it only
+# suppresses the planner's collision block. WatchDog's own contact
+# predicates still judge whether a given contact event, at a given step,
+# matches what the contract expects.
+permitted_contacts:
+  - [green_cube, red_cube]
+
 objects:
   red_cube:
     enabled: true

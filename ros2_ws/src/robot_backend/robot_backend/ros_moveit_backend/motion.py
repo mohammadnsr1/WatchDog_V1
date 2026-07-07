@@ -18,19 +18,13 @@ from moveit_msgs.msg import MotionPlanRequest
 from moveit_msgs.msg import MoveItErrorCodes
 from moveit_msgs.msg import OrientationConstraint
 from moveit_msgs.msg import PlanningOptions
-from moveit_msgs.msg import PlanningSceneComponents
 from moveit_msgs.msg import PositionConstraint
 from moveit_msgs.msg import RobotState
-from moveit_msgs.srv import GetPlanningScene
 from moveit_msgs.srv import GetPositionIK
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.time import Time
 from sensor_msgs.msg import JointState
 from shape_msgs.msg import SolidPrimitive
-from tf2_ros import Buffer
-from tf2_ros import TransformException
-from tf2_ros import TransformListener
 
 from robot_backend.interfaces.motion_backend import MotionBackend
 from robot_backend.interfaces.motion_backend import PoseLike
@@ -52,16 +46,9 @@ DEFAULT_TCP_FRAME = "tcp"
 DEFAULT_MOVE_GROUP_ACTION = "/move_action"
 DEFAULT_IK_SERVICE_NAME = "/compute_ik"
 DEFAULT_JOINT_STATE_TOPIC = "/joint_states"
-DEFAULT_GET_PLANNING_SCENE_SERVICE = "/get_planning_scene"
 _DEFAULT_ACTION_TIMEOUT = 30.0
 _DEFAULT_IK_TIMEOUT = 5.0
 _INITIAL_JOINT_STATE_TIMEOUT = 1.0
-_DEFAULT_TF_LOOKUP_TIMEOUT_SEC = 2.0
-_DEFAULT_GET_PLANNING_SCENE_TIMEOUT_SEC = 2.0
-# Tool-local axis (in the tcp frame) pointing from the wrist toward the
-# fingers, consistent with the [0, 0, 1] approach-vector convention used by
-# the grasp-approach helpers in motion_mcp_server.
-_DEFAULT_COLLISION_RETREAT_DISTANCE_M = 0.03
 
 _ERROR_CODE_NAMES = {
     getattr(MoveItErrorCodes, name): name
@@ -116,14 +103,6 @@ class ROSMoveItMotionBackend(MotionBackend):
             GetPositionIK,
             self._ik_service_name,
         )
-        self._get_planning_scene_client = self._node.create_client(
-            GetPlanningScene,
-            DEFAULT_GET_PLANNING_SCENE_SERVICE,
-        )
-        self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(
-            self._tf_buffer, self._node, spin_thread=False
-        )
 
     @property
     def node(self) -> Node:
@@ -155,14 +134,6 @@ class ROSMoveItMotionBackend(MotionBackend):
         `solve_ik_first=True` is available only as a debug path. It resolves the
         target pose through `/compute_ik` first, then reuses the joint-space
         planning path. Normal planning should leave this disabled.
-
-        If planning fails with START_STATE_IN_COLLISION while an object is
-        currently attached to the robot (the common case right after a grasp,
-        where the attached object still touches whatever it was resting on),
-        this method backs the TCP straight out along its current approach
-        axis by `collision_retreat_distance_m` (default 0.03 m) and retries
-        the original goal once. Set `collision_retreat_distance_m=0.0` to
-        disable this retry. Any other failure propagates unchanged.
         """
 
         requested_pose_stamped = self._coerce_pose_stamped(target_pose)
@@ -240,12 +211,6 @@ class ROSMoveItMotionBackend(MotionBackend):
             kwargs.get("orientation_tolerance_rad", 0.01)
         )
         action_timeout_sec = float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT))
-        collision_retreat_distance_m = float(
-            kwargs.get(
-                "collision_retreat_distance_m",
-                _DEFAULT_COLLISION_RETREAT_DISTANCE_M,
-            )
-        )
 
         def _plan_and_execute(pose_stamped: PoseStamped) -> Any:
             goal = MoveGroup.Goal()
@@ -265,34 +230,7 @@ class ROSMoveItMotionBackend(MotionBackend):
                 goal, timeout_sec=action_timeout_sec
             )
 
-        collision_retreat_info: dict[str, Any] = {
-            "triggered": False,
-            "distance_m": collision_retreat_distance_m,
-        }
-
-        try:
-            result_response = _plan_and_execute(tcp_target_pose_stamped)
-        except MoveGroupPlanningError as exc:
-            retreat_eligible = (
-                exc.error_code_val == MoveItErrorCodes.START_STATE_IN_COLLISION
-                and collision_retreat_distance_m > 0.0
-                and self._has_attached_collision_objects()
-            )
-            if not retreat_eligible:
-                raise
-
-            retreat_pose_stamped = self._compute_retreat_pose_stamped(
-                tcp_frame=tcp_frame,
-                planning_frame=tcp_target_pose_stamped.header.frame_id,
-                retreat_distance_m=collision_retreat_distance_m,
-            )
-            _plan_and_execute(retreat_pose_stamped)
-            result_response = _plan_and_execute(tcp_target_pose_stamped)
-            collision_retreat_info = {
-                "triggered": True,
-                "distance_m": collision_retreat_distance_m,
-                "retreat_pose": self._pose_stamped_to_dict(retreat_pose_stamped),
-            }
+        result_response = _plan_and_execute(tcp_target_pose_stamped)
 
         return {
             "ok": True,
@@ -306,7 +244,6 @@ class ROSMoveItMotionBackend(MotionBackend):
             "tcp_frame": tcp_frame,
             "planning_group": planning_group,
             "solve_ik_first": False,
-            "collision_retreat": collision_retreat_info,
             "response": self._summarize_move_group_result(result_response),
         }
 
@@ -653,128 +590,6 @@ class ROSMoveItMotionBackend(MotionBackend):
         robot_state.joint_state = joint_state
         robot_state.is_diff = True
         return robot_state
-
-    def _has_attached_collision_objects(
-        self, timeout_sec: float = _DEFAULT_GET_PLANNING_SCENE_TIMEOUT_SEC
-    ) -> bool:
-        """Query the live monitored planning scene for attached collision objects."""
-
-        if not self._get_planning_scene_client.wait_for_service(timeout_sec=2.0):
-            raise RuntimeError(
-                f"MoveIt planning scene service {DEFAULT_GET_PLANNING_SCENE_SERVICE} "
-                "is not available within 2.0 seconds."
-            )
-
-        request = GetPlanningScene.Request()
-        request.components = PlanningSceneComponents()
-        request.components.components = (
-            PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
-        )
-
-        future = self._get_planning_scene_client.call_async(request)
-        rclpy.spin_until_future_complete(
-            self._node,
-            future,
-            timeout_sec=timeout_sec,
-        )
-        if not future.done():
-            raise TimeoutError(
-                f"Timed out waiting for {DEFAULT_GET_PLANNING_SCENE_SERVICE} response."
-            )
-
-        exception = future.exception()
-        if exception is not None:
-            raise RuntimeError(
-                f"{DEFAULT_GET_PLANNING_SCENE_SERVICE} call failed: {exception}"
-            ) from exception
-
-        response = future.result()
-        if response is None:
-            raise RuntimeError(
-                f"{DEFAULT_GET_PLANNING_SCENE_SERVICE} returned no response."
-            )
-
-        return len(response.scene.robot_state.attached_collision_objects) > 0
-
-    def _lookup_tcp_pose_stamped(
-        self,
-        *,
-        planning_frame: str,
-        tcp_frame: str,
-        timeout_sec: float = _DEFAULT_TF_LOOKUP_TIMEOUT_SEC,
-    ) -> PoseStamped:
-        """Look up the current pose of `tcp_frame` in `planning_frame` via TF."""
-
-        deadline_ns = self._node.get_clock().now().nanoseconds + int(
-            timeout_sec * 1e9
-        )
-        last_exception: Exception | None = None
-        while rclpy.ok():
-            try:
-                transform = self._tf_buffer.lookup_transform(
-                    planning_frame,
-                    tcp_frame,
-                    Time(),
-                )
-                pose_stamped = PoseStamped()
-                pose_stamped.header.frame_id = planning_frame
-                pose_stamped.pose.position.x = transform.transform.translation.x
-                pose_stamped.pose.position.y = transform.transform.translation.y
-                pose_stamped.pose.position.z = transform.transform.translation.z
-                pose_stamped.pose.orientation = transform.transform.rotation
-                return pose_stamped
-            except TransformException as exc:
-                last_exception = exc
-
-            if self._node.get_clock().now().nanoseconds >= deadline_ns:
-                break
-            rclpy.spin_once(self._node, timeout_sec=0.1)
-
-        raise RuntimeError(
-            f"TF lookup failed {planning_frame} -> {tcp_frame} within "
-            f"{timeout_sec:.1f}s: {last_exception}"
-        )
-
-    def _compute_retreat_pose_stamped(
-        self,
-        *,
-        tcp_frame: str,
-        planning_frame: str,
-        retreat_distance_m: float,
-    ) -> PoseStamped:
-        """Back the TCP out along the reverse of its current approach axis.
-
-        The tool-local +z axis (wrist -> fingers) is rotated into
-        `planning_frame` using the TCP's current orientation, then the TCP is
-        moved `retreat_distance_m` opposite that direction. Because the
-        gripper is already oriented along its approach axis immediately
-        after grasping, this reverses the approach for both top-down and
-        non-top-down grasps without needing the original approach vector.
-        """
-
-        current_tcp_pose = self._lookup_tcp_pose_stamped(
-            planning_frame=planning_frame, tcp_frame=tcp_frame
-        )
-        orientation = current_tcp_pose.pose.orientation
-        qx, qy, qz, qw = orientation.x, orientation.y, orientation.z, orientation.w
-
-        approach_x = 2.0 * (qx * qz + qw * qy)
-        approach_y = 2.0 * (qy * qz - qw * qx)
-        approach_z = 1.0 - 2.0 * (qx * qx + qy * qy)
-
-        retreat_pose_stamped = PoseStamped()
-        retreat_pose_stamped.header.frame_id = planning_frame
-        retreat_pose_stamped.pose.orientation = orientation
-        retreat_pose_stamped.pose.position.x = (
-            current_tcp_pose.pose.position.x - approach_x * retreat_distance_m
-        )
-        retreat_pose_stamped.pose.position.y = (
-            current_tcp_pose.pose.position.y - approach_y * retreat_distance_m
-        )
-        retreat_pose_stamped.pose.position.z = (
-            current_tcp_pose.pose.position.z - approach_z * retreat_distance_m
-        )
-        return retreat_pose_stamped
 
     def _build_planning_options(self, kwargs: Mapping[str, Any]) -> PlanningOptions:
         options = PlanningOptions()

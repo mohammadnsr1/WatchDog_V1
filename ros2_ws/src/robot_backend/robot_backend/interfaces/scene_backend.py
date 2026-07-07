@@ -13,8 +13,6 @@ class SceneBackend(ABC):
 
     Conceptual behavior:
     - `add_collision_object` adds a known object into the planning scene
-    - `allow_touch` permits temporary contact between an object and selected
-      gripper links
     - `attach_object` makes the planner treat the object as attached to the
       robot
     - `detach_object` releases the object from the robot
@@ -34,10 +32,6 @@ class SceneBackend(ABC):
     @abstractmethod
     def remove_collision_object(self, object_id: str) -> Any:
         """Remove a collision object from the planning scene."""
-
-    @abstractmethod
-    def allow_touch(self, object_id: str, link_names: Sequence[str]) -> Any:
-        """Temporarily allow contact between an object and selected links."""
 
     @abstractmethod
     def attach_object(

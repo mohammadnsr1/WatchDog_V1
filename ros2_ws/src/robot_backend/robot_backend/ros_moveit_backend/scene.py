@@ -9,6 +9,8 @@ from typing import Any
 import rclpy
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import PoseStamped
+from moveit_msgs.msg import AllowedCollisionEntry
+from moveit_msgs.msg import AllowedCollisionMatrix
 from moveit_msgs.msg import AttachedCollisionObject
 from moveit_msgs.msg import CollisionObject
 from moveit_msgs.msg import PlanningScene
@@ -54,7 +56,6 @@ class ROSMoveItSceneBackend(SceneBackend):
         self._get_planning_scene_service = get_planning_scene_service
         self._clear_octomap_service = clear_octomap_service
         self._sync_scene_objects_service = sync_scene_objects_service
-        self._touch_links_by_object: dict[str, list[str]] = {}
         self._collision_object_cache: dict[str, CollisionObject] = {}
         self._apply_planning_scene_client = self._node.create_client(
             ApplyPlanningScene,
@@ -140,7 +141,6 @@ class ROSMoveItSceneBackend(SceneBackend):
 
         if not world_exists_before:
             self._collision_object_cache.pop(normalized_object_id, None)
-            self._touch_links_by_object.pop(normalized_object_id, None)
             return {
                 "ok": True,
                 "command": "remove_collision_object",
@@ -170,7 +170,6 @@ class ROSMoveItSceneBackend(SceneBackend):
         verified_absent = self._verify_world_object_absent(normalized_object_id)
         if verified_absent:
             self._collision_object_cache.pop(normalized_object_id, None)
-        self._touch_links_by_object.pop(normalized_object_id, None)
 
         return {
             "ok": verified_absent,
@@ -184,27 +183,6 @@ class ROSMoveItSceneBackend(SceneBackend):
             "response": self._summarize_apply_planning_scene_response(response),
         }
 
-    def allow_touch(
-        self,
-        object_id: str,
-        link_names: Sequence[str],
-    ) -> dict[str, Any]:
-        """Store touch links for use by later attach operations."""
-
-        normalized_object_id = self._normalize_object_id(object_id)
-        normalized_link_names = self._normalize_link_names(link_names)
-        self._touch_links_by_object[normalized_object_id] = normalized_link_names
-        return {
-            "ok": True,
-            "command": "allow_touch",
-            "object_id": normalized_object_id,
-            "touch_links": list(normalized_link_names),
-            "note": (
-                "Touch links are cached locally for attach_object(). "
-                "AllowedCollisionMatrix updates are not implemented yet."
-            ),
-        }
-
     def attach_object(
         self,
         object_id: str,
@@ -216,9 +194,7 @@ class ROSMoveItSceneBackend(SceneBackend):
         normalized_object_id = self._normalize_object_id(object_id)
         normalized_link_name = self._normalize_required_string(link_name, "link_name")
         if touch_links is None:
-            resolved_touch_links = list(
-                self._touch_links_by_object.get(normalized_object_id, [])
-            )
+            resolved_touch_links = []
         else:
             resolved_touch_links = self._normalize_link_names(touch_links)
 
@@ -382,6 +358,96 @@ class ROSMoveItSceneBackend(SceneBackend):
             "skipped_object_ids": list(response.skipped_object_ids),
             "message": str(response.message),
         }
+
+    def get_allowed_collision_matrix(self) -> dict[str, Any]:
+        """Read-only fetch of MoveIt's current Allowed Collision Matrix."""
+
+        acm = self._fetch_allowed_collision_matrix()
+        return {
+            "ok": True,
+            "command": "get_allowed_collision_matrix",
+            "entry_names": list(acm.entry_names),
+            "entry_values": [list(entry.enabled) for entry in acm.entry_values],
+        }
+
+    def set_permitted_contacts(
+        self,
+        pairs: Sequence[tuple[str, str]],
+    ) -> dict[str, Any]:
+        """Persistently allow contact between each declared object pair.
+
+        Fetches the current AllowedCollisionMatrix, extends it with any
+        object not yet present, sets enabled=True symmetrically for each
+        pair, and applies the fully reconstructed matrix as a planning
+        scene diff.
+        """
+
+        normalized_pairs = [
+            (self._normalize_object_id(a), self._normalize_object_id(b))
+            for a, b in pairs
+        ]
+
+        acm = self._fetch_allowed_collision_matrix()
+        entry_names = list(acm.entry_names)
+        entry_values = [list(entry.enabled) for entry in acm.entry_values]
+
+        def _ensure_object(name: str) -> None:
+            if name in entry_names:
+                return
+            for row in entry_values:
+                row.append(False)
+            entry_names.append(name)
+            entry_values.append([False] * len(entry_names))
+
+        for a, b in normalized_pairs:
+            _ensure_object(a)
+            _ensure_object(b)
+
+        for a, b in normalized_pairs:
+            i = entry_names.index(a)
+            j = entry_names.index(b)
+            entry_values[i][j] = True
+            entry_values[j][i] = True
+
+        new_acm = AllowedCollisionMatrix()
+        new_acm.entry_names = entry_names
+        new_acm.entry_values = [
+            AllowedCollisionEntry(enabled=row) for row in entry_values
+        ]
+        new_acm.default_entry_names = list(acm.default_entry_names)
+        new_acm.default_entry_values = list(acm.default_entry_values)
+
+        request = ApplyPlanningScene.Request()
+        request.scene = PlanningScene()
+        request.scene.is_diff = True
+        request.scene.allowed_collision_matrix = new_acm
+
+        response = self._call_service(
+            self._apply_planning_scene_client,
+            request,
+            self._apply_planning_scene_service,
+        )
+
+        return {
+            "ok": bool(response.success),
+            "command": "set_permitted_contacts",
+            "pairs": [[a, b] for a, b in normalized_pairs],
+            "entry_names": entry_names,
+            "response": self._summarize_apply_planning_scene_response(response),
+        }
+
+    def _fetch_allowed_collision_matrix(self) -> AllowedCollisionMatrix:
+        request = GetPlanningScene.Request()
+        request.components = PlanningSceneComponents()
+        request.components.components = (
+            PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
+        )
+        response = self._call_service(
+            self._get_planning_scene_client,
+            request,
+            self._get_planning_scene_service,
+        )
+        return response.scene.allowed_collision_matrix
 
     def _create_node(self) -> Node:
         """Create an internal helper node if one was not supplied."""

@@ -10,6 +10,8 @@ Tools:
   recover_scene        — reset all objects + clear octomap.
   begin_step           — open a WatchDog execution-step recording window.
   end_step             — close the window and declare the claimed outcome.
+  set_permitted_contacts — apply registry-declared permitted-contact pairs
+                           to MoveIt's Allowed Collision Matrix.
 
 Process pattern (same as gripper_mcp_server):
   - Lazy rclpy.init on first tool call.
@@ -42,6 +44,7 @@ from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
 from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
 from robot_backend.skills.maintenance_skills import reset_object_state as reset_object_state_skill
+from robot_backend.skills.maintenance_skills import set_permitted_contacts as set_permitted_contacts_skill
 
 
 try:
@@ -428,6 +431,25 @@ if mcp is not None:
             return _ok(command, step_id=step_id.strip(), claimed_outcome=claimed_outcome)
         except Exception as exc:
             return _error(command, exc, step_id=step_id)
+
+
+    @mcp.tool()
+    def set_permitted_contacts() -> dict[str, Any]:
+        """Apply the registry's declared permitted-contact pairs to MoveIt's
+        Allowed Collision Matrix.
+
+        Reads permitted_contacts from model_registry.yaml and persistently
+        allows each declared object pair to be in contact without being
+        flagged as a planning-time collision. Does not affect any other
+        collision pair.
+        """
+        command = "set_permitted_contacts"
+        try:
+            backend = _ensure_backend()
+            result = set_permitted_contacts_skill(backend, registry=_REGISTRY or {})
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc)
 
 
 def main() -> None:
