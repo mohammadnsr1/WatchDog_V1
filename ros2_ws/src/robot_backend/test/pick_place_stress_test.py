@@ -44,7 +44,6 @@ WORLD_FRAME = "world"            # set to "World" if that's the cube parent fram
 GREEN = "green_cube"
 RED = "red_cube"
 SAFE_POSE_NAME = "ready"
-CUBE_HEIGHT_M = 0.06
 GRASP_WIDTH_M = 0.04
 APPROACH_HEIGHT_M = 0.10
 RIGHT_OFFSET_M = 0.05
@@ -113,6 +112,9 @@ class Cycle:
         self.tf = tf
         self.registry = registry
 
+    def _object_height_m(self, object_id: str) -> float:
+        return float(self.registry["objects"][object_id]["collision"]["dimensions"][2])
+
     def _pick(self):
         g = self.tf.pose(GREEN)
         move_grasp_center_to_pose_skill(
@@ -151,17 +153,23 @@ class Cycle:
             # Task A: green on top of red
             self._pick()
             red = self.tf.pose(RED)
-            self._place(red["x"], red["y"], red["z"] + CUBE_HEIGHT_M)
+            stack_z = (
+                red["z"]
+                + self._object_height_m(RED) / 2.0
+                + self._object_height_m(GREEN) / 2.0
+            )
+            self._place(red["x"], red["y"], stack_z)
             time.sleep(SETTLE_SEC)
             g = self.tf.pose(GREEN)
-            if abs(g["x"] - red["x"]) > 0.03 or abs(g["y"] - red["y"]) > 0.03:
-                return False, f"stack misplaced green={g} red={red}"
+            if (abs(g["x"] - red["x"]) > 0.03 or abs(g["y"] - red["y"]) > 0.03
+                    or abs(g["z"] - stack_z) > 0.01):
+                return False, f"stack misplaced green={g} red={red} expected_z={stack_z:.4f}"
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
 
             # Task B: green 5cm right (-y) of red
             self._pick()
             red = self.tf.pose(RED)
-            tx, ty, tz = red["x"], red["y"] - RIGHT_OFFSET_M, CUBE_HEIGHT_M / 2.0
+            tx, ty, tz = red["x"], red["y"] - RIGHT_OFFSET_M, self._object_height_m(GREEN) / 2.0
             self._place(tx, ty, tz)
             time.sleep(SETTLE_SEC)
             g = self.tf.pose(GREEN)
