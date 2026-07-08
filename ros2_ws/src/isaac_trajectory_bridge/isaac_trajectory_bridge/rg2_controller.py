@@ -124,6 +124,10 @@ DEFAULT_HARD_FORCE_THRESHOLD = 0.18
 DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.18
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
+# Consecutive over-threshold fresh samples required to confirm contact —
+# debounces the instantaneous HARD GUARD / PRIMARY STOP checks against a
+# single noisy transient spike at first surface contact.
+DEFAULT_EFFORT_CONTACT_TICKS = 3
 DEFAULT_ASYMMETRY_THRESHOLD_M = 0.010
 DEFAULT_ENABLE_ASYMMETRY_FAULT = False
 DEFAULT_MAX_CONTROL_ITERS = 400        # used by width mode; torque mode uses wall-clock timeout
@@ -174,6 +178,7 @@ class RG2Controller(Node):
         self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
+        self.declare_parameter("effort_contact_ticks", DEFAULT_EFFORT_CONTACT_TICKS)
         self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
         self.declare_parameter("enable_asymmetry_fault", DEFAULT_ENABLE_ASYMMETRY_FAULT)
         self.declare_parameter("max_control_iters", DEFAULT_MAX_CONTROL_ITERS)
@@ -224,6 +229,7 @@ class RG2Controller(Node):
         self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
+        self._effort_contact_ticks = int(self.get_parameter("effort_contact_ticks").value)
         self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
         self._enable_asymmetry_fault = bool(self.get_parameter("enable_asymmetry_fault").value)
         self._max_control_iters = int(self.get_parameter("max_control_iters").value)
@@ -746,11 +752,15 @@ class RG2Controller(Node):
                  torque_stale_hold_sec, hold the current commanded angle and
                  skip all further checks for this iteration.  A stale sample
                  is never treated as safe-to-continue.
-              2. HARD GUARD — effort >= goal.force_threshold → stop immediately.
-                 stop_reason = "force_threshold".
-              3. PRIMARY STOP — effort >= effort_contact_threshold → HOLD the
-                 current commanded_angle and stop immediately (no further step).
-                 stop_reason = "force_threshold".
+              2/3. HARD GUARD + PRIMARY STOP (debounced) — effort >=
+                 goal.force_threshold OR effort >= effort_contact_threshold on
+                 a fresh sample increments a contact counter; any fresh sample
+                 where neither holds resets it to 0.  Once the counter reaches
+                 effort_contact_ticks consecutive fresh samples, HOLD the
+                 current commanded_angle and stop.  stop_reason =
+                 "force_threshold".  This debounces the instantaneous checks
+                 against a single noisy transient spike at first contact —
+                 sustained contact is required, not a one-sample crossing.
               4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
                  effort_plateau_ticks while effort is non-negligible.  Catches
                  slow contact build-up below the primary threshold.
@@ -831,6 +841,7 @@ class RG2Controller(Node):
 
             prev_effort: float = 0.0
             plateau_count = 0
+            contact_count = 0
             dt = self._control_period_sec
 
             # Snapshot the current stamp as "already used" so the first
@@ -911,17 +922,20 @@ class RG2Controller(Node):
                 fb.phase = "closing"
                 goal_handle.publish_feedback(fb)
 
-                # ── 2. HARD GUARD: over-force ─────────────────────────────
+                # ── 2/3. HARD GUARD + PRIMARY STOP (debounced) ────────────
                 # abs(): idle effort ranges -0.026..+0.027 across orientations.
-                if abs(effort) >= force_threshold:
-                    stop_reason = "force_threshold"
-                    break
-
-                # ── 3. PRIMARY STOP: instant contact ──────────────────────
-                if abs(effort) >= self._effort_contact_threshold:
-                    self._command_angle(commanded_angle)  # hold
-                    stop_reason = "force_threshold"
-                    break
+                # Grasp-phase effort is noisy — a single sample crossing either
+                # threshold is often a transient spike at first surface contact,
+                # not sustained clamp force.  Require effort_contact_ticks
+                # consecutive fresh samples over threshold before stopping.
+                if abs(effort) >= force_threshold or abs(effort) >= self._effort_contact_threshold:
+                    contact_count += 1
+                    if contact_count >= self._effort_contact_ticks:
+                        self._command_angle(commanded_angle)  # hold
+                        stop_reason = "force_threshold"
+                        break
+                else:
+                    contact_count = 0
 
                 # ── 4. PLATEAU CONFIRM (secondary) ────────────────────────
                 # Catches slow effort build-up that stalls just below the
