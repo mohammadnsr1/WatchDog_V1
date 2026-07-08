@@ -1,0 +1,84 @@
+"""Narrow halt authority for WatchDog."""
+
+from __future__ import annotations
+
+import threading
+from typing import Any
+
+from robot_backend.events.schema import HaltPayload, make_event
+
+
+class HaltClient:
+    """Cancel MoveGroup goals without issuing any replacement motion."""
+
+    def __init__(self, node: Any, event_bus: Any, timeout_sec: float = 2.0) -> None:
+        self.node = node
+        self.event_bus = event_bus
+        self.timeout_sec = timeout_sec
+        self._action_client: Any | None = None
+        self._cancel_client: Any | None = None
+        self._CancelGoal: Any | None = None
+        self._GoalInfo: Any | None = None
+        self._lock = threading.Lock()
+
+    def halt(self, step_id: str, monitor_id: str, detail: str) -> dict[str, Any]:
+        ok = False
+        cancel_detail = "cancel not attempted"
+        try:
+            self._ensure_clients()
+            if self._cancel_client is None or self._CancelGoal is None or self._GoalInfo is None:
+                raise RuntimeError("cancel client unavailable")
+            if not self._cancel_client.wait_for_service(timeout_sec=0.2):
+                raise RuntimeError("/move_action/_action/cancel_goal service unavailable")
+            request = self._CancelGoal.Request()
+            request.goal_info = self._GoalInfo()
+            request.goal_info.goal_id.uuid = [0] * 16
+            done = threading.Event()
+            holder: dict[str, Any] = {}
+            future = self._cancel_client.call_async(request)
+
+            def _done(fut: Any) -> None:
+                holder["future"] = fut
+                done.set()
+
+            future.add_done_callback(_done)
+            if done.wait(self.timeout_sec):
+                result = future.result()
+                return_code = getattr(result, "return_code", None)
+                ok = return_code in (None, 0)
+                cancel_detail = f"cancel-all requested; return_code={return_code}"
+            else:
+                cancel_detail = f"cancel-all timed out after {self.timeout_sec:.1f}s"
+        except Exception as exc:
+            cancel_detail = str(exc)
+        finally:
+            self._publish_halt(step_id, monitor_id, detail)
+        return {"ok": bool(ok), "detail": cancel_detail}
+
+    def _ensure_clients(self) -> None:
+        with self._lock:
+            if self._cancel_client is not None:
+                return
+            from action_msgs.msg import GoalInfo
+            from action_msgs.srv import CancelGoal
+            from moveit_msgs.action import MoveGroup
+            from rclpy.action import ActionClient
+
+            # rclpy ActionClient has per-goal cancel APIs, not cancel-all, so WatchDog
+            # uses the action cancel service with an all-zero GoalInfo goal_id.
+            self._action_client = ActionClient(self.node, MoveGroup, "/move_action")
+            self._cancel_client = self.node.create_client(
+                CancelGoal, "/move_action/_action/cancel_goal"
+            )
+            self._CancelGoal = CancelGoal
+            self._GoalInfo = GoalInfo
+
+    def _publish_halt(self, step_id: str, monitor_id: str, detail: str) -> None:
+        try:
+            if self.event_bus is not None:
+                self.event_bus.publish(make_event(
+                    "halt",
+                    HaltPayload(step_id=step_id, monitor_id=monitor_id, detail=detail),
+                ))
+        except Exception:
+            pass

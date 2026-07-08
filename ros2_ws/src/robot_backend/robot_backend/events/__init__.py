@@ -20,8 +20,13 @@ from .schema import (
     EndStepPayload,
     EventEnvelope,
     GraspWidthSource,
+    HaltPayload,
+    MonitorArmedPayload,
+    MonitorDisarmedPayload,
+    MonitorFirePayload,
     SkillEndPayload,
     SkillStartPayload,
+    VerdictPayload,
     make_event,
 )
 
@@ -36,5 +41,10 @@ __all__ = [
     "EndStepPayload",
     "SkillStartPayload",
     "SkillEndPayload",
+    "MonitorArmedPayload",
+    "MonitorFirePayload",
+    "MonitorDisarmedPayload",
+    "HaltPayload",
+    "VerdictPayload",
     "make_event",
 ]

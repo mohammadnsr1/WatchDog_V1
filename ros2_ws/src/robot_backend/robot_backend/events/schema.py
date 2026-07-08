@@ -107,13 +107,74 @@ class SkillEndPayload(BaseModel):
     error: str | None = None
 
 
+class MonitorArmedPayload(BaseModel):
+    """WatchDog monitor arm event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    monitor_id: str
+    monitor_type: str
+    step_id: str
+    params: dict[str, Any]
+    clause: dict[str, Any] | None
+    halt_on_fire: bool
+
+
+class MonitorFirePayload(BaseModel):
+    """WatchDog monitor violation event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    monitor_id: str
+    monitor_type: str
+    step_id: str
+    trigger_wall_ns: int
+    triggering_value: float
+    threshold: float
+    comparison: str
+    clause: dict[str, Any] | None
+    action_taken: str
+
+
+class MonitorDisarmedPayload(BaseModel):
+    """WatchDog monitor disarm event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    monitor_id: str
+    step_id: str
+    reason: str
+
+
+class HaltPayload(BaseModel):
+    """WatchDog halt event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    step_id: str
+    monitor_id: str
+    detail: str
+
+
+class VerdictPayload(BaseModel):
+    """WatchDog conformance verdict event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    step_id: str
+    verdict: str
+    claimed_outcome: str | None
+    clause_results: list[dict[str, Any]]
+    explanation: str
+
+
 class EventEnvelope(BaseModel):
     """Top-level wrapper shared by all event types.
 
     Fields
     ------
     event_id      : UUID4 — deduplication key; stable ordering within one process.
-    event_type    : discriminator — one of begin_step, end_step, skill_start, skill_end.
+    event_type    : discriminator — one of the WatchDog event types.
     timestamp_ns  : time.monotonic_ns() at emission — monotonic, sub-ms precision.
     wall_time_iso : ISO-8601 UTC wall clock — for cross-process / cross-tool alignment.
     payload       : typed payload serialized to plain dict for storage and transport.
@@ -122,15 +183,45 @@ class EventEnvelope(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     event_id: str
-    event_type: Literal["begin_step", "end_step", "skill_start", "skill_end"]
+    event_type: Literal[
+        "begin_step",
+        "end_step",
+        "skill_start",
+        "skill_end",
+        "monitor_fire",
+        "monitor_armed",
+        "monitor_disarmed",
+        "halt",
+        "verdict",
+    ]
     timestamp_ns: int
     wall_time_iso: str
     payload: dict[str, Any]
 
 
 def make_event(
-    event_type: Literal["begin_step", "end_step", "skill_start", "skill_end"],
-    payload: BeginStepPayload | EndStepPayload | SkillStartPayload | SkillEndPayload,
+    event_type: Literal[
+        "begin_step",
+        "end_step",
+        "skill_start",
+        "skill_end",
+        "monitor_fire",
+        "monitor_armed",
+        "monitor_disarmed",
+        "halt",
+        "verdict",
+    ],
+    payload: (
+        BeginStepPayload
+        | EndStepPayload
+        | SkillStartPayload
+        | SkillEndPayload
+        | MonitorFirePayload
+        | MonitorArmedPayload
+        | MonitorDisarmedPayload
+        | HaltPayload
+        | VerdictPayload
+    ),
 ) -> EventEnvelope:
     """Create a timestamped EventEnvelope from a typed payload model."""
     return EventEnvelope(

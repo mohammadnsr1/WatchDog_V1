@@ -26,10 +26,11 @@ _DEFAULT_REGISTRY_PATH = (
 )
 
 # System-wide constants for grasp success criteria clauses.
-# These must stay in sync with gripper_skills.AIR_CLOSE_FLOOR_EFFORT and
-# gripper_skills.GRASP_WIDTH_TOLERANCE_M respectively.
-_GRASP_EFFORT_FLOOR: float = 0.05   # sim effort units — empirical air-close floor
-_GRASP_WIDTH_TOL_M: float = 0.020   # metres — ±20 mm plausibility band
+# Instrument characterization constant: empirical RG2 air-close floor in
+# Isaac Sim, above the ~0.03 idle noise floor.
+_GRASP_EFFORT_FLOOR: float = 0.05
+# Mirrors gripper_skills.GRASP_WIDTH_TOLERANCE_M; keep in sync manually.
+_GRASP_WIDTH_TOL_M: float = 0.005
 
 
 def _load_registry(path: Path | None) -> dict[str, Any]:

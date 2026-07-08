@@ -86,12 +86,12 @@ class TestLoadFromRegistry:
         assert red_cube_contract.version == "1.0"
 
     def test_red_cube_grasp_width(self, red_cube_contract: PickContract) -> None:
-        # From registry spec: grasp_width_m: 0.065
-        assert red_cube_contract.grasp_width_m == pytest.approx(0.065)
+        # From registry spec: grasp_width_m: 0.06
+        assert red_cube_contract.grasp_width_m == pytest.approx(0.06)
 
     def test_green_cube_grasp_width(self, green_cube_contract: PickContract) -> None:
-        # From registry spec: grasp_width_m: 0.045
-        assert green_cube_contract.grasp_width_m == pytest.approx(0.045)
+        # From registry spec: grasp_width_m: 0.04
+        assert green_cube_contract.grasp_width_m == pytest.approx(0.04)
 
     def test_precondition_count(self, red_cube_contract: PickContract) -> None:
         assert len(red_cube_contract.preconditions) == 3
@@ -149,19 +149,19 @@ class TestLoadFromRegistry:
     # ------------------------------------------------------------------
 
     def test_red_cube_force_threshold_n(self, red_cube_contract: PickContract) -> None:
-        # From registry spec.grasp.force_threshold_n: 0.50
-        assert red_cube_contract.force_threshold_n == pytest.approx(0.50)
+        # From registry spec.grasp.force_threshold_n: 0.18
+        assert red_cube_contract.force_threshold_n == pytest.approx(0.18)
 
     def test_green_cube_force_threshold_n(self, green_cube_contract: PickContract) -> None:
-        # From registry spec.grasp.force_threshold_n: 0.45
-        assert green_cube_contract.force_threshold_n == pytest.approx(0.45)
+        # From registry spec.grasp.force_threshold_n: 0.18
+        assert green_cube_contract.force_threshold_n == pytest.approx(0.18)
 
-    def test_green_cube_force_threshold_lower_than_red(
+    def test_green_cube_force_threshold_matches_red(
         self,
         red_cube_contract: PickContract,
         green_cube_contract: PickContract,
     ) -> None:
-        assert green_cube_contract.force_threshold_n < red_cube_contract.force_threshold_n
+        assert green_cube_contract.force_threshold_n == red_cube_contract.force_threshold_n
 
     def test_grasp_effort_plateau_effect_clause(self, red_cube_contract: PickContract) -> None:
         clause = next(
@@ -177,8 +177,8 @@ class TestLoadFromRegistry:
             c for c in red_cube_contract.effects if c.field == "grasp_width_error_m"
         )
         assert clause.comparison == Comparison.LE
-        # Threshold = _GRASP_WIDTH_TOL_M = 0.020
-        assert clause.threshold == pytest.approx(0.020)
+        # Threshold = _GRASP_WIDTH_TOL_M = 0.005
+        assert clause.threshold == pytest.approx(0.005)
         assert clause.unit == "m"
 
     def test_grasp_effort_instantaneous_invariant(self, red_cube_contract: PickContract) -> None:
@@ -187,11 +187,11 @@ class TestLoadFromRegistry:
             if c.field == "grasp_effort_instantaneous"
         )
         assert clause.comparison == Comparison.LE
-        # Threshold sourced from spec.grasp.force_threshold_n = 0.50
-        assert clause.threshold == pytest.approx(0.50)
+        # Threshold sourced from spec.grasp.force_threshold_n = 0.18
+        assert clause.threshold == pytest.approx(0.18)
         assert clause.unit == "sim_effort"
 
-    def test_grasp_effort_cap_differs_per_object(
+    def test_grasp_effort_cap_matches_per_object_registry_values(
         self,
         red_cube_contract: PickContract,
         green_cube_contract: PickContract,
@@ -204,7 +204,7 @@ class TestLoadFromRegistry:
             c.threshold for c in green_cube_contract.invariants
             if c.field == "grasp_effort_instantaneous"
         )
-        assert green_cap < red_cap
+        assert green_cap == red_cap == pytest.approx(0.18)
 
     def test_missing_object_raises(self) -> None:
         with pytest.raises(KeyError, match="not found in registry"):
@@ -276,7 +276,9 @@ class TestSerialization:
         serialized = to_json(red_cube_contract)
         recovered = from_json(serialized)
         for orig, rec in zip(
-            red_cube_contract.preconditions + red_cube_contract.effects + red_cube_contract.invariants,
+            red_cube_contract.preconditions
+            + red_cube_contract.effects
+            + red_cube_contract.invariants,
             recovered.preconditions + recovered.effects + recovered.invariants,
         ):
             assert orig.comparison == rec.comparison

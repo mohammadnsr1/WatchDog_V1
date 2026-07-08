@@ -41,6 +41,7 @@ setup(
             "scene_tf_sync_node = robot_backend.nodes.scene_tf_sync_node:main",
             "scene_backend_smoke_test = robot_backend.manual_tests.scene_backend_smoke_test:main",
             "scene_mcp_server = robot_backend.mcp_servers.scene_mcp_server:main",
+            "watchdog_mcp_server = robot_backend.mcp_servers.watchdog_mcp_server:main",
         ],
     },
 )
