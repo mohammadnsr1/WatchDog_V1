@@ -26,19 +26,22 @@ RG2_TOUCH_LINKS: list[str] = [
 
 # Post-grasp width sanity check: how far final_width_m may deviate from the
 # registry's expected grasp_width_m before a "successful" contact is rejected
-# as implausible. Distinct from DEFAULT_WIDTH_TOLERANCE_M below, which is the
-# GripperGuardedMove goal's own position tolerance, not a grasp outcome check.
-GRASP_WIDTH_TOLERANCE_M: float = 0.010   # ±10 mm post-grasp width check
+# as implausible. Distinct from the GripperGuardedMove goal's own position
+# tolerance, which we don't override — see NO_WIDTH_TOLERANCE_OVERRIDE below.
+GRASP_WIDTH_TOLERANCE_M: float = 0.005   # ±5 mm post-grasp width check
 # Clearance applied to the safety-floor target so the floor sits inside the
 # object, guaranteeing mechanical contact before the floor clamp stops progress.
 GRASP_CLEARANCE_M: float = 0.003
 # Fallback only, used when the registry entry lacks force_threshold_n.
-# Matches the controller's hard-guard default in rg2_controller.py; per-object
-# tuned overrides belong in the registry's spec.grasp.force_threshold_n, not here.
+# Matches the controller's hard-guard default (DEFAULT_HARD_FORCE_THRESHOLD in
+# rg2_controller.py); per-object tuned overrides belong in the registry's
+# spec.grasp.force_threshold_n, not here.
 DEFAULT_FORCE_THRESHOLD: float = 0.18
-# Guarded-move goal position tolerance (width_tolerance_m on the action goal),
-# not a post-grasp sanity check — see GRASP_WIDTH_TOLERANCE_M above for that.
-DEFAULT_WIDTH_TOLERANCE_M: float = 0.003
+# Sentinel meaning "no override" for goal.width_tolerance_m: the controller
+# treats <= 0.0 as "use my own verify_tolerance_m parameter" (rg2_controller.py
+# DEFAULT_VERIFY_TOLERANCE_M). The tolerance is defined once, on the controller
+# side, so it stays in sync with whatever open/close/set_position use.
+NO_WIDTH_TOLERANCE_OVERRIDE: float = 0.0
 GUARDED_MOVE_ACTION = "/rg2_controller/guarded_move"
 ACTION_SERVER_TIMEOUT_SEC: float = 5.0
 ACTION_EXECUTE_TIMEOUT_SEC: float = 30.0
@@ -97,7 +100,7 @@ def _call_guarded_move(
     target_width_m: float,
     force_threshold: float,
     mode: str = "torque",
-    width_tolerance_m: float = DEFAULT_WIDTH_TOLERANCE_M,
+    width_tolerance_m: float = NO_WIDTH_TOLERANCE_OVERRIDE,
 ) -> GripperGuardedMove.Result:
     """Send a GripperGuardedMove goal and block until a result arrives."""
     action_client = ActionClient(node, GripperGuardedMove, action_name)
@@ -187,7 +190,7 @@ def grasp_skill(
             target_width_m=max(0.0, expected_width_m - GRASP_CLEARANCE_M),
             force_threshold=force_threshold,
             mode="torque",
-            width_tolerance_m=DEFAULT_WIDTH_TOLERANCE_M,
+            width_tolerance_m=NO_WIDTH_TOLERANCE_OVERRIDE,
         )
         steps_log.append({
             "step": "guarded_move_action",

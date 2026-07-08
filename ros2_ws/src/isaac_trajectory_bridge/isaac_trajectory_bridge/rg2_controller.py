@@ -94,7 +94,7 @@ DEFAULT_WIDTH_TABLE_PATH = _default_table_path()
 # Verify-after-command parameters
 # ---------------------------------------------------------------------------
 
-DEFAULT_VERIFY_TOLERANCE_M = 0.0005     # 3 mm — acceptable final error
+DEFAULT_VERIFY_TOLERANCE_M = 0.0005     # 0.5 mm — acceptable final error
 DEFAULT_VERIFY_STABLE_DELTA = 0.0005   # kept for launch compatibility; verify uses target band
 DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive in-band ticks required
 DEFAULT_VERIFY_SETTLE_EPSILON_M = 0.001  # max tick-to-tick change to be considered settled
@@ -114,6 +114,13 @@ DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # Contact threshold: above worst-case idle (~0.027) with margin, below fast-rising
 # hard-contact effort (~0.05–0.1).  Comparisons use abs(effort) — idle ranges
 # from about -0.026 to +0.027 depending on gripper orientation/gravity loading.
+# Hard-guard fallback used when a GripperGuardedMove goal omits force_threshold.
+# Kept equal to DEFAULT_EFFORT_CONTACT_THRESHOLD by convention (both tuned off
+# the same idle-effort measurements), but they are independent stop conditions
+# (see _execute_guarded_move HARD GUARD vs PRIMARY STOP) and may be retuned
+# separately. robot_backend/skills/gripper_skills.py's DEFAULT_FORCE_THRESHOLD
+# mirrors this value for its own goal.force_threshold fallback.
+DEFAULT_HARD_FORCE_THRESHOLD = 0.18
 DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.18
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
@@ -764,7 +771,11 @@ class RG2Controller(Node):
         goal: GripperGuardedMove.Goal = goal_handle.request
 
         target_width = float(goal.target_width_m)
-        force_threshold = float(goal.force_threshold) if goal.force_threshold > 0.0 else 0.18
+        force_threshold = (
+            float(goal.force_threshold)
+            if goal.force_threshold > 0.0
+            else DEFAULT_HARD_FORCE_THRESHOLD
+        )
         mode = str(goal.mode) if goal.mode else "torque"
         tol = (
             float(goal.width_tolerance_m)

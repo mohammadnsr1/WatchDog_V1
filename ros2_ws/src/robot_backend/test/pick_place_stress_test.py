@@ -46,7 +46,7 @@ RED = "red_cube"
 SAFE_POSE_NAME = "ready"
 GRASP_WIDTH_M = 0.04
 APPROACH_HEIGHT_M = 0.10
-RIGHT_OFFSET_M = 0.05
+RIGHT_OFFSET_M = 0.10
 SETTLE_SEC = 1.0
 TOP_DOWN_QUAT = {"x": 1.0, "y": 0.0, "z": 0.0, "w": 0.0}
 # ----------------------------------------------------------
