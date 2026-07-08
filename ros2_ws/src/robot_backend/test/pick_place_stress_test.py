@@ -11,8 +11,21 @@ Structure that avoids the rclpy "two things spinning one node" footgun:
 Per cycle:
   1. sync scene   2. safe pose
   3. pick green, place ON TOP of red
-  4. pick green, place 5 cm RIGHT of red (-y)
+  4. pick green, place RIGHT_OFFSET_M RIGHT of red (-y)
 Loops N times; prints PASS/FAIL per cycle and a final tally.
+
+Robustness (mirrors grasp_effort_test.py, now that the grasp is repeatable):
+  - Place retreats from the KNOWN pick pose, not the attached object's TF
+    (once grasped, green's TF rides with the gripper, so reading it back is
+    circular). Deterministic up-and-over.
+  - Success checks read the object pose only after it has SETTLED (two
+    consecutive stable reads), so a still-settling cube is not misread as a
+    misplacement.
+  - Failures are labeled by phase (A:pick, A:place, A:check, B:pick, ...) and
+    grasp failures carry full provenance, so a FAIL says which step broke and
+    why instead of just surfacing a bare exception.
+  - Clean executor/thread teardown to avoid the "Destroyable ... destruction
+    was requested" shutdown noise.
 
 Run (full stack up, workspace sourced):
     python3 pick_place_stress_test.py --cycles 20
@@ -46,8 +59,12 @@ RED = "red_cube"
 SAFE_POSE_NAME = "ready"
 GRASP_WIDTH_M = 0.04
 APPROACH_HEIGHT_M = 0.10
-RIGHT_OFFSET_M = 0.10
+RIGHT_OFFSET_M = 0.10           # Task B: place green this far in -y from red
 SETTLE_SEC = 1.0
+SETTLE_EPSILON_M = 0.002        # pose-settled threshold for success checks
+SETTLE_TIMEOUT_SEC = 3.0
+PLACE_Z_TOLERANCE_M = 0.01      # z-tolerance for stack/rest height checks
+XY_TOLERANCE_M = 0.03           # x/y-tolerance for placement checks
 TOP_DOWN_QUAT = {"x": 1.0, "y": 0.0, "z": 0.0, "w": 0.0}
 # ----------------------------------------------------------
 
@@ -102,7 +119,13 @@ class TFReader:
         return {"x": t.x, "y": t.y, "z": t.z}
 
     def shutdown(self):
+        # Order matters: stop the executor, let the spin thread exit, THEN
+        # destroy the node. Destroying the node while the background thread is
+        # still spinning it is what produces the "cannot use Destroyable
+        # because destruction was requested" / "exception was never retrieved"
+        # noise at process exit.
         self.executor.shutdown()
+        self._thread.join(timeout=2.0)
         self.node.destroy_node()
 
 
@@ -115,7 +138,34 @@ class Cycle:
     def _object_height_m(self, object_id: str) -> float:
         return float(self.registry["objects"][object_id]["collision"]["dimensions"][2])
 
-    def _pick(self):
+    def _wait_settled(self, object_id: str) -> dict:
+        """Return the object pose once it stops moving.
+
+        Reads the pose repeatedly and returns as soon as two consecutive
+        reads agree within SETTLE_EPSILON_M on all axes, or the last read at
+        SETTLE_TIMEOUT_SEC. This prevents a still-settling cube (physics has
+        not caught up right after release) from being misread as a
+        misplacement by the success checks.
+        """
+        prev = self.tf.pose(object_id)
+        end = time.time() + SETTLE_TIMEOUT_SEC
+        while time.time() < end:
+            time.sleep(0.3)
+            cur = self.tf.pose(object_id)
+            if (abs(cur["x"] - prev["x"]) < SETTLE_EPSILON_M
+                    and abs(cur["y"] - prev["y"]) < SETTLE_EPSILON_M
+                    and abs(cur["z"] - prev["z"]) < SETTLE_EPSILON_M):
+                return cur
+            prev = cur
+        return prev
+
+    def _pick(self) -> dict:
+        """Pick green from its current pose. Returns the grasp pose used.
+
+        The returned pose is the pre-grasp green location; _place uses it as
+        the retreat reference instead of reading green's TF back while it is
+        attached (attached, green's frame rides with the gripper).
+        """
         g = self.tf.pose(GREEN)
         move_grasp_center_to_pose_skill(
             self.b, _pose(g["x"], g["y"], g["z"] + APPROACH_HEIGHT_M),
@@ -126,12 +176,27 @@ class Cycle:
         time.sleep(SETTLE_SEC)
         res = grasp_skill(self.b, object_id=GREEN, registry=self.registry)
         if not res.get("ok"):
-            raise RuntimeError(f"grasp failed: {res.get('reason', res)}")
+            prov = res.get("provenance", {})
+            raise RuntimeError(
+                f"grasp failed: {res.get('reason', res)} | "
+                f"stop_reason={prov.get('stop_reason')!r} "
+                f"final_effort={prov.get('final_effort')} "
+                f"final_width_m={prov.get('final_width_m')} "
+                f"asymmetry={prov.get('asymmetry_detected')}"
+            )
+        return g
 
-    def _place(self, x, y, z):
-        cur = self.tf.pose(GREEN)
+    def _place(self, pick_pose: dict, x, y, z):
+        """Place green at (x, y, z), retreating from the known pick pose.
+
+        The first up-move references pick_pose (deterministic) rather than
+        green's attached TF, which rides with the gripper once grasped. Target
+        z is the object-center resting height, so opening the gripper leaves
+        the cube resting (no freefall / re-rotation).
+        """
         move_grasp_center_to_pose_skill(
-            self.b, _pose(cur["x"], cur["y"], cur["z"] + APPROACH_HEIGHT_M),
+            self.b,
+            _pose(pick_pose["x"], pick_pose["y"], pick_pose["z"] + APPROACH_HEIGHT_M),
             gripper_width_m=GRASP_WIDTH_M)
         time.sleep(SETTLE_SEC)
         move_grasp_center_to_pose_skill(
@@ -146,39 +211,58 @@ class Cycle:
         time.sleep(SETTLE_SEC)
 
     def run(self):
+        phase = "init"
         try:
+            phase = "sync"
             self.b.scene.sync_collision_objects([GREEN, RED])
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
 
             # Task A: green on top of red
-            self._pick()
+            phase = "A:pick"
+            pick_pose = self._pick()
             red = self.tf.pose(RED)
             stack_z = (
                 red["z"]
                 + self._object_height_m(RED) / 2.0
                 + self._object_height_m(GREEN) / 2.0
             )
-            self._place(red["x"], red["y"], stack_z)
-            time.sleep(SETTLE_SEC)
-            g = self.tf.pose(GREEN)
-            if (abs(g["x"] - red["x"]) > 0.03 or abs(g["y"] - red["y"]) > 0.03
-                    or abs(g["z"] - stack_z) > 0.01):
-                return False, f"stack misplaced green={g} red={red} expected_z={stack_z:.4f}"
+            phase = "A:place"
+            self._place(pick_pose, red["x"], red["y"], stack_z)
+            phase = "A:check"
+            g = self._wait_settled(GREEN)
+            if (abs(g["x"] - red["x"]) > XY_TOLERANCE_M
+                    or abs(g["y"] - red["y"]) > XY_TOLERANCE_M
+                    or abs(g["z"] - stack_z) > PLACE_Z_TOLERANCE_M):
+                return False, (
+                    f"[A:check] stack misplaced green={g} red={red} "
+                    f"expected_z={stack_z:.4f} "
+                    f"dz={g['z'] - stack_z:+.4f}"
+                )
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
 
-            # Task B: green 5cm right (-y) of red
-            self._pick()
+            # Task B: green RIGHT_OFFSET_M to the right (-y) of red, on the table
+            phase = "B:pick"
+            pick_pose = self._pick()
             red = self.tf.pose(RED)
-            tx, ty, tz = red["x"], red["y"] - RIGHT_OFFSET_M, self._object_height_m(GREEN) / 2.0
-            self._place(tx, ty, tz)
-            time.sleep(SETTLE_SEC)
-            g = self.tf.pose(GREEN)
-            if abs(g["x"] - tx) > 0.03 or abs(g["y"] - ty) > 0.03:
-                return False, f"right-place misplaced green={g} target=({tx:.3f},{ty:.3f})"
+            tx = red["x"]
+            ty = red["y"] - RIGHT_OFFSET_M
+            tz = self._object_height_m(GREEN) / 2.0
+            phase = "B:place"
+            self._place(pick_pose, tx, ty, tz)
+            phase = "B:check"
+            g = self._wait_settled(GREEN)
+            if (abs(g["x"] - tx) > XY_TOLERANCE_M
+                    or abs(g["y"] - ty) > XY_TOLERANCE_M
+                    or abs(g["z"] - tz) > PLACE_Z_TOLERANCE_M):
+                return False, (
+                    f"[B:check] right-place misplaced green={g} "
+                    f"target=({tx:.3f},{ty:.3f},{tz:.3f}) "
+                    f"dz={g['z'] - tz:+.4f}"
+                )
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
             return True, "ok"
         except Exception as exc:  # noqa: BLE001
-            return False, f"{type(exc).__name__}: {exc}"
+            return False, f"[{phase}] {type(exc).__name__}: {exc}"
 
 
 def main():
