@@ -23,8 +23,14 @@ Per cycle (pick only):
   4. descend to grasp pose
   5. grasp_skill (torque mode)  -> log full provenance
   6. static hold for HOLD_SEC   -> watch effort decay
-  7. (optional --lift) lift LIFT_HEIGHT_M and hold again -> watch under load
-  8. release, return to safe pose
+  7. (optional --lift) lift LIFT_HEIGHT_M, hold under load, then place the
+     cube back at its original resting pose so the next cycle is repeatable
+  8. release (cube already resting on table), return to safe pose
+
+Placing the cube back before release (rather than opening in mid-air) keeps
+the cube's pose/orientation identical from cycle to cycle. An air-release
+drops the cube, it resettles rotated, and the following grasp starts from a
+different state — which masks whether the grasp itself is repeatable.
 
 Console prints per-cycle grasp provenance + effort-window summaries.
 A full per-sample effort trace for every cycle is written to --csv
@@ -270,18 +276,35 @@ class GraspCycle:
             self.effort.phase(cycle, "hold")
             time.sleep(HOLD_SEC)
 
-            # --- optional lift + hold under load ---
+            # --- optional lift + hold under load, then place back ---
             if self.do_lift and res.get("ok"):
+                # Lift straight up from the known grasp pose p. Using p (not a
+                # fresh TF read) is deterministic: once grasped, the object's
+                # TF rides up with the gripper, so re-reading it mid-lift is
+                # circular and laggy.
                 self.effort.phase(cycle, "lift")
-                cur = self.tf.pose(oid)
                 move_grasp_center_to_pose_skill(
-                    self.b, _pose(cur["x"], cur["y"], cur["z"] + LIFT_HEIGHT_M),
+                    self.b, _pose(p["x"], p["y"], p["z"] + LIFT_HEIGHT_M),
                     gripper_width_m=GRASP_WIDTH_M)
                 time.sleep(SETTLE_SEC)
                 self.effort.phase(cycle, "lifthold")
                 time.sleep(HOLD_SEC)
 
+                # Place the cube back down at its original resting pose BEFORE
+                # releasing, so the next cycle starts from the identical cube
+                # pose/orientation. Target z is exactly the grasp-center height
+                # the descend used, so the cube is resting on the table when
+                # the gripper opens (no freefall, no re-rotation).
+                self.effort.phase(cycle, "place")
+                move_grasp_center_to_pose_skill(
+                    self.b, _pose(p["x"], p["y"], p["z"]),
+                    gripper_width_m=GRASP_WIDTH_M)
+                time.sleep(SETTLE_SEC)
+
             # --- release + home (not scored; just leaves a clean state) ---
+            # Without --lift the cube was never raised, so release-in-place
+            # already leaves it on the table. With --lift it was just set back
+            # down above. Either way the gripper opens on a table-resting cube.
             self.effort.phase(cycle, "release")
             release_skill(self.b, object_id=oid)
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
@@ -369,7 +392,7 @@ def main():
     print(f"  wrote {n} effort samples to {args.csv}")
     print("  columns: t_rel_s, effort, position, cycle, phase")
     print("  phases: sync, approach, descend, grasp, hold"
-          + (", lift, lifthold" if args.lift else "") + ", release")
+          + (", lift, lifthold, place" if args.lift else "") + ", release")
 
     effort.shutdown()
     tf.shutdown()

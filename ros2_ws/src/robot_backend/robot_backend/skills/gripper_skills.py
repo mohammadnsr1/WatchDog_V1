@@ -36,7 +36,7 @@ GRASP_CLEARANCE_M: float = 0.003
 # Matches the controller's hard-guard default (DEFAULT_HARD_FORCE_THRESHOLD in
 # rg2_controller.py); per-object tuned overrides belong in the registry's
 # spec.grasp.force_threshold_n, not here.
-DEFAULT_FORCE_THRESHOLD: float = 0.18
+DEFAULT_FORCE_THRESHOLD: float = 0.5
 # Sentinel meaning "no override" for goal.width_tolerance_m: the controller
 # treats <= 0.0 as "use my own verify_tolerance_m parameter" (rg2_controller.py
 # DEFAULT_VERIFY_TOLERANCE_M). The tolerance is defined once, on the controller

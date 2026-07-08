@@ -100,7 +100,7 @@ DEFAULT_VERIFY_STABLE_TICKS = 4        # consecutive in-band ticks required
 DEFAULT_VERIFY_SETTLE_EPSILON_M = 0.001  # max tick-to-tick change to be considered settled
 DEFAULT_VERIFY_TIMEOUT_SEC = 3.0
 DEFAULT_NO_MOTION_EPSILON_M = 0.002
-DEFAULT_RAMP_TIME_SEC = 1.5
+DEFAULT_RAMP_TIME_SEC = 1.0
 
 # ---------------------------------------------------------------------------
 # Force / effort parameters (guarded move only)
@@ -120,8 +120,8 @@ DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # (see _execute_guarded_move HARD GUARD vs PRIMARY STOP) and may be retuned
 # separately. robot_backend/skills/gripper_skills.py's DEFAULT_FORCE_THRESHOLD
 # mirrors this value for its own goal.force_threshold fallback.
-DEFAULT_HARD_FORCE_THRESHOLD = 0.18
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.18
+DEFAULT_HARD_FORCE_THRESHOLD = 0.5
+DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.5
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 # Consecutive over-threshold fresh samples required to confirm contact —
