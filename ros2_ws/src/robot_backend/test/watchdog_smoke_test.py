@@ -84,11 +84,15 @@ MIN_JOINT_RATE_HZ = 10.0
 MIN_TF_RATE_HZ = 10.0
 
 # Rung 1
-HALT_DELAY_SEC = 1.0        # how long into the motion to fire the halt
+HALT_DELAY_SEC = 2.0        # how long into the motion to fire the halt
 HALT_LATENCY_BUDGET_SEC = 1.0   # halt() should return well inside its own 2 s timeout
 STOP_OBSERVE_SEC = 1.5      # how long to watch joints after halt
 STOP_SETTLE_SEC = 0.4       # ignore this much right after halt (deceleration)
 STOP_EPSILON_RAD = 0.01     # max joint travel that still counts as "stopped"
+# Below this, we can't tell "already at target" apart from "never started" —
+# criterion 3 (stopped) is only meaningful once this is confirmed exceeded.
+PRE_HALT_MOTION_MIN_RAD = 0.02
+PRE_HALT_WINDOW_SEC = 0.8   # window just before the halt, used to confirm motion
 # Joints belonging to the gripper, excluded from the arm-stopped check.
 GRIPPER_JOINT_MARKERS = ("finger", "knuckle")
 # ----------------------------------------------------------
@@ -224,10 +228,10 @@ def _max_joint_travel(rec: EvidenceRecorder, start: int, end: int) -> tuple[floa
     """Largest absolute arm-joint displacement inside a wall-ns window."""
     rows = rec.get_joint_window(start, end, None, 500)
     if len(rows) < 2:
-        return 0.0, "", len(rows)
+        return 0.0, "(insufficient samples)", len(rows)
     names = _arm_joints(rows[0]["positions"])
     worst = 0.0
-    worst_name = ""
+    worst_name = "(no joint moved)"
     for name in names:
         values = [r["positions"][name] for r in rows if name in r["positions"]]
         if len(values) < 2:
@@ -285,6 +289,24 @@ def rung1(harness: WatchDogHarness, backend: Any) -> bool:
               f"pick a farther target, then rerun.")
         return False
 
+    # Confirm the arm is ACTUALLY moving before we halt it. Without this, a
+    # halt fired before real motion starts (or after it's already arrived)
+    # would make "stopped after halt" true but meaningless — travel would
+    # read ~0 either way, for an unrelated reason.
+    pre_halt_end = wall_ns()
+    pre_halt_start = pre_halt_end - int(PRE_HALT_WINDOW_SEC * 1_000_000_000)
+    pre_travel, pre_joint, pre_samples = _max_joint_travel(rec, pre_halt_start, pre_halt_end)
+    was_moving = pre_travel >= PRE_HALT_MOTION_MIN_RAD
+    print(f"  pre-halt motion check: {pre_travel:.4f} rad on {pre_joint} over "
+          f"{PRE_HALT_WINDOW_SEC:.1f}s ({pre_samples} samples) "
+          f"{'OK, arm is moving' if was_moving else 'TOO LOW'}")
+    if not was_moving:
+        print(f"      -> arm shows <{PRE_HALT_MOTION_MIN_RAD} rad movement right "
+              f"before the halt fires. Either the trajectory hasn't started "
+              f"yet or it already arrived. Increase HALT_DELAY_SEC (currently "
+              f"{HALT_DELAY_SEC}s) or move to a farther target, then rerun — "
+              f"criterion 3 below is not trustworthy until this passes.")
+
     print(f"  firing halt {HALT_DELAY_SEC:.1f}s into the motion...")
     t_call = time.monotonic()
     halt_wall = wall_ns()
@@ -312,10 +334,17 @@ def rung1(harness: WatchDogHarness, backend: Any) -> bool:
     print(f"\n  [1] cancel accepted    : {'PASS' if halt_ok else 'FAIL'}")
     print(f"  [2] returned promptly  : {'PASS' if latency_ok else 'FAIL'} "
           f"({latency * 1000:.0f} ms, budget {HALT_LATENCY_BUDGET_SEC * 1000:.0f} ms)")
-    print(f"  [3] arm actually stopped: {'PASS' if stopped else 'FAIL'} "
-          f"(max travel {travel:.4f} rad on {joint or 'n/a'} over "
+    stop_check_valid = was_moving
+    print(f"  [3] arm actually stopped: "
+          f"{'PASS' if (stopped and stop_check_valid) else ('FAIL' if stop_check_valid else 'INVALID')} "
+          f"(max travel {travel:.4f} rad on {joint} over "
           f"{STOP_OBSERVE_SEC:.1f}s, {samples} samples, "
           f"epsilon {STOP_EPSILON_RAD})")
+    if not stop_check_valid:
+        print("      -> INVALID, not FAIL: the pre-halt motion check above did "
+              "not confirm the arm was moving, so a low post-halt travel number "
+              "doesn't tell us anything. Fix that check first, then this one "
+              "becomes meaningful.")
     print(f"  motion thread: ok={motion.get('ok')} "
           f"duration={motion.get('duration_sec', 0):.2f}s "
           f"{motion.get('error', '')}")
@@ -331,7 +360,7 @@ def rung1(harness: WatchDogHarness, backend: Any) -> bool:
     print(f"  [4] halt event observed on /watchdog/events: "
           f"{'PASS' if loopback_ok else 'FAIL'} ({len(halt_events)} found)")
 
-    ok = halt_ok and latency_ok and stopped and loopback_ok
+    ok = halt_ok and latency_ok and stopped and stop_check_valid and loopback_ok
 
     if not stopped:
         print("\n      -> Cancel was accepted but the arm kept moving: the "
