@@ -18,10 +18,14 @@
 #                                NOT a commanded position. Force control closes until a
 #                                plateau; this value is compared against the measured
 #                                width at plateau to detect air grasps.
-#   grasp.force_threshold_n    — per-object effort cap for the guarded close [sim effort
-#                                units]. The grasp primitive stops if instantaneous
-#                                finger_joint effort exceeds this value. Low for delicate
-#                                objects, higher for rigid ones.
+#   grasp.force_threshold_n    — per-object STOP TRIGGER for the guarded close [sim
+#                                effort units]. The guarded close stops once measured
+#                                finger_joint effort FIRST CROSSES this value — it is
+#                                not a steady-state force setpoint or a ceiling. The
+#                                settled clamp effort after the stop is a consequence
+#                                of penetration depth and joint stiffness and will read
+#                                higher than this trigger. Low for delicate objects,
+#                                higher for rigid ones.
 #                                NOTE: in Isaac Sim the effort scale is small (~0.48 for
 #                                a solid rigid grasp). These values are in sim effort
 #                                units, not physical Newtons. Force control is therefore
@@ -30,8 +34,11 @@
 #   tolerances.position_m      — allowable object pose error before / after pick [m]
 #   tolerances.orientation_deg — allowable orientation error [degrees]
 #   tolerances.lift_height_min_m — minimum vertical displacement to confirm grasp [m]
-#   limits.max_contact_force_n — invariant upper bound on contact force [N]
-#                                (hardware safety limit; distinct from force_threshold_n)
+#
+#   There is no limits.max_contact_force_n field: this platform has no force/torque
+#   sensor and no calibration from Isaac sim-effort units to Newtons, so a
+#   Newton-valued bound has no feed and cannot be monitored. It does not sit in the
+#   spec chain implying it is checkable.
 
 # permitted_contacts: object pairs that are allowed to physically touch
 # for the duration of a run (e.g. because the assembly plan requires
@@ -71,8 +78,6 @@ objects:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
-      limits:
-        max_contact_force_n: 20.0  # hardware safety limit [N] — distinct from force_threshold_n
 
   green_cube:
     enabled: true
@@ -94,10 +99,8 @@ objects:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
         grasp_width_m: 0.04      # expected contact width [m]; verification input, not a command
-        force_threshold_n: 0.5  # effort cap: smaller 4 cm cube; slightly below the rigid plateau
+        force_threshold_n: 0.2  # effort cap: smaller 4 cm cube; slightly below the rigid plateau
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
-      limits:
-        max_contact_force_n: 15.0  # hardware safety limit [N] — distinct from force_threshold_n

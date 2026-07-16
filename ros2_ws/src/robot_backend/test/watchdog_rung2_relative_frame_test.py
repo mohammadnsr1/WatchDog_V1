@@ -37,6 +37,9 @@ from robot_backend.contracts.loader import load_pick_contract
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import grasp_skill, release_skill
+from robot_backend.skills.maintenance_skills import (
+    set_permitted_contacts as set_permitted_contacts_skill,
+)
 from robot_backend.skills.motion_skills import (
     move_to_named_safe_joint_pose_skill,
     move_grasp_center_to_pose_skill,
@@ -102,8 +105,12 @@ def main() -> int:
         print("waiting for recorder buffers to fill...")
         time.sleep(2.0)
 
-        child_frame = harness.registry_child_frame = harness.recorder.registry[
-            "objects"][GREEN]["tf_frame"]
+        # Scene setup, same as every other executor-driving test: MoveIt cannot
+        # attach an object that is not in the world collision scene.
+        backend.scene.sync_collision_objects([GREEN])
+        set_permitted_contacts_skill(backend, registry=harness.recorder.registry)
+
+        child_frame = harness.recorder.registry["objects"][GREEN]["tf_frame"]
 
         contract = load_pick_contract(GREEN)
         clause = _find_clause(contract, "object_tcp_offset_m")

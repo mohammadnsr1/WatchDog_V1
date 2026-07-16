@@ -111,17 +111,14 @@ DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact
 DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # uniform step size for the entire torque-mode close
 # Measured idle magnitude peaks at ~0.027 across orientations; floor adds a margin.
 DEFAULT_EFFORT_NOISE_FLOOR = 0.03
-# Contact threshold: above worst-case idle (~0.027) with margin, below fast-rising
-# hard-contact effort (~0.05–0.1).  Comparisons use abs(effort) — idle ranges
-# from about -0.026 to +0.027 depending on gripper orientation/gravity loading.
-# Hard-guard fallback used when a GripperGuardedMove goal omits force_threshold.
-# Kept equal to DEFAULT_EFFORT_CONTACT_THRESHOLD by convention (both tuned off
-# the same idle-effort measurements), but they are independent stop conditions
-# (see _execute_guarded_move HARD GUARD vs PRIMARY STOP) and may be retuned
-# separately. robot_backend/skills/gripper_skills.py's DEFAULT_FORCE_THRESHOLD
-# mirrors this value for its own goal.force_threshold fallback.
+# The single effort stop threshold for torque-mode guarded_move is
+# goal.force_threshold — sourced per object from the registry spec
+# (spec.grasp.force_threshold_n, via robot_backend/skills/gripper_skills.py).
+# DEFAULT_HARD_FORCE_THRESHOLD is only the fallback used when a goal omits
+# force_threshold (goal.force_threshold <= 0.0); it is not a second,
+# independent stop condition. robot_backend/skills/gripper_skills.py's
+# DEFAULT_FORCE_THRESHOLD mirrors this value for its own fallback.
 DEFAULT_HARD_FORCE_THRESHOLD = 0.5
-DEFAULT_EFFORT_CONTACT_THRESHOLD = 0.5
 DEFAULT_EFFORT_PLATEAU_DERIV = 0.05
 DEFAULT_EFFORT_PLATEAU_TICKS = 2
 # Consecutive over-threshold fresh samples required to confirm contact —
@@ -175,7 +172,6 @@ class RG2Controller(Node):
         self.declare_parameter("probe_step_rad", DEFAULT_PROBE_STEP_RAD)
         self.declare_parameter("torque_probe_step_rad", DEFAULT_TORQUE_PROBE_STEP_RAD)
         self.declare_parameter("effort_noise_floor", DEFAULT_EFFORT_NOISE_FLOOR)
-        self.declare_parameter("effort_contact_threshold", DEFAULT_EFFORT_CONTACT_THRESHOLD)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
         self.declare_parameter("effort_contact_ticks", DEFAULT_EFFORT_CONTACT_TICKS)
@@ -226,7 +222,6 @@ class RG2Controller(Node):
         self._probe_step_rad = float(self.get_parameter("probe_step_rad").value)
         self._torque_probe_step_rad = float(self.get_parameter("torque_probe_step_rad").value)
         self._effort_noise_floor = float(self.get_parameter("effort_noise_floor").value)
-        self._effort_contact_threshold = float(self.get_parameter("effort_contact_threshold").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
         self._effort_contact_ticks = int(self.get_parameter("effort_contact_ticks").value)
@@ -241,17 +236,6 @@ class RG2Controller(Node):
             raise ValueError("gripper_joint_names must contain exactly 6 joints.")
         if self._master_joint_name not in self._gripper_joint_names:
             raise ValueError("master_joint_name must be in gripper_joint_names.")
-
-        if self._effort_contact_threshold <= self._effort_noise_floor:
-            clamped = self._effort_noise_floor * 1.5
-            self.get_logger().error(
-                f"effort_contact_threshold ({self._effort_contact_threshold:.4f}) is not above "
-                f"effort_noise_floor ({self._effort_noise_floor:.4f}) — every torque-mode close "
-                f"will false-trigger on sensor noise.  Clamping contact threshold to "
-                f"{clamped:.4f} (noise_floor × 1.5).  Set effort_contact_threshold > "
-                f"effort_noise_floor in your launch config."
-            )
-            self._effort_contact_threshold = clamped
 
         # ---- load calibration table -------------------------------------------
         self._table_angles: np.ndarray
@@ -753,18 +737,21 @@ class RG2Controller(Node):
                  skip all further checks for this iteration.  A stale sample
                  is never treated as safe-to-continue.
               2/3. HARD GUARD + PRIMARY STOP (debounced) — effort >=
-                 goal.force_threshold OR effort >= effort_contact_threshold on
-                 a fresh sample increments a contact counter; any fresh sample
-                 where neither holds resets it to 0.  Once the counter reaches
-                 effort_contact_ticks consecutive fresh samples, HOLD the
-                 current commanded_angle and stop.  stop_reason =
-                 "force_threshold".  This debounces the instantaneous checks
-                 against a single noisy transient spike at first contact —
-                 sustained contact is required, not a one-sample crossing.
+                 force_threshold (the resolved per-goal threshold: goal.
+                 force_threshold when supplied, else DEFAULT_HARD_FORCE_
+                 THRESHOLD as a fallback) on a fresh sample increments a
+                 contact counter; any fresh sample below threshold resets it
+                 to 0.  Once the counter reaches effort_contact_ticks
+                 consecutive fresh samples, HOLD the current commanded_angle
+                 and stop.  stop_reason = "force_threshold".  This debounces
+                 the instantaneous check against a single noisy transient
+                 spike at first contact — sustained contact is required, not
+                 a one-sample crossing.
               4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
-                 effort_plateau_ticks while effort is non-negligible.  Catches
-                 slow contact build-up below the primary threshold.
-                 stop_reason = "force_threshold".
+                 effort_plateau_ticks while effort is non-negligible relative
+                 to force_threshold.  Catches slow contact build-up that
+                 stalls just below the primary threshold without ever
+                 crossing it.  stop_reason = "force_threshold".
               5. PROBE STEP — advance commanded_angle by torque_probe_step_rad
                  toward CLOSE_POSITION, clamped to floor_angle (safety floor,
                  never a stop condition).
@@ -786,6 +773,16 @@ class RG2Controller(Node):
             if goal.force_threshold > 0.0
             else DEFAULT_HARD_FORCE_THRESHOLD
         )
+        if force_threshold <= self._effort_noise_floor:
+            clamped = self._effort_noise_floor * 1.5
+            self.get_logger().error(
+                f"force_threshold ({force_threshold:.4f}) is not above "
+                f"effort_noise_floor ({self._effort_noise_floor:.4f}) — this goal's "
+                f"torque-mode close will false-trigger on sensor noise.  Clamping to "
+                f"{clamped:.4f} (noise_floor × 1.5).  Raise spec.grasp.force_threshold_n "
+                f"for this object in model_registry.yaml."
+            )
+            force_threshold = clamped
         mode = str(goal.mode) if goal.mode else "torque"
         tol = (
             float(goal.width_tolerance_m)
@@ -924,11 +921,12 @@ class RG2Controller(Node):
 
                 # ── 2/3. HARD GUARD + PRIMARY STOP (debounced) ────────────
                 # abs(): idle effort ranges -0.026..+0.027 across orientations.
-                # Grasp-phase effort is noisy — a single sample crossing either
-                # threshold is often a transient spike at first surface contact,
-                # not sustained clamp force.  Require effort_contact_ticks
-                # consecutive fresh samples over threshold before stopping.
-                if abs(effort) >= force_threshold or abs(effort) >= self._effort_contact_threshold:
+                # Grasp-phase effort is noisy — a single sample crossing
+                # force_threshold is often a transient spike at first surface
+                # contact, not sustained clamp force.  Require
+                # effort_contact_ticks consecutive fresh samples over
+                # threshold before stopping.
+                if abs(effort) >= force_threshold:
                     contact_count += 1
                     if contact_count >= self._effort_contact_ticks:
                         self._command_angle(commanded_angle)  # hold
@@ -942,7 +940,7 @@ class RG2Controller(Node):
                 # primary threshold without ever crossing it.  Gate requires
                 # abs(effort) clearly above noise AND close to the primary
                 # threshold.  d_effort keeps its sign for the derivative check.
-                if abs(effort) > max(self._effort_noise_floor, self._effort_contact_threshold * 0.8):
+                if abs(effort) > max(self._effort_noise_floor, force_threshold * 0.8):
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:

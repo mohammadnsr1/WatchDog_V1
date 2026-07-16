@@ -48,7 +48,6 @@ _REGISTRY = {
                     "force_threshold_n": 0.50,
                 },
                 "tolerances": {"position_m": 0.005, "orientation_deg": 5.0, "lift_height_min_m": 0.02},
-                "limits": {"max_contact_force_n": 20.0},
             },
         }
     }

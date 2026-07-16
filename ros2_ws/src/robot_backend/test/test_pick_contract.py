@@ -66,8 +66,6 @@ def minimal_registry(tmp_path: Path) -> Path:
                 position_m: 0.004
                 orientation_deg: 3.0
                 lift_height_min_m: 0.015
-              limits:
-                max_contact_force_n: 10.0
     """)
     registry = tmp_path / "model_registry.yaml"
     registry.write_text(content, encoding="utf-8")
@@ -101,8 +99,8 @@ class TestLoadFromRegistry:
         assert len(red_cube_contract.effects) == 4
 
     def test_invariant_count(self, red_cube_contract: PickContract) -> None:
-        # hardware force limit + software effort cap
-        assert len(red_cube_contract.invariants) == 2
+        # software effort cap only — there is no monitorable hardware force limit
+        assert len(red_cube_contract.invariants) == 1
 
     def test_precondition_thresholds_from_registry(self, red_cube_contract: PickContract) -> None:
         pos_clause = next(
@@ -128,18 +126,14 @@ class TestLoadFromRegistry:
         assert lift_clause.threshold == pytest.approx(0.02)
         assert lift_clause.comparison == Comparison.GE
 
-    def test_invariant_force_limit_from_registry(self, red_cube_contract: PickContract) -> None:
-        force_clause = red_cube_contract.invariants[0]
-        assert force_clause.field == "contact_force_n"
-        # From registry spec.limits.max_contact_force_n: 20.0
-        assert force_clause.threshold == pytest.approx(20.0)
-        assert force_clause.comparison == Comparison.LE
-
     def test_green_cube_has_lower_force_limit(
         self,
         red_cube_contract: PickContract,
         green_cube_contract: PickContract,
     ) -> None:
+        # invariants[0] is grasp_effort_instantaneous (spec.grasp.force_threshold_n) —
+        # there is no separate hardware force limit; the registry defines a lower
+        # effort ceiling for the smaller/lighter green cube.
         red_force = red_cube_contract.invariants[0].threshold
         green_force = green_cube_contract.invariants[0].threshold
         assert green_force < red_force
@@ -237,7 +231,9 @@ class TestLoadFromRegistry:
         assert contract.object_id == "test_cube"
         assert contract.grasp_width_m == pytest.approx(0.055)
         assert contract.force_threshold_n == pytest.approx(0.42)
-        assert contract.invariants[0].threshold == pytest.approx(10.0)
+        # invariants[0] is grasp_effort_instantaneous, sourced from
+        # spec.grasp.force_threshold_n (0.42) — there is no separate limit clause.
+        assert contract.invariants[0].threshold == pytest.approx(0.42)
 
 
 # ---------------------------------------------------------------------------

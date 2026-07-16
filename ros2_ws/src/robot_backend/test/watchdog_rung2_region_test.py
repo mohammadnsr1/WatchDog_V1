@@ -41,6 +41,9 @@ from rclpy.node import Node
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import grasp_skill, release_skill
+from robot_backend.skills.maintenance_skills import (
+    set_permitted_contacts as set_permitted_contacts_skill,
+)
 from robot_backend.skills.motion_skills import (
     move_to_named_safe_joint_pose_skill,
     move_grasp_center_to_pose_skill,
@@ -101,6 +104,12 @@ def main() -> int:
         print("waiting for recorder buffers to fill...")
         time.sleep(2.0)
         registry = harness.recorder.registry
+
+        # Scene setup. sync is required before attach; permitted_contacts is
+        # required because Phase B deliberately stacks green on red, which is
+        # exactly the declared allowed-contact pair.
+        backend.scene.sync_collision_objects([GREEN, RED])
+        set_permitted_contacts_skill(backend, registry=registry)
 
         red_pose = harness.recorder.latest_object_pose(RED)
         green_pose = harness.recorder.latest_object_pose(GREEN)

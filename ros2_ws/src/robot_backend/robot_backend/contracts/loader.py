@@ -60,8 +60,8 @@ def load_pick_contract(
 ) -> PickContract:
     """Build a PickContract from a registry object's spec block.
 
-    All clause thresholds are read directly from spec.tolerances and
-    spec.limits — nothing is hard-coded here.
+    All clause thresholds are read directly from spec.grasp and
+    spec.tolerances — nothing is hard-coded here.
 
     Parameters
     ----------
@@ -92,12 +92,11 @@ def load_pick_contract(
     if not isinstance(spec, dict):
         raise ValueError(
             f"Object {object_id!r} has no 'spec' block in the registry. "
-            "Add grasp / tolerances / limits subsections to enable contract loading."
+            "Add grasp / tolerances subsections to enable contract loading."
         )
 
     grasp = spec.get("grasp", {})
     tolerances = spec.get("tolerances", {})
-    limits = spec.get("limits", {})
 
     # --- Extract spec values (let KeyError/TypeError surface for missing fields) ---
     grasp_width_m: float = float(grasp["grasp_width_m"])
@@ -105,7 +104,6 @@ def load_pick_contract(
     position_tol: float = float(tolerances["position_m"])
     orientation_tol: float = float(tolerances["orientation_deg"])
     lift_height_min: float = float(tolerances["lift_height_min_m"])
-    max_force: float = float(limits["max_contact_force_n"])
 
     # --- Preconditions: must hold BEFORE skill execution ---
     # "gripper_is_open" uses threshold 1.0 (boolean encoded as float); this is
@@ -189,16 +187,6 @@ def load_pick_contract(
 
     # --- Invariants: must hold THROUGHOUT execution ---
     invariants: list[Clause] = [
-        Clause(
-            field="contact_force_n",
-            comparison=Comparison.LE,
-            threshold=max_force,
-            description=(
-                "Contact force on the object must not exceed the hardware safety "
-                "limit at any point during the pick sequence."
-            ),
-            unit="N",
-        ),
         Clause(
             field="grasp_effort_instantaneous",
             comparison=Comparison.LE,
