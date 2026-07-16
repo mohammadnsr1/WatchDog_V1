@@ -2,11 +2,9 @@
 
 Covers:
   - EventEnvelope schema construction and JSON round-trip
-  - GraspWidthSource enum serialization
   - EventBus file logging (temp file)
   - EventBus no-op mode (node=None, log_path=None)
-  - @emit_skill_events decorator — happy path, exception path, provenance capture
-  - Grasp-width provenance threading through decorated skill
+  - @emit_skill_events decorator — happy path, exception path, param capture
 
 Run with: pytest test/test_event_bus.py -v
 """
@@ -27,7 +25,6 @@ from robot_backend.events.schema import (
     BeginStepPayload,
     EndStepPayload,
     EventEnvelope,
-    GraspWidthSource,
     SkillEndPayload,
     SkillStartPayload,
     make_event,
@@ -44,7 +41,8 @@ class TestSchema:
         event = make_event("begin_step", BeginStepPayload(step_id="s1"))
         assert event.event_type == "begin_step"
         assert event.payload["step_id"] == "s1"
-        assert event.payload["contract"] is None
+        assert event.payload["object_ids"] == []
+        assert event.payload["notes"] == ""
         assert len(event.event_id) == 36  # UUID4
         assert event.timestamp_ns > 0
 
@@ -57,18 +55,16 @@ class TestSchema:
         assert event.payload["claimed_outcome"] == "success"
         assert event.payload["notes"] == "ok"
 
-    def test_make_event_skill_start_with_provenance(self) -> None:
+    def test_make_event_skill_start(self) -> None:
         event = make_event(
             "skill_start",
             SkillStartPayload(
                 skill_name="pick_object",
-                params={"object_id": "red_cube", "grasp_width_m": 0.065},
-                grasp_width_m=0.065,
-                grasp_width_source=GraspWidthSource.REGISTRY_SPEC,
+                params={"object_id": "red_cube"},
             ),
         )
-        assert event.payload["grasp_width_m"] == pytest.approx(0.065)
-        assert event.payload["grasp_width_source"] == "registry_spec"
+        assert event.payload["skill_name"] == "pick_object"
+        assert event.payload["params"] == {"object_id": "red_cube"}
 
     def test_make_event_skill_end(self) -> None:
         event = make_event(
@@ -87,10 +83,6 @@ class TestSchema:
         assert "timestamp_ns" in parsed
         assert "wall_time_iso" in parsed
 
-    def test_grasp_width_source_enum_values(self) -> None:
-        assert GraspWidthSource.REGISTRY_SPEC.value == "registry_spec"
-        assert GraspWidthSource.AGENT_ESTIMATE.value == "agent_estimate"
-
     def test_end_step_invalid_outcome_raises(self) -> None:
         with pytest.raises(Exception):
             EndStepPayload(step_id="s", claimed_outcome="maybe")  # type: ignore[arg-type]
@@ -105,10 +97,13 @@ class TestSchema:
         ids = {e.event_id for e in events}
         assert len(ids) == 10
 
-    def test_contract_serialized_in_begin_step(self) -> None:
-        contract_data = {"schema_name": "pick_object_v1", "object_id": "red_cube"}
-        event = make_event("begin_step", BeginStepPayload(step_id="s", contract=contract_data))
-        assert event.payload["contract"]["object_id"] == "red_cube"
+    def test_begin_step_object_ids_and_notes(self) -> None:
+        event = make_event(
+            "begin_step",
+            BeginStepPayload(step_id="s", object_ids=["red_cube"], notes="picking up"),
+        )
+        assert event.payload["object_ids"] == ["red_cube"]
+        assert event.payload["notes"] == "picking up"
 
 
 # ---------------------------------------------------------------------------
@@ -152,12 +147,13 @@ class TestEventBus:
 
     def test_emit_begin_step_helper(self, tmp_path: Path) -> None:
         bus = EventBus(node=None, log_path=tmp_path / "e.jsonl")
-        bus.emit_begin_step("s1", contract={"object_id": "red_cube"})
+        bus.emit_begin_step("s1", object_ids=["red_cube"], notes="picking up")
         bus.close()
         lines = (tmp_path / "e.jsonl").read_text().strip().splitlines()
         parsed = json.loads(lines[0])
         assert parsed["event_type"] == "begin_step"
-        assert parsed["payload"]["contract"]["object_id"] == "red_cube"
+        assert parsed["payload"]["object_ids"] == ["red_cube"]
+        assert parsed["payload"]["notes"] == "picking up"
 
     def test_emit_end_step_helper(self, tmp_path: Path) -> None:
         bus = EventBus(node=None, log_path=tmp_path / "e.jsonl")
@@ -167,18 +163,16 @@ class TestEventBus:
         assert parsed["payload"]["claimed_outcome"] == "failure"
         assert parsed["payload"]["notes"] == "dropped"
 
-    def test_emit_skill_start_with_provenance(self, tmp_path: Path) -> None:
+    def test_emit_skill_start_helper(self, tmp_path: Path) -> None:
         bus = EventBus(node=None, log_path=tmp_path / "e.jsonl")
         bus.emit_skill_start(
             "pick_object",
             params={"object_id": "red_cube"},
-            grasp_width_m=0.065,
-            grasp_width_source="registry_spec",
         )
         bus.close()
         parsed = json.loads((tmp_path / "e.jsonl").read_text())
-        assert parsed["payload"]["grasp_width_source"] == "registry_spec"
-        assert parsed["payload"]["grasp_width_m"] == pytest.approx(0.065)
+        assert parsed["payload"]["skill_name"] == "pick_object"
+        assert parsed["payload"]["params"] == {"object_id": "red_cube"}
 
     def test_emit_skill_end_helper(self, tmp_path: Path) -> None:
         bus = EventBus(node=None, log_path=tmp_path / "e.jsonl")
@@ -236,39 +230,36 @@ class TestEmitSkillEventsDecorator:
         types = [json.loads(l)["event_type"] for l in lines]
         assert types == ["skill_start", "skill_end"]
 
-    def test_decorator_captures_grasp_provenance(self, tmp_path: Path) -> None:
+    def test_decorator_captures_kwargs_in_params(self, tmp_path: Path) -> None:
         bus, log = self._make_logging_bus(tmp_path)
         configure_bus(log_path=log)
 
         @emit_skill_events
-        def pick_object(backend: Any, *, object_id: str, grasp_width_m: float,
-                        grasp_width_source: str = "agent_estimate") -> dict:
+        def pick_object(backend: Any, *, object_id: str, width_m: float) -> dict:
             return {"ok": True, "command": "pick_object"}
 
-        pick_object(None, object_id="red_cube", grasp_width_m=0.065,
-                    grasp_width_source="registry_spec")
+        pick_object(None, object_id="red_cube", width_m=0.065)
         shutdown_bus()
 
         lines = log.read_text().strip().splitlines()
         start_event = json.loads(lines[0])
         assert start_event["event_type"] == "skill_start"
-        assert start_event["payload"]["grasp_width_m"] == pytest.approx(0.065)
-        assert start_event["payload"]["grasp_width_source"] == "registry_spec"
+        assert start_event["payload"]["params"]["object_id"] == "red_cube"
+        assert start_event["payload"]["params"]["width_m"] == pytest.approx(0.065)
 
-    def test_decorator_captures_agent_estimate(self, tmp_path: Path) -> None:
+    def test_decorator_omits_positional_args_from_params(self, tmp_path: Path) -> None:
         configure_bus(log_path=tmp_path / "e.jsonl")
 
         @emit_skill_events
-        def pick_object(backend: Any, *, grasp_width_m: float,
-                        grasp_width_source: str = "agent_estimate") -> dict:
+        def pick_object(backend: Any, object_id: str) -> dict:
             return {"ok": True, "command": "pick_object"}
 
-        pick_object(None, grasp_width_m=0.07, grasp_width_source="agent_estimate")
+        pick_object(None, "red_cube")
         shutdown_bus()
 
         lines = (tmp_path / "e.jsonl").read_text().strip().splitlines()
         payload = json.loads(lines[0])["payload"]
-        assert payload["grasp_width_source"] == "agent_estimate"
+        assert payload["params"] == {}
 
     def test_decorator_skill_end_ok_false_on_dict_result(self, tmp_path: Path) -> None:
         configure_bus(log_path=tmp_path / "e.jsonl")

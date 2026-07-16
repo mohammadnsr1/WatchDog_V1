@@ -30,38 +30,25 @@ from __future__ import annotations
 import time
 import uuid
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
 
-class GraspWidthSource(str, Enum):
-    """Provenance of the grasp_width_m value used in a pick_object call.
-
-    REGISTRY_SPEC  — the agent used the constant from model_registry.yaml spec.
-    AGENT_ESTIMATE — the agent chose a value not sourced from the registry;
-                     the WatchDog can later compare this estimate against the
-                     registry spec constant to flag deviation.
-    """
-
-    REGISTRY_SPEC = "registry_spec"
-    AGENT_ESTIMATE = "agent_estimate"
-
-
 class BeginStepPayload(BaseModel):
     """Agent declares intent to begin a named execution step.
 
-    contract is the serialized PickContract (or None). Capturing it here
-    binds the spec snapshot to the step timestamp so the WatchDog can compare
-    observed behaviour against the spec AS IT WAS at execution time, even if
-    the registry is later updated.
+    Names the objects in scope for this step. Does NOT carry a specification
+    snapshot — the WatchDog loads contracts independently from the registry
+    via its own get_contract tool, so the executor is never the authority on
+    which spec the WatchDog checks against.
     """
 
     model_config = ConfigDict(frozen=True)
 
     step_id: str
-    contract: dict[str, Any] | None = None
+    object_ids: list[str] = []
+    notes: str = ""
 
 
 class EndStepPayload(BaseModel):
@@ -80,20 +67,12 @@ class EndStepPayload(BaseModel):
 
 
 class SkillStartPayload(BaseModel):
-    """Auto-emitted at the entry of a decorated skill call.
-
-    grasp_width_m and grasp_width_source carry pick provenance:
-      - registry_spec → agent used the registry constant (auditable by spec)
-      - agent_estimate → agent chose a value; WatchDog can compare to spec
-    Both fields are None for non-grasp skills.
-    """
+    """Auto-emitted at the entry of a decorated skill call."""
 
     model_config = ConfigDict(frozen=True)
 
     skill_name: str
     params: dict[str, Any]
-    grasp_width_m: float | None = None
-    grasp_width_source: GraspWidthSource | None = None
 
 
 class SkillEndPayload(BaseModel):

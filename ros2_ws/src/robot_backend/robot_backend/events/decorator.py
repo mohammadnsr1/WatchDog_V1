@@ -3,8 +3,6 @@
 Apply to any skill function. The decorator:
   1. Records the entry timestamp.
   2. Emits a skill_start event with the serializable subset of kwargs.
-     For pick_object: grasp_width_m and grasp_width_source are extracted from
-     kwargs and promoted to top-level payload fields for WatchDog provenance checks.
   3. Calls the wrapped function.
   4. Emits skill_end with duration_ns and ok/error from the result dict.
 
@@ -15,7 +13,7 @@ Usage:
     from robot_backend.events.decorator import emit_skill_events
 
     @emit_skill_events
-    def pick_object(backend, *, object_id, grasp_width_m, grasp_width_source="agent_estimate", ...):
+    def some_skill(backend, *, object_id, ...):
         ...
 """
 
@@ -37,6 +35,9 @@ def _sanitize_params(kwargs: dict[str, Any]) -> dict[str, Any]:
     Drops complex objects (RobotBackend, pose dicts with non-primitive values,
     etc.) so the event payload remains pure JSON without importing the full
     type hierarchy on the consumer side.
+
+    Only kwargs are captured — positionally-passed arguments are absent from
+    the event payload, since decorated skills are not made keyword-only.
     """
     safe: dict[str, Any] = {}
     for key, value in kwargs.items():
@@ -61,12 +62,7 @@ def _sanitize_params(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 def emit_skill_events(func: Callable) -> Callable:
-    """Decorator: emit skill_start and skill_end events around a skill call.
-
-    Reads grasp_width_m and grasp_width_source from kwargs automatically so
-    pick_object provenance lands in skill_start without any change to the skill
-    function body.
-    """
+    """Decorator: emit skill_start and skill_end events around a skill call."""
     from .bus import get_bus
 
     @functools.wraps(func)
@@ -75,15 +71,9 @@ def emit_skill_events(func: Callable) -> Callable:
         skill_name: str = func.__qualname__
         start_ns: int = time.monotonic_ns()
 
-        # Grasp-width provenance — present only on pick_object calls.
-        grasp_width_m: float | None = kwargs.get("grasp_width_m")
-        grasp_width_source: str | None = kwargs.get("grasp_width_source")
-
         bus.emit_skill_start(
             skill_name=skill_name,
             params=_sanitize_params(kwargs),
-            grasp_width_m=grasp_width_m,
-            grasp_width_source=grasp_width_source,
         )
 
         ok: bool = False

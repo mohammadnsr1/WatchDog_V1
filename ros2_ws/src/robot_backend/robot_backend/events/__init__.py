@@ -10,7 +10,6 @@ get_bus()                      — retrieve the active bus (or a no-op bus)
 shutdown_bus()                 — close file handles and clear singleton
 emit_skill_events              — decorator: wrap a skill to auto-emit skill_start/end
 EventEnvelope                  — top-level event model (all events in this shape)
-GraspWidthSource               — enum: "registry_spec" | "agent_estimate"
 """
 
 from .bus import configure_bus, get_bus, shutdown_bus
@@ -19,7 +18,6 @@ from .schema import (
     BeginStepPayload,
     EndStepPayload,
     EventEnvelope,
-    GraspWidthSource,
     HaltPayload,
     MonitorArmedPayload,
     MonitorDisarmedPayload,
@@ -36,7 +34,6 @@ __all__ = [
     "shutdown_bus",
     "emit_skill_events",
     "EventEnvelope",
-    "GraspWidthSource",
     "BeginStepPayload",
     "EndStepPayload",
     "SkillStartPayload",

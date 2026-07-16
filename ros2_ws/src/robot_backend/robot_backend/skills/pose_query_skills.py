@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from robot_backend.events.decorator import emit_skill_events
+
 _HAVE_ROS = False
 try:
     from rclpy.duration import Duration
@@ -37,6 +39,7 @@ except ImportError:
         pass
 
 
+@emit_skill_events
 def get_object_pose(
     tf_buffer: Buffer,
     registry: dict[str, Any],
@@ -150,6 +153,7 @@ def get_object_pose(
     }
 
 
+@emit_skill_events
 def get_object_poses(
     tf_buffer: Buffer,
     registry: dict[str, Any],

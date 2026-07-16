@@ -35,7 +35,6 @@ from .schema import (
     BeginStepPayload,
     EndStepPayload,
     EventEnvelope,
-    GraspWidthSource,
     SkillEndPayload,
     SkillStartPayload,
     make_event,
@@ -119,9 +118,13 @@ class EventBus:
     def emit_begin_step(
         self,
         step_id: str,
-        contract: dict[str, Any] | None = None,
+        object_ids: list[str] | None = None,
+        notes: str = "",
     ) -> None:
-        self.publish(make_event("begin_step", BeginStepPayload(step_id=step_id, contract=contract)))
+        self.publish(make_event(
+            "begin_step",
+            BeginStepPayload(step_id=step_id, object_ids=object_ids or [], notes=notes),
+        ))
 
     def emit_end_step(
         self,
@@ -142,18 +145,10 @@ class EventBus:
         self,
         skill_name: str,
         params: dict[str, Any],
-        grasp_width_m: float | None = None,
-        grasp_width_source: str | None = None,
     ) -> None:
-        source = GraspWidthSource(grasp_width_source) if grasp_width_source else None
         self.publish(make_event(
             "skill_start",
-            SkillStartPayload(
-                skill_name=skill_name,
-                params=params,
-                grasp_width_m=grasp_width_m,
-                grasp_width_source=source,
-            ),
+            SkillStartPayload(skill_name=skill_name, params=params),
         ))
 
     def emit_skill_end(

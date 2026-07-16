@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import atexit
 import math
+import os
+from pathlib import Path
 from typing import Any
 
 from robot_backend.mcp_servers import ensure_mcp_server_environment
@@ -28,6 +30,7 @@ ensure_mcp_server_environment("robot_backend.mcp_servers.motion_mcp_server")
 import rclpy
 from rclpy.node import Node
 
+from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.utils.geometry import make_pose
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
@@ -73,6 +76,13 @@ def _ensure_backend():
         rclpy.init(args=None)
 
     _NODE = Node("robot_backend_motion_mcp_server")
+    # /watchdog/events (ROS topic) is the unified cross-process timeline; this
+    # JSONL file is a per-process crash-survival artifact, not the merge point.
+    log_path = os.environ.get(
+        "WATCHDOG_EVENT_LOG",
+        str(Path.home() / ".watchdog" / "events_motion.jsonl"),
+    )
+    configure_bus(node=_NODE, log_path=log_path)
     _BACKEND = create_ros_moveit_backend(node=_NODE)
     return _BACKEND
 
@@ -82,6 +92,7 @@ def _shutdown_backend() -> None:
 
     global _NODE, _BACKEND
 
+    shutdown_bus()
     if _NODE is not None:
         _NODE.destroy_node()
         _NODE = None

@@ -87,9 +87,11 @@ def _ensure_backend():
         rclpy.init(args=None)
     _NODE = Node("robot_backend_scene_mcp_server")
     _BACKEND = create_ros_moveit_backend(node=_NODE)
+    # /watchdog/events (ROS topic) is the unified cross-process timeline; this
+    # JSONL file is a per-process crash-survival artifact, not the merge point.
     log_path = os.environ.get(
         "WATCHDOG_EVENT_LOG",
-        str(Path.home() / ".watchdog" / "events.jsonl"),
+        str(Path.home() / ".watchdog" / "events_scene.jsonl"),
     )
     configure_bus(node=_NODE, log_path=log_path)
     if _REGISTRY is None:
@@ -352,22 +354,22 @@ if mcp is not None:
     @mcp.tool()
     def begin_step(
         step_id: str,
-        object_id: str | None = None,
+        object_ids: list[str] | None = None,
+        notes: str = "",
     ) -> dict[str, Any]:
         """Publish a begin_step event to the WatchDog event bus.
 
-        Opens a sensor-recording window keyed by step_id. All skill_start /
-        skill_end events that follow (until the matching end_step) are within
-        this window. When object_id is provided the corresponding PickContract
-        is loaded from the registry spec and embedded in the event payload.
+        Declares the start of a named execution step and the objects in
+        scope for it.
 
         Parameters
         ----------
         step_id:
             Caller-chosen identifier, unique within the session.
-        object_id:
-            Registry object ID. When provided, its PickContract is attached to
-            the event for downstream conformance checking.
+        object_ids:
+            Registry object IDs in scope for this step.
+        notes:
+            Optional free-text annotation.
         """
         command = "begin_step"
         try:
@@ -375,18 +377,10 @@ if mcp is not None:
                 raise ValueError("step_id must be a non-empty string.")
             step_id = step_id.strip()
 
-            contract_dict = None
-            if object_id is not None:
-                import json as _json
-                from robot_backend.contracts.loader import load_pick_contract
-                from robot_backend.contracts.schema import to_json
-                contract = load_pick_contract(_validate_object_id(object_id))
-                contract_dict = _json.loads(to_json(contract))
-
             _ensure_backend()
             from robot_backend.events.bus import get_bus
-            get_bus().emit_begin_step(step_id=step_id, contract=contract_dict)
-            return _ok(command, step_id=step_id, contract_attached=contract_dict is not None)
+            get_bus().emit_begin_step(step_id=step_id, object_ids=object_ids, notes=notes)
+            return _ok(command, step_id=step_id, object_ids=object_ids or [])
         except Exception as exc:
             return _error(command, exc, step_id=step_id)
 

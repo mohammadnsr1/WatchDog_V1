@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from typing import Mapping
 
+from robot_backend.events.decorator import emit_skill_events
 from robot_backend.interfaces.robot_backend import RobotBackend
 
 SAFE_NAMED_JOINT_POSES: dict[str, list[float]] = {
@@ -13,12 +14,14 @@ SAFE_NAMED_JOINT_POSES: dict[str, list[float]] = {
 }
 
 
+@emit_skill_events
 def get_robot_state_skill(backend: RobotBackend) -> Any:
     """Return backend motion state and planning metadata."""
 
     return backend.motion.get_robot_state()
 
 
+@emit_skill_events
 def move_to_pose_skill(
     backend: RobotBackend,
     target_pose: Any,
@@ -29,6 +32,7 @@ def move_to_pose_skill(
     return backend.motion.move_to_pose(target_pose, **kwargs)
 
 
+@emit_skill_events
 def move_to_joint_positions_skill(
     backend: RobotBackend,
     joint_positions: Mapping[str, float] | list[float] | tuple[float, ...],
@@ -39,6 +43,7 @@ def move_to_joint_positions_skill(
     return backend.motion.move_to_joint_positions(joint_positions, **kwargs)
 
 
+@emit_skill_events
 def move_to_named_safe_joint_pose_skill(
     backend: RobotBackend,
     name: str,
@@ -59,6 +64,7 @@ def move_to_named_safe_joint_pose_skill(
     )
 
 
+@emit_skill_events
 def move_tcp_to_pose_skill(
     backend: RobotBackend,
     target_pose: Any,
@@ -73,6 +79,7 @@ def move_tcp_to_pose_skill(
     )
 
 
+@emit_skill_events
 def move_grasp_center_to_pose_skill(
     backend: RobotBackend,
     target_pose: Any,
