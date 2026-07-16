@@ -27,7 +27,14 @@ _DEFAULT_REGISTRY_PATH = (
 
 
 def _load_registry(path: Path | None = None) -> dict[str, Any]:
-    resolved = path or _DEFAULT_REGISTRY_PATH
+    if path is not None:
+        resolved = path
+    else:
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            resolved = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+        except Exception:
+            resolved = _DEFAULT_REGISTRY_PATH
     with resolved.open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     if not isinstance(data, dict):

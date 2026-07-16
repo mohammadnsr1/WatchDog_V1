@@ -6,7 +6,10 @@ contracts always match the authoritative registry — if the registry changes,
 reloading the contract picks up the new values automatically.
 
 ROS-free: uses only pathlib + yaml, so the WatchDog can load contracts
-without a running ROS context.
+without a running ROS context. The default registry path prefers the
+installed package's share directory (resolved via ament_index_python when
+importable) and otherwise falls back to the package-relative path — no
+running ROS context is required either way.
 """
 
 from __future__ import annotations
@@ -34,7 +37,14 @@ _GRASP_WIDTH_TOL_M: float = 0.005
 
 
 def _load_registry(path: Path | None) -> dict[str, Any]:
-    resolved = path or _DEFAULT_REGISTRY_PATH
+    if path is not None:
+        resolved = path
+    else:
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            resolved = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+        except Exception:
+            resolved = _DEFAULT_REGISTRY_PATH
     if not resolved.is_file():
         raise FileNotFoundError(f"Model registry not found: {resolved}")
     with resolved.open("r", encoding="utf-8") as fh:
