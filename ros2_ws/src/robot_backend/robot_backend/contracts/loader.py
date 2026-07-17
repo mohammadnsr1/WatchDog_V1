@@ -60,8 +60,8 @@ def load_pick_contract(
 ) -> PickContract:
     """Build a PickContract from a registry object's spec block.
 
-    All clause thresholds are read directly from spec.grasp and
-    spec.tolerances — nothing is hard-coded here.
+    All clause thresholds are read directly from spec.grasp, spec.tolerances,
+    and spec.limits — nothing is hard-coded here.
 
     Parameters
     ----------
@@ -92,11 +92,12 @@ def load_pick_contract(
     if not isinstance(spec, dict):
         raise ValueError(
             f"Object {object_id!r} has no 'spec' block in the registry. "
-            "Add grasp / tolerances subsections to enable contract loading."
+            "Add grasp / tolerances / limits subsections to enable contract loading."
         )
 
     grasp = spec.get("grasp", {})
     tolerances = spec.get("tolerances", {})
+    limits = spec.get("limits", {})
 
     # --- Extract spec values (let KeyError/TypeError surface for missing fields) ---
     grasp_width_m: float = float(grasp["grasp_width_m"])
@@ -104,6 +105,7 @@ def load_pick_contract(
     position_tol: float = float(tolerances["position_m"])
     orientation_tol: float = float(tolerances["orientation_deg"])
     lift_height_min: float = float(tolerances["lift_height_min_m"])
+    max_clamp_effort: float = float(limits["max_clamp_effort"])
 
     # --- Preconditions: must hold BEFORE skill execution ---
     # "gripper_is_open" uses threshold 1.0 (boolean encoded as float); this is
@@ -190,10 +192,10 @@ def load_pick_contract(
         Clause(
             field="grasp_effort_instantaneous",
             comparison=Comparison.LE,
-            threshold=force_threshold_n,
+            threshold=max_clamp_effort,
             description=(
-                "Instantaneous finger_joint effort must not exceed the per-object "
-                "cap from spec.grasp.force_threshold_n during the grasp sequence."
+                "Instantaneous finger_joint effort must not exceed the object's "
+                "tolerated clamp effort from spec.limits.max_clamp_effort."
             ),
             unit="sim_effort",
         ),
@@ -203,6 +205,7 @@ def load_pick_contract(
         object_id=object_id,
         grasp_width_m=grasp_width_m,
         force_threshold_n=force_threshold_n,
+        max_clamp_effort=max_clamp_effort,
         preconditions=preconditions,
         effects=effects,
         invariants=invariants,

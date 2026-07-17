@@ -21,11 +21,19 @@
 #   grasp.force_threshold_n    — per-object STOP TRIGGER for the guarded close [sim
 #                                effort units]. The guarded close stops once measured
 #                                finger_joint effort FIRST CROSSES this value — it is
-#                                not a steady-state force setpoint or a ceiling. The
-#                                settled clamp effort after the stop is a consequence
-#                                of penetration depth and joint stiffness and will read
-#                                higher than this trigger. Low for delicate objects,
-#                                higher for rigid ones.
+#                                not a steady-state force setpoint or a ceiling and it
+#                                does NOT bound the settled clamp effort. It must sit
+#                                below the achievable effort ceiling for the configured
+#                                clearance (see the ceiling-law comment below) or the
+#                                close stalls before reaching it and stops instead with
+#                                stop_reason="effort_plateau". At the current 3 mm
+#                                clearance the trigger is nearly inert in practice —
+#                                debounce and stiffness lag carry the close to the floor
+#                                regardless of where this is set (measured: thresholds
+#                                0.5 / 1.0 / 2.0 all settle at 3.38-3.42 effort units).
+#                                This is an engineering parameter of the close
+#                                procedure, not manufacturing documentation about the
+#                                object — it does NOT belong in a conformance clause.
 #                                NOTE: in Isaac Sim the effort scale is small (~0.48 for
 #                                a solid rigid grasp). These values are in sim effort
 #                                units, not physical Newtons. Force control is therefore
@@ -34,11 +42,30 @@
 #   tolerances.position_m      — allowable object pose error before / after pick [m]
 #   tolerances.orientation_deg — allowable orientation error [degrees]
 #   tolerances.lift_height_min_m — minimum vertical displacement to confirm grasp [m]
+#   limits.max_clamp_effort    — CONFORMANCE BOUND: the maximum clamp effort the object
+#                                tolerates [sim effort units] — manufacturing
+#                                documentation, not an engineering parameter of the
+#                                close procedure. Unlike the removed max_contact_force_n
+#                                (which was in Newtons with no sensor feed), this is
+#                                directly measurable from finger_joint effort and can be
+#                                monitored. Distinct in kind from force_threshold_n: the
+#                                trigger says when to stop closing, the bound says what
+#                                the object can survive. Raising force_threshold_n can
+#                                never make a grasp satisfy this bound retroactively —
+#                                it only commands a harder squeeze.
 #
-#   There is no limits.max_contact_force_n field: this platform has no force/torque
-#   sensor and no calibration from Isaac sim-effort units to Newtons, so a
-#   Newton-valued bound has no feed and cannot be monitored. It does not sit in the
-#   spec chain implying it is checkable.
+#   Effort ceiling law (instrument characterization, not a task-learned threshold):
+#   against a rigid object, position control tracks target_width_m =
+#   grasp_width_m - GRASP_CLEARANCE_M, which sits inside the object once contact is
+#   made; steady-state tracking error saturates at the clearance, and since
+#   torque ~= stiffness x tracking_error, CLEARANCE sets the achievable settled
+#   effort ceiling — force_threshold_n can only stop the close early, never push
+#   past it. Measured on green_cube (clearance x settled effort, from
+#   test/rg2_effort_sweep.py's effort_plateau cells): 1 mm -> 0.944, 2 mm -> 2.150,
+#   3 mm -> 3.425, 4 mm -> 4.41, 5 mm -> 5.54 (~1.15 effort-units per mm). At
+#   GRASP_CLEARANCE_M = 3 mm the measured ceiling (~3.43) sits ~15% under
+#   max_clamp_effort = 4.0 — that margin is WHY 3 mm was chosen; 4 mm and 5 mm
+#   clearances measure above the bound and would violate it on every grasp.
 
 # permitted_contacts: object pairs that are allowed to physically touch
 # for the duration of a run (e.g. because the assembly plan requires
@@ -73,11 +100,13 @@ objects:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
         grasp_width_m: 0.06      # expected contact width [m]; verification input, not a command
-        force_threshold_n: 0.5   # effort cap: solid 6 cm cube; above the ~0.48 sim plateau
+        force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+      limits:
+        max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
 
   green_cube:
     enabled: true
@@ -99,8 +128,10 @@ objects:
           position: {x: 0.0, y: 0.0, z: 0.0}
           orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
         grasp_width_m: 0.04      # expected contact width [m]; verification input, not a command
-        force_threshold_n: 4.0  # effort cap: smaller 4 cm cube; slightly below the rigid plateau
+        force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+      limits:
+        max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates

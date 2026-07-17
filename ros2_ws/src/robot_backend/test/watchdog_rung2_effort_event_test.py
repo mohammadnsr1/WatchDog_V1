@@ -6,18 +6,20 @@ sustained effort signal (per the earlier grasp/effort work).
 
 Phase A — COMPLIANCE check, using the real safety clause:
     green_cube's contract invariant is
-        grasp_effort_instantaneous LE force_threshold_n   (force_threshold_n = 0.18)
-    The monitor is armed with comparison="gt", threshold=force_threshold_n —
-    i.e. it fires exactly when that invariant is violated. A normal, healthy
-    grasp is EXPECTED to pass this (no fire), because the guarded-move stops
-    at essentially this same threshold with its own debounce. So Phase A's
-    correct, designed outcome is NO FIRE — that is what "the grasp is
-    conformant with its own effort invariant" looks like. This is a genuine
-    test of the monitor's specificity (it doesn't cry wolf on a compliant
-    grasp), not a placeholder.
+        grasp_effort_instantaneous LE max_clamp_effort   (max_clamp_effort = 4.0)
+    max_clamp_effort is the conformance BOUND (spec.limits.max_clamp_effort) —
+    what the object tolerates — distinct from force_threshold_n, the guarded
+    close's stop TRIGGER, which cannot bound achievable effort. The monitor is
+    armed with comparison="gt", threshold=max_clamp_effort — i.e. it fires
+    exactly when that invariant is violated. A normal, healthy grasp is
+    EXPECTED to pass this (no fire): at the configured 3 mm clearance, settled
+    effort is ~3.42, under the 4.0 bound. So Phase A's correct, designed
+    outcome is NO FIRE — that is what "the grasp is conformant with its own
+    effort invariant" looks like. This is a genuine test of the monitor's
+    specificity (it doesn't cry wolf on a compliant grasp), not a placeholder.
 
 Phase B — MECHANISM check, using a deliberately lower threshold:
-    Re-arm on the same joint with threshold = force_threshold_n * 0.5, well
+    Re-arm on the same joint with threshold = max_clamp_effort * 0.5, well
     above the RG2's idle noise floor (~0.03) but comfortably below what a
     real contact grasp reaches. This should fire, proving the monitor
     actually detects a real crossing (rather than being silently broken in a
@@ -191,15 +193,15 @@ def main() -> int:
         if clause is None:
             print("FAIL: green_cube's contract has no grasp_effort_instantaneous clause.")
             return 1
-        force_threshold_n = clause.threshold
-        print(f"force_threshold_n = {force_threshold_n}, sourced from "
+        max_clamp_effort = clause.threshold
+        print(f"max_clamp_effort = {max_clamp_effort}, sourced from "
               f"green_cube's own contract clause: field={clause.field!r} "
               f"comparison={clause.comparison.value!r} "
               f"(\"{clause.description}\")")
 
         ok_a, _ = _run_phase(
             harness, engine, backend, registry,
-            threshold=force_threshold_n,
+            threshold=max_clamp_effort,
             clause=clause.model_dump(mode="json"),
             expect_fire=False,
             label="Phase A (compliance check, real safety threshold)",
@@ -211,7 +213,7 @@ def main() -> int:
                   "normal operation — that's worth investigating on its own, "
                   "separately from this test.")
 
-        threshold_b = force_threshold_n * PHASE_B_THRESHOLD_FACTOR
+        threshold_b = max_clamp_effort * PHASE_B_THRESHOLD_FACTOR
         ok_b, fires_b = _run_phase(
             harness, engine, backend, registry,
             threshold=threshold_b,
@@ -221,7 +223,7 @@ def main() -> int:
                 "threshold": threshold_b,
                 "description": (
                     f"Mechanism check only: {PHASE_B_THRESHOLD_FACTOR} x "
-                    f"green_cube's real force_threshold_n, deliberately "
+                    f"green_cube's real max_clamp_effort, deliberately "
                     f"lowered to confirm the monitor fires on a real "
                     f"crossing rather than being silently inert."
                 ),

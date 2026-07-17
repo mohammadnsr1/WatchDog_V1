@@ -58,6 +58,14 @@ class PickContract(BaseModel):
 
     grasp_width_m is carried here so the WatchDog can compare it against
     what the executor actually reported in the event log (provenance check).
+
+    force_threshold_n and max_clamp_effort are different quantities carried
+    for different reasons. force_threshold_n is the stop TRIGGER the executor
+    was configured with — a provenance value the WatchDog can compare against
+    what the guarded close actually used, not a conformance bound. It can only
+    stop the close early; it never limits achievable effort. max_clamp_effort
+    is the conformance BOUND — what the object tolerates — and is the
+    threshold actually used by the grasp_effort_instantaneous invariant.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -67,6 +75,7 @@ class PickContract(BaseModel):
     object_id: str
     grasp_width_m: float
     force_threshold_n: float
+    max_clamp_effort: float
     preconditions: list[Clause]
     effects: list[Clause]
     invariants: list[Clause]

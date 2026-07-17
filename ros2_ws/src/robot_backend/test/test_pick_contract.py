@@ -66,6 +66,8 @@ def minimal_registry(tmp_path: Path) -> Path:
                 position_m: 0.004
                 orientation_deg: 3.0
                 lift_height_min_m: 0.015
+              limits:
+                max_clamp_effort: 10.0
     """)
     registry = tmp_path / "model_registry.yaml"
     registry.write_text(content, encoding="utf-8")
@@ -231,9 +233,10 @@ class TestLoadFromRegistry:
         assert contract.object_id == "test_cube"
         assert contract.grasp_width_m == pytest.approx(0.055)
         assert contract.force_threshold_n == pytest.approx(0.42)
+        assert contract.max_clamp_effort == pytest.approx(10.0)
         # invariants[0] is grasp_effort_instantaneous, sourced from
-        # spec.grasp.force_threshold_n (0.42) — there is no separate limit clause.
-        assert contract.invariants[0].threshold == pytest.approx(0.42)
+        # spec.limits.max_clamp_effort (10.0), not force_threshold_n.
+        assert contract.invariants[0].threshold == pytest.approx(10.0)
 
 
 # ---------------------------------------------------------------------------
