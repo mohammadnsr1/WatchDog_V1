@@ -193,9 +193,7 @@ def load_pick_contract(
             threshold=force_threshold_n,
             description=(
                 "Instantaneous finger_joint effort must not exceed the per-object "
-                "guarded-close cap (spec.grasp.force_threshold_n) during the grasp "
-                "sequence. This is a software-enforced effort ceiling, distinct from "
-                "the hardware safety limit in limits.max_contact_force_n."
+                "cap from spec.grasp.force_threshold_n during the grasp sequence."
             ),
             unit="sim_effort",
         ),

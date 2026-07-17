@@ -37,6 +37,14 @@ GRASP_CLEARANCE_M: float = 0.003
 # rg2_controller.py); per-object tuned overrides belong in the registry's
 # spec.grasp.force_threshold_n, not here.
 DEFAULT_FORCE_THRESHOLD: float = 0.5
+# Mirrors rg2_controller.CONTACT_STOP_REASONS (isaac_trajectory_bridge). Not
+# imported directly: robot_backend only depends on
+# isaac_trajectory_bridge_interfaces, not the isaac_trajectory_bridge package
+# itself, and importing rg2_controller would pull in its full ROS Node stack.
+# Source of truth is rg2_controller.py — keep this set in manual sync with it.
+# Both reasons indicate confirmed physical contact, differing only in HOW it
+# was detected (threshold crossed vs effort stalled above noise floor).
+CONTACT_STOP_REASONS: frozenset[str] = frozenset({"force_threshold", "effort_plateau"})
 # Sentinel meaning "no override" for goal.width_tolerance_m: the controller
 # treats <= 0.0 as "use my own verify_tolerance_m parameter" (rg2_controller.py
 # DEFAULT_VERIFY_TOLERANCE_M). The tolerance is defined once, on the controller
@@ -153,7 +161,8 @@ def grasp_skill(
 ) -> dict[str, Any]:
     """Torque-probed grasp via the GripperGuardedMove action server (mode='torque').
 
-    A successful grasp stops on 'force_threshold' (effort-based contact).
+    A successful grasp stops on 'force_threshold' or 'effort_plateau'
+    (both are effort-based confirmed contact — see CONTACT_STOP_REASONS).
     The final width is checked against the spec's expected grasp_width_m
     (±grasp_width_tolerance_m) as a sanity bound, not a stop condition.
     """
@@ -219,8 +228,9 @@ def grasp_skill(
     stop_reason = action_result.stop_reason
 
     # --- Success criteria ---
-    # torque mode: contact is confirmed only by effort-threshold; width is a sanity bound only.
-    criterion_contact = stop_reason == "force_threshold"
+    # torque mode: contact is confirmed by either effort-based stop reason;
+    # width is a sanity bound only.
+    criterion_contact = stop_reason in CONTACT_STOP_REASONS
     criterion_width_plausible = abs(final_width - expected_width_m) <= grasp_width_tolerance_m
 
     provenance: dict[str, Any] = {
@@ -243,7 +253,7 @@ def grasp_skill(
         if not criterion_contact:
             reason_parts.append(
                 f"stop_reason '{stop_reason}' indicates no confirmed contact "
-                f"(expected 'force_threshold')"
+                f"(expected one of {sorted(CONTACT_STOP_REASONS)})"
             )
         if not criterion_width_plausible:
             reason_parts.append(

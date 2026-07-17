@@ -133,6 +133,14 @@ DEFAULT_TORQUE_MAX_DURATION_SEC = 30.0
 # Max wall-clock gap since the last fresh joint_state before the probe holds.
 DEFAULT_TORQUE_STALE_HOLD_SEC = 0.060  # 60 ms ≈ 3× the 50 Hz period
 
+# Both reasons indicate confirmed physical contact in torque mode — they
+# differ only in HOW contact was detected: "force_threshold" means effort
+# crossed the primary threshold; "effort_plateau" means effort stalled above
+# the noise floor without ever crossing it (expected when target_width_m
+# caps the achievable close before force_threshold is reached). Consumers
+# that gate on "contact confirmed" must accept both.
+CONTACT_STOP_REASONS = frozenset({"force_threshold", "effort_plateau"})
+
 
 class RG2Controller(Node):
     def __init__(self) -> None:
@@ -748,10 +756,15 @@ class RG2Controller(Node):
                  spike at first contact — sustained contact is required, not
                  a one-sample crossing.
               4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
-                 effort_plateau_ticks while effort is non-negligible relative
-                 to force_threshold.  Catches slow contact build-up that
-                 stalls just below the primary threshold without ever
-                 crossing it.  stop_reason = "force_threshold".
+                 effort_plateau_ticks while effort is above effort_noise_floor.
+                 Catches effort that stalls above sensor noise without ever
+                 crossing force_threshold — the expected outcome when the
+                 commanded floor (target_width_m) physically caps achievable
+                 effort before the primary threshold is reached.  stop_reason
+                 = "effort_plateau", distinct from PRIMARY STOP's
+                 "force_threshold" — both are in CONTACT_STOP_REASONS and are
+                 treated as confirmed contact, but the string is preserved so
+                 logs (and the WatchDog) can tell HOW contact was detected.
               5. PROBE STEP — advance commanded_angle by torque_probe_step_rad
                  toward CLOSE_POSITION, clamped to floor_angle (safety floor,
                  never a stop condition).
@@ -936,16 +949,19 @@ class RG2Controller(Node):
                     contact_count = 0
 
                 # ── 4. PLATEAU CONFIRM (secondary) ────────────────────────
-                # Catches slow effort build-up that stalls just below the
-                # primary threshold without ever crossing it.  Gate requires
-                # abs(effort) clearly above noise AND close to the primary
-                # threshold.  d_effort keeps its sign for the derivative check.
-                if abs(effort) > max(self._effort_noise_floor, force_threshold * 0.8):
+                # Catches effort that has stalled above sensor noise without
+                # ever crossing force_threshold — i.e. the close has stopped
+                # advancing against something.  Gate is the noise floor
+                # itself, not a fraction of force_threshold: gating at or
+                # above force_threshold would make this path unreachable,
+                # since the primary stop fires first at that level.
+                # d_effort keeps its sign for the derivative check.
+                if abs(effort) > self._effort_noise_floor:
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:
                             self._command_angle(commanded_angle)  # hold
-                            stop_reason = "force_threshold"
+                            stop_reason = "effort_plateau"
                             break
                     else:
                         plateau_count = 0
@@ -971,10 +987,10 @@ class RG2Controller(Node):
 
                 time.sleep(dt)
 
-            fb.phase = "contact" if stop_reason == "force_threshold" else stop_reason
+            fb.phase = "contact" if stop_reason in CONTACT_STOP_REASONS else stop_reason
             goal_handle.publish_feedback(fb)
 
-            result.success = stop_reason == "force_threshold"
+            result.success = stop_reason in CONTACT_STOP_REASONS
             result.stop_reason = stop_reason
             result.final_width_m = final_width
             result.final_effort = final_effort
