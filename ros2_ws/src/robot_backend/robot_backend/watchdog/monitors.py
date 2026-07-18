@@ -90,6 +90,10 @@ class MonitorPrimitive:
     """Base class for deterministic monitor predicates."""
 
     feed: str = ""
+    description: str = ""
+    serves: str = ""
+    reference_capture: str = "none"
+    param_schema: list[dict[str, Any]] = []
 
     def __init__(
         self,
@@ -126,6 +130,33 @@ class RelativeFrameMonitor(MonitorPrimitive):
     """Relative-frame predicate driven by TF; serves retention/alignment clauses."""
 
     feed = "tf"
+    description = (
+        "Fires when the straight-line distance between two TF frames departs "
+        "from its armed reference by more than max_delta_m."
+    )
+    serves = (
+        "Clauses bounding the relative displacement of two frames: grasp "
+        "retention between a gripper frame and a held object, insertion "
+        "alignment between a part and its mating feature."
+    )
+    reference_capture = (
+        "at_arm_time. The parent->child translation is looked up at the instant "
+        "of arming and frozen. The monitor measures departure from that frozen "
+        "value, not from any absolute target. Arm only once the relationship "
+        "you intend to hold already exists: arming grasp retention before the "
+        "grasp closes freezes the pre-grasp separation as the reference and the "
+        "monitor will fire on the approach itself. The armed reference is "
+        "returned in reference_values.translation; check it."
+    )
+    param_schema = [
+        {"name": "parent_frame", "type": "string", "required": True,
+         "notes": "TF frame id. Must exist in the WatchDog TF buffer."},
+        {"name": "child_frame", "type": "string", "required": True,
+         "notes": "TF frame id."},
+        {"name": "max_delta_m", "type": "number", "required": True,
+         "units": "meters", "constraint": "> 0",
+         "notes": "Permitted departure from the armed reference distance."},
+    ]
 
     def __init__(self, params: dict[str, Any], step_id: str, recorder: Any, **kwargs: Any) -> None:
         super().__init__("relative_frame", params, step_id, **kwargs)
@@ -154,6 +185,29 @@ class StationarityMonitor(MonitorPrimitive):
     """Stationarity predicate driven by TF samples; serves scene invariants."""
 
     feed = "tf"
+    description = (
+        "Fires when an object's position displaces more than epsilon_m from its "
+        "armed reference position."
+    )
+    serves = (
+        "Invariants asserting an object is not to be disturbed: untouched-object "
+        "invariants, scene invariants over fixtures and neighbouring parts."
+    )
+    reference_capture = (
+        "at_arm_time. The latest buffered pose for object_id becomes the "
+        "reference. Arm at step entry, before the executor disturbs the scene; "
+        "arming after a disturbance freezes the already-disturbed pose and the "
+        "invariant becomes unfalsifiable. Requires at least one buffered pose "
+        "sample for the object or arming fails. The armed reference is returned "
+        "in reference_values.position."
+    )
+    param_schema = [
+        {"name": "object_id", "type": "string", "required": True,
+         "notes": "Must be an object enabled in the model registry."},
+        {"name": "epsilon_m", "type": "number", "required": True,
+         "units": "meters", "constraint": "> 0",
+         "notes": "Permitted displacement from the armed reference position."},
+    ]
 
     def __init__(self, params: dict[str, Any], step_id: str, recorder: Any, **kwargs: Any) -> None:
         super().__init__("stationarity", params, step_id, **kwargs)
@@ -184,6 +238,28 @@ class RegionMonitor(MonitorPrimitive):
     """Region predicate driven by TF samples; serves pose-corridor clauses."""
 
     feed = "tf"
+    description = (
+        "Fires when an object leaves an axis-aligned box (stay_inside) or "
+        "enters one (stay_outside)."
+    )
+    serves = "Pose corridors, keep-out volumes, workspace bounds."
+    reference_capture = (
+        "none. The box is absolute and given in the object's registry lookup "
+        "frame, so this primitive can be armed at any time with identical "
+        "meaning."
+    )
+    param_schema = [
+        {"name": "object_id", "type": "string", "required": True,
+         "notes": "Must be an object enabled in the model registry."},
+        {"name": "center", "type": "object {x, y, z}", "required": True,
+         "units": "meters",
+         "notes": "Box center in the object's registry lookup frame."},
+        {"name": "half_extents", "type": "object {x, y, z}", "required": True,
+         "units": "meters", "constraint": "each > 0",
+         "notes": "Half-widths of the box along each axis."},
+        {"name": "mode", "type": "enum", "required": True,
+         "values": ["stay_inside", "stay_outside"]},
+    ]
 
     def __init__(self, params: dict[str, Any], step_id: str, **kwargs: Any) -> None:
         super().__init__("region", params, step_id, **kwargs)
@@ -221,6 +297,32 @@ class EffortEventMonitor(MonitorPrimitive):
     """Effort-event predicate driven by /joint_states; serves contact/load clauses."""
 
     feed = "joint_states"
+    description = (
+        "Fires when the absolute effort reported for a named joint satisfies "
+        "comparison against threshold on sustained_ticks consecutive samples."
+    )
+    serves = "Contact signatures, clamp-force bounds, load clauses."
+    reference_capture = (
+        "none. The threshold is absolute, so this primitive can be armed at any "
+        "time with identical meaning."
+    )
+    param_schema = [
+        {"name": "joint_name", "type": "string", "required": True,
+         "notes": "Must appear in the name array of /joint_states."},
+        {"name": "comparison", "type": "enum", "required": True,
+         "values": ["gt", "ge", "lt", "le"]},
+        {"name": "threshold", "type": "number", "required": True,
+         "units": "effort units as reported on /joint_states",
+         "notes": "Compared against the absolute value of the reported effort. "
+                  "These are not newtons; use the value from the contract clause "
+                  "or registry spec field verbatim and do not convert it."},
+        {"name": "sustained_ticks", "type": "integer", "required": False,
+         "default": 3, "constraint": "> 0",
+         "notes": "Consecutive violating samples required before firing. An "
+                  "instrument characterization constant that debounces contact "
+                  "chatter, not a specification value. Leave at default unless "
+                  "a contract clause states otherwise."},
+    ]
 
     def __init__(self, params: dict[str, Any], step_id: str, **kwargs: Any) -> None:
         super().__init__("effort_event", params, step_id, **kwargs)
@@ -261,3 +363,29 @@ MONITOR_TYPES = {
     "region": RegionMonitor,
     "effort_event": EffortEventMonitor,
 }
+
+
+def monitor_definitions() -> list[dict[str, Any]]:
+    """Describe every registered monitor primitive."""
+    return [
+        {
+            "monitor_type": name,
+            "feed": cls.feed,
+            "description": cls.description,
+            "serves": cls.serves,
+            "reference_capture": cls.reference_capture,
+            "params": cls.param_schema,
+        }
+        for name, cls in MONITOR_TYPES.items()
+    ]
+
+
+__all__ = [
+    "MonitorPrimitive",
+    "RelativeFrameMonitor",
+    "StationarityMonitor",
+    "RegionMonitor",
+    "EffortEventMonitor",
+    "MONITOR_TYPES",
+    "monitor_definitions",
+]

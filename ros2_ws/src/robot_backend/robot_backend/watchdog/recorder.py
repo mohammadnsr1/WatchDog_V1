@@ -311,13 +311,15 @@ class EvidenceRecorder:
                 return None
             return self._pose_tuple_to_dict(samples[-1])
 
-    def pop_wait_events(self, event_types: set[str]) -> list[dict[str, Any]]:
+    def pop_wait_events(
+        self, event_types: set[str] | None = None
+    ) -> list[dict[str, Any]]:
         matched: list[dict[str, Any]] = []
         with self.lock:
             remaining: collections.deque[dict[str, Any]] = collections.deque(maxlen=1000)
             while self._wait_events:
                 event = self._wait_events.popleft()
-                if event.get("event_type") in event_types:
+                if event_types is None or event.get("event_type") in event_types:
                     matched.append(event)
                 else:
                     remaining.append(event)

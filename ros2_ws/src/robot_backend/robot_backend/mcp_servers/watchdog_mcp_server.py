@@ -22,7 +22,7 @@ from robot_backend.events.bus import EventBus
 from robot_backend.events.schema import VerdictPayload, make_event
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
-from robot_backend.watchdog.monitors import MONITOR_TYPES
+from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
 from robot_backend.watchdog.recorder import EvidenceRecorder, _load_registry
 from robot_backend.watchdog.timebase import wall_ns
 
@@ -179,11 +179,13 @@ def _build_monitor(
     return cls(params=params, step_id=resolved_step, **kwargs)
 
 
-def _drain_wait(ctx: WatchDogContext) -> dict[str, Any] | None:
+def _drain_wait(
+    ctx: WatchDogContext, event_types: set[str] | None
+) -> dict[str, Any] | None:
     fires = ctx.engine.pop_fires()
     if fires:
         return {"wake": "monitor_fire", "fire": fires[0], "additional_fires": fires[1:]}
-    events = ctx.recorder.pop_wait_events({"begin_step", "end_step"})
+    events = ctx.recorder.pop_wait_events(event_types)
     if events:
         first = events[0]
         return {
@@ -293,25 +295,38 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
-    def wait_for_event(timeout_sec: float = 120.0) -> dict[str, Any]:
-        """Block until a monitor fire, begin_step, end_step, or timeout."""
+    def wait_for_event(
+        timeout_sec: float = 120.0,
+        event_types: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Block until a monitor fire, an executor event of the requested types, or timeout."""
         command = "wait_for_event"
         try:
             ctx = _ensure_watchdog()
             timeout = min(max(float(timeout_sec), 0.0), 600.0)
-            immediate = _drain_wait(ctx)
+            wanted = set(event_types) if event_types else None
+            immediate = _drain_wait(ctx, wanted)
             if immediate is not None:
                 return _ok(command, **immediate)
             ctx.wake_event.clear()
-            immediate = _drain_wait(ctx)
+            immediate = _drain_wait(ctx, wanted)
             if immediate is not None:
                 return _ok(command, **immediate)
             if not ctx.wake_event.wait(timeout):
                 return _ok(command, wake="timeout")
-            immediate = _drain_wait(ctx)
+            immediate = _drain_wait(ctx, wanted)
             if immediate is not None:
                 return _ok(command, **immediate)
             return _ok(command, wake="timeout")
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
+    def available_monitor_definitions() -> dict[str, Any]:
+        """Return the type, feed, semantics, and parameter schema of every monitor primitive."""
+        command = "available_monitor_definitions"
+        try:
+            return _ok(command, monitors=monitor_definitions())
         except Exception as exc:
             return _error(command, exc)
 

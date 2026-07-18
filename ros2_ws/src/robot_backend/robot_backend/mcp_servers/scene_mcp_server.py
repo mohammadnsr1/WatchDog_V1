@@ -388,6 +388,7 @@ if mcp is not None:
     def end_step(
         step_id: str,
         claimed_outcome: str,
+        claim_detail: dict[str, Any] | None = None,
         notes: str = "",
     ) -> dict[str, Any]:
         """Publish an end_step event and declare the claimed outcome.
@@ -402,6 +403,11 @@ if mcp is not None:
             Must match the step_id from the corresponding begin_step call.
         claimed_outcome:
             Self-assessed result: "success", "failure", or "partial".
+        claim_detail:
+            The quantities checked to reach claimed_outcome, e.g.
+            {"final_width_m": 0.021, "width_tolerance_m": 0.002}. Lets the
+            WatchDog compare its own evidence against what the executor
+            actually looked at rather than only its conclusion.
         notes:
             Optional free-text annotation.
         """
@@ -420,6 +426,7 @@ if mcp is not None:
             get_bus().emit_end_step(
                 step_id=step_id.strip(),
                 claimed_outcome=claimed_outcome,
+                claim_detail=claim_detail,
                 notes=notes,
             )
             return _ok(command, step_id=step_id.strip(), claimed_outcome=claimed_outcome)

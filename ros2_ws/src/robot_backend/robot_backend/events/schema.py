@@ -63,6 +63,7 @@ class EndStepPayload(BaseModel):
 
     step_id: str
     claimed_outcome: Literal["success", "failure", "partial"]
+    claim_detail: dict[str, Any] | None = None
     notes: str = ""
 
 

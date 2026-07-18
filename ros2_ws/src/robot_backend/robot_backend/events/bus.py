@@ -130,6 +130,7 @@ class EventBus:
         self,
         step_id: str,
         claimed_outcome: str,
+        claim_detail: dict[str, Any] | None = None,
         notes: str = "",
     ) -> None:
         self.publish(make_event(
@@ -137,6 +138,7 @@ class EventBus:
             EndStepPayload(
                 step_id=step_id,
                 claimed_outcome=claimed_outcome,  # type: ignore[arg-type]
+                claim_detail=claim_detail,
                 notes=notes,
             ),
         ))
