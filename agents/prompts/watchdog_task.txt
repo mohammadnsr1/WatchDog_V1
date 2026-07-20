@@ -1,0 +1,20 @@
+## Assembly instruction specification
+
+{{INSTRUCTION_SPEC}}
+
+## Step plan
+
+{{STEP_PLAN}}
+
+## Objects in scene
+
+{{OBJECT_IDS}}
+
+## Run notes
+
+{{RUN_NOTES}}
+
+---
+
+Begin your control loop. Monitor this run to completion. Record one verdict per
+step.

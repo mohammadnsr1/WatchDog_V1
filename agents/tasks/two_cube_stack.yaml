@@ -1,0 +1,61 @@
+name: two_cube_stack
+instruction_spec: |
+  Assemble a two-cube stack by picking up green_cube and placing it centered on
+  top of red_cube, then releasing it there.
+
+  Preconditions (step 1, pick_green_cube):
+    - green_cube and red_cube are both present in the scene and localized
+      within their registry position/orientation tolerances.
+    - The gripper is empty (not already holding an object).
+
+  Effects (step 1, pick_green_cube):
+    - The gripper has grasped green_cube: measured gripper width at plateau
+      matches green_cube's registry grasp_width_m within tolerance, and the
+      object has lifted at least its registry lift_height_min_m.
+    - Grasp clamp effort on green_cube never exceeds green_cube's registry
+      max_clamp_effort.
+    - red_cube is undisturbed: its pose has not moved beyond its registry
+      position/orientation tolerance from its pre-step snapshot.
+
+  Preconditions (step 2, place_green_on_red):
+    - green_cube is grasped and lifted (established by step 1).
+
+  Effects (step 2, place_green_on_red):
+    - green_cube's final pose is centered on top of red_cube: horizontal
+      offset within green_cube's registry position tolerance of red_cube's
+      horizontal position, and vertical offset consistent with green_cube
+      resting on top of red_cube's collision geometry.
+    - green_cube and red_cube are in contact. This contact is permitted by
+      the registry's permitted_contacts entry [green_cube, red_cube] and is
+      the intended outcome of this step, not a violation.
+    - The gripper has released green_cube (open, no grasp retained) and
+      green_cube remains at its placed pose after release (it does not
+      topple or slide).
+    - Grasp clamp effort on green_cube never exceeds green_cube's registry
+      max_clamp_effort at any point before release.
+
+  Invariants across both steps:
+    - No object other than green_cube (and, from step 2 onward, its permitted
+      contact with red_cube) is displaced or contacted.
+    - Clamp effort on whichever object is currently grasped never exceeds
+      that object's registry max_clamp_effort. Reaching the registry
+      force_threshold_n stop trigger during a guarded close is expected and
+      is not itself a violation.
+step_plan: |
+  step_id: pick_green_cube
+    object_id: green_cube
+    action: Approach, grasp, and lift green_cube clear of the table.
+
+  step_id: place_green_on_red
+    object_id: green_cube
+    action: Transport green_cube to a pose centered on top of red_cube,
+      lower it into contact, and release the gripper.
+object_ids: |
+  green_cube — 40 mm cube, graspable, to be picked and placed.
+  red_cube   — 60 mm cube, graspable, stays in place as the stack base.
+
+  Registry-declared permitted contact for this run: [green_cube, red_cube].
+# run_notes stays empty by design, including in fault-injection runs where the
+# registry has been deliberately corrupted: neither the executor nor WatchDog
+# may be told that, since being told would invalidate the comparison.
+run_notes: ""

@@ -1,0 +1,23 @@
+agent: watchdog
+provider: openai
+model: gpt-5
+api_key_env: OPENAI_API_KEY
+max_tokens: 4096
+
+system_prompt: prompts/watchdog_system.txt
+task_template: prompts/watchdog_task.txt
+
+mcp_servers:
+  - name: watchdog
+    command: python3
+    args: ["-m", "robot_backend.mcp_servers.watchdog_mcp_server"]
+    cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+    env:
+      WATCHDOG_MONITOR_LOG: "~/.watchdog/monitor_events.jsonl"
+
+loop:
+  max_turns: 200
+  wait_timeout_sec: 120.0
+  stop_after_consecutive_timeouts: 2
+
+transcript_dir: transcripts

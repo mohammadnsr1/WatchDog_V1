@@ -1,0 +1,20 @@
+## Assembly instruction specification
+
+{{INSTRUCTION_SPEC}}
+
+## Step plan
+
+{{STEP_PLAN}}
+
+## Objects in scene
+
+{{OBJECT_IDS}}
+
+## Run notes
+
+{{RUN_NOTES}}
+
+---
+
+Execute this assembly. Announce each step before you act, carry it out, and
+close each step with your outcome claim and its basis.
