@@ -9,6 +9,7 @@ termination path. That coupling is confined to the single constant below.
 from __future__ import annotations
 
 import contextlib
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,7 +56,13 @@ class MCPClientPool(contextlib.AbstractAsyncContextManager):
                     command=server.command,
                     args=server.args,
                     cwd=server.cwd,
-                    env=server.env or None,
+                    # mcp's stdio_client defaults to a minimal, security-safe
+                    # environment (HOME/PATH/USER/...) that does NOT inherit
+                    # PYTHONPATH, AMENT_PREFIX_PATH, ROS_DISTRO, etc. These
+                    # servers are ROS2 nodes that need the sourced overlay, so
+                    # we explicitly pass this process's full environment
+                    # through, with the config's own env vars layered on top.
+                    env={**os.environ, **server.env},
                 )
                 read, write = await self._stack.enter_async_context(
                     stdio_client(params)

@@ -9,7 +9,7 @@ task_template: prompts/watchdog_task.txt
 
 mcp_servers:
   - name: watchdog
-    command: python3
+    command: /usr/bin/python3
     args: ["-m", "robot_backend.mcp_servers.watchdog_mcp_server"]
     cwd: "~/watchdog/WatchDog_V1/ros2_ws"
     env:

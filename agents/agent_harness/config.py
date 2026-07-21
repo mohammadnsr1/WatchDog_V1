@@ -64,7 +64,10 @@ def load_config(config_path: str | Path) -> AgentConfig:
     with open(config_path) as f:
         raw = yaml.safe_load(f)
 
-    base_dir = config_path.parent
+    # Relative paths in the config (system_prompt, task_template,
+    # transcript_dir) are written relative to the agents/ directory the
+    # tooling is run from (see README), not relative to config/ itself.
+    base_dir = Path.cwd()
 
     def resolve_relative(p: str) -> Path:
         expanded = _expand(p)
