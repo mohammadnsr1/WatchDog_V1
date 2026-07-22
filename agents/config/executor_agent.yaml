@@ -20,6 +20,12 @@ mcp_servers:
     command: /usr/bin/python3
     args: ["-m", "robot_backend.mcp_servers.scene_mcp_server"]
     cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+    env:
+      # Read by robot_backend.cell.gate as the default timeout_sec for
+      # begin_step/mark_phase's request_go calls. Must equal gate_timeout_sec
+      # below -- config.py checks this at load time and refuses to start if
+      # they've drifted apart.
+      CELL_GATE_TIMEOUT_SEC: "90.0"
 
 loop:
   max_turns: 300
@@ -27,3 +33,14 @@ loop:
   stop_after_consecutive_timeouts: 2
 
 transcript_dir: transcripts
+
+# Timeout ordering (enforced at config load, not just documented here):
+# mcp_client_timeout_sec > gate_timeout_sec > expected agent arming turn.
+# begin_step/mark_phase can block for as long as the monitoring agent takes
+# to arm (up to gate_timeout_sec, at the orchestrator). If mcp_client_timeout_sec
+# were <= gate_timeout_sec, this process's own MCP client would abort the
+# call while the orchestrator is still legitimately holding it open -- an
+# mcp_error that looks like a transport bug and is actually a configuration
+# mismatch. Keep this comfortably above gate_timeout_sec (here: +60s).
+gate_timeout_sec: 90.0
+mcp_client_timeout_sec: 150.0

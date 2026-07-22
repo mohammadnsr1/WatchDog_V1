@@ -21,3 +21,9 @@ loop:
   stop_after_consecutive_timeouts: 2
 
 transcript_dir: transcripts
+
+# No gate_timeout_sec here: WatchDog never calls request_go, so there is no
+# gate timeout on this side of the handshake to order against. Still keep
+# this comfortably above the longest blocking call this agent makes
+# (wait_for_event's own timeout_sec, bounded by loop.wait_timeout_sec above).
+mcp_client_timeout_sec: 180.0

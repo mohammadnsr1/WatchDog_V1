@@ -112,7 +112,7 @@ async def _dry_run(config, system_prompt: str, task_text: str) -> int:
     print(f"=== agent: {config.agent} | provider: {config.provider} | model: {config.model} ===")
     print()
     print("--- connecting to MCP servers ---")
-    async with MCPClientPool(config.mcp_servers) as pool:
+    async with MCPClientPool(config.mcp_servers, config.mcp_client_timeout_sec) as pool:
         tools = await pool.list_tools()
         print(f"discovered {len(tools)} tool(s):")
         for t in tools:

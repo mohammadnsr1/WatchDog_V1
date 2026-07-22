@@ -4,6 +4,15 @@ Everything here is discovered at runtime from the servers themselves. No tool
 name, signature, or schema is hardcoded, with exactly one exception: the
 runner needs to recognize wait_for_event to detect a timeout-driven
 termination path. That coupling is confined to the single constant below.
+
+Per-request timeout is made explicit (config.AgentConfig.mcp_client_timeout_sec,
+required) rather than left at the mcp SDK's own default of no timeout at all.
+For the executor, begin_step/mark_phase can legitimately block for as long as
+the monitoring agent takes to arm (the cell's /cell/request_go gate; see
+robot_backend/cell/gate.py) -- config.py already asserts at load time that
+mcp_client_timeout_sec is strictly greater than that gate timeout, so this
+session-level timeout is never the thing that cuts off a call the gate is
+still legitimately holding open.
 """
 
 from __future__ import annotations
@@ -11,6 +20,7 @@ from __future__ import annotations
 import contextlib
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
@@ -41,8 +51,9 @@ class DiscoveredTool:
 class MCPClientPool(contextlib.AbstractAsyncContextManager):
     """Spawns one stdio_client + ClientSession per configured server."""
 
-    def __init__(self, servers: list[MCPServerConfig]):
+    def __init__(self, servers: list[MCPServerConfig], mcp_client_timeout_sec: float):
         self._server_configs = servers
+        self._read_timeout = timedelta(seconds=mcp_client_timeout_sec)
         self._sessions: dict[str, ClientSession] = {}
         self._tools: dict[str, DiscoveredTool] = {}
         self._stack: contextlib.AsyncExitStack | None = None
@@ -68,7 +79,7 @@ class MCPClientPool(contextlib.AbstractAsyncContextManager):
                     stdio_client(params)
                 )
                 session = await self._stack.enter_async_context(
-                    ClientSession(read, write)
+                    ClientSession(read, write, read_timeout_seconds=self._read_timeout)
                 )
                 await session.initialize()
                 self._sessions[server.name] = session

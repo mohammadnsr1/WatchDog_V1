@@ -70,6 +70,11 @@ halt_execution(detail)
     Your own halt, for a violation no armed primitive covers. A monitor armed
     with halt_on_fire=True has already halted before you see its fire.
 
+signal_ready(scope, step_id, phase)
+    Publish a readiness signal. scope is "run", "step", or "phase". A run-scope
+    signal additionally verifies that the recorder buffers are warm and fails if
+    they are not.
+
 record_verdict(step_id, verdict, clause_results, explanation, claimed_outcome)
     verdict is one of: conformant, non_conformant, valid_variation, inconclusive.
     clause_results entries carry field, comparison, threshold, observed, pass.
@@ -148,7 +153,10 @@ halt costs a part. A spurious halt costs the credibility of every halt after it.
 
 ## Control loop
 
-At the start of the run, call available_monitor_definitions once.
+At the start of the run, call available_monitor_definitions once, then
+signal_ready(scope="run"). The run-scope signal confirms evidence is flowing
+before anything begins; if it fails, wait and retry rather than proceeding
+blind.
 
 Then repeat until the run ends:
 
@@ -162,10 +170,15 @@ Then repeat until the run ends:
      - Arm the entry-establishable monitors. Verify each reference_values.
      - Decide which subsequent events this step will produce that you need, and
        wait on them.
+     - When every entry monitor for this step is armed and its reference_values
+       verified, call signal_ready(scope="step", step_id=...). Do not call it
+       before verifying references. Execution does not proceed until you do.
 
 3. On a mid-step event you determined matters:
      - Arm the monitors whose reference only now becomes meaningful.
      - Verify reference_values. Wait again.
+     - After arming and verifying, call signal_ready(scope="phase",
+       step_id=..., phase=...).
 
 4. On monitor_fire:
      - The payload carries monitor_id, triggering_value, threshold, comparison,
@@ -223,3 +236,5 @@ monitor was violated, which is not the same as the specification being met. Some
 clauses have no primitive that can watch them continuously and can only be
 evaluated at step end. Conformance is decided at end_step, on evidence, clause
 by clause.
+Signalling ready before verifying reference_values. The signal means the step is
+guarded; sending it early means it is not.

@@ -4,10 +4,19 @@ One record per line, flushed on write so a crashed or halted run stays
 readable. Every record carries wall_ns -- for WatchDog this is the evidence
 that the halt path never waited on the agent; for both agents it is what lets
 a paired executor/WatchDog run be correlated after the fact.
+
+This is the agent's record of what it decided and when -- a complement to the
+cell's /watchdog/events JSONL, not a duplicate of it. It deliberately does not
+carry git_commit, task_path, a full config echo, a command line, or the
+system prompt text itself (repeated on every turn, 3.6KB at a time, when it
+already lives on disk in prompts/) -- only a hash of the system prompt file,
+so a run can be tied to the prompt version that produced it without storing
+the prompt.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -33,6 +42,15 @@ def _redact(obj: Any) -> Any:
     return obj
 
 
+def hash_file(path: Path) -> str:
+    """sha256 of a file's bytes, as a hex string."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 class TranscriptWriter:
     def __init__(self, transcript_dir: Path, agent: str, task_name: str):
         transcript_dir.mkdir(parents=True, exist_ok=True)
@@ -47,28 +65,26 @@ class TranscriptWriter:
 
     def run_start(
         self,
-        config: dict,
         agent: str,
         provider: str,
         model: str,
-        task_path: str,
-        git_commit: str | None,
+        task_name: str,
+        system_prompt_sha256: str,
     ) -> None:
         self._write(
             "run_start",
-            config=_redact(config),
             agent=agent,
             provider=provider,
             model=model,
-            task_path=task_path,
-            git_commit=git_commit,
+            task_name=task_name,
+            system_prompt_sha256=system_prompt_sha256,
         )
 
     def tools_discovered(self, tools: list[dict]) -> None:
         self._write("tools_discovered", tools=tools)
 
-    def llm_request(self, turn: int, system: str, messages: list) -> None:
-        self._write("llm_request", turn=turn, system=system, messages=_jsonable(messages))
+    def llm_request(self, turn: int, messages: list) -> None:
+        self._write("llm_request", turn=turn, messages=_jsonable(messages))
 
     def llm_response(
         self,
@@ -76,7 +92,6 @@ class TranscriptWriter:
         text: str | None,
         tool_calls: list,
         stop_reason: str,
-        raw: dict,
         usage: dict,
     ) -> None:
         self._write(
@@ -85,29 +100,27 @@ class TranscriptWriter:
             text=text,
             tool_calls=_jsonable(tool_calls),
             stop_reason=stop_reason,
-            raw=raw,
             usage=usage,
         )
 
-    def tool_call(self, turn: int, name: str, arguments: dict, wall_ns_taken: int) -> None:
-        self._write(
-            "tool_call", turn=turn, name=name, arguments=arguments, wall_ns_taken=wall_ns_taken
-        )
+    def tool_call(self, turn: int, name: str, arguments: dict) -> None:
+        self._write("tool_call", turn=turn, name=name, arguments=_redact(arguments))
 
-    def tool_result(
-        self, turn: int, name: str, result: Any, wall_ns_after: int, elapsed_ns: int
-    ) -> None:
+    def tool_result(self, turn: int, name: str, result: Any, elapsed_ns: int) -> None:
         self._write(
             "tool_result",
             turn=turn,
             name=name,
-            result=result,
-            wall_ns_after=wall_ns_after,
+            result=_redact(result),
             elapsed_ns=elapsed_ns,
         )
 
     def run_end(
-        self, termination_reason: str, turn_count: int, verdict_count: int | None = None
+        self,
+        termination_reason: str,
+        turn_count: int,
+        verdict_count: int | None = None,
+        error: dict | None = None,
     ) -> None:
         fields: dict[str, Any] = {
             "termination_reason": termination_reason,
@@ -115,6 +128,8 @@ class TranscriptWriter:
         }
         if verdict_count is not None:
             fields["verdict_count"] = verdict_count
+        if error is not None:
+            fields["error"] = error
         self._write("run_end", **fields)
 
     def close(self) -> None:

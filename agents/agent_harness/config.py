@@ -49,6 +49,11 @@ class AgentConfig:
     loop: LoopConfig
     transcript_dir: Path
     config_path: Path
+    mcp_client_timeout_sec: float
+    # Only meaningful for a config whose MCP servers gate on
+    # robot_backend.cell.gate (i.e. the executor's scene server). None for
+    # configs (like WatchDog's) that never call request_go at all.
+    gate_timeout_sec: float | None = None
 
     @property
     def api_key(self) -> str:
@@ -126,6 +131,57 @@ def load_config(config_path: str | Path) -> AgentConfig:
             "config mixes watchdog server with executor servers in one agent"
         )
 
+    # MCP client timeout vs. gate timeout ordering. begin_step/mark_phase can
+    # block for as long as the monitoring agent takes to arm (the cell's
+    # /cell/request_go gate; see robot_backend/cell/gate.py). If this
+    # process's own MCP client timeout is shorter than -- or even just equal
+    # to -- that gate timeout, the client aborts the call while the
+    # orchestrator is still legitimately holding it: the symptom is an
+    # mcp_error in this transcript with the orchestrator log showing a
+    # perfectly normal gate_open a few seconds later, which reads like a
+    # transport bug and would cost hours to find as anything else. Required
+    # ordering: mcp_client_timeout_sec > gate_timeout_sec > expected agent
+    # arming turn. Enforced here, at config load, not discovered at runtime.
+    mcp_client_timeout_sec = float(raw["mcp_client_timeout_sec"])
+    if mcp_client_timeout_sec <= 0:
+        raise ValueError(
+            f"{config_path}: mcp_client_timeout_sec must be positive, got "
+            f"{mcp_client_timeout_sec!r}."
+        )
+
+    gate_timeout_sec = raw.get("gate_timeout_sec")
+    if gate_timeout_sec is not None:
+        gate_timeout_sec = float(gate_timeout_sec)
+        if mcp_client_timeout_sec <= gate_timeout_sec:
+            raise ValueError(
+                f"{config_path}: mcp_client_timeout_sec ({mcp_client_timeout_sec}) "
+                f"must be strictly greater than gate_timeout_sec "
+                f"({gate_timeout_sec}), or the MCP client will abort a "
+                f"begin_step/mark_phase call the orchestrator is still "
+                f"legitimately holding open. Increase mcp_client_timeout_sec "
+                f"(recommended: comfortably above gate_timeout_sec, e.g. "
+                f"gate_timeout_sec + 60)."
+            )
+
+        # Cross-check against whatever CELL_GATE_TIMEOUT_SEC the scene
+        # server's own env actually carries (robot_backend.cell.gate reads
+        # this env var for its default timeout_sec) -- catches the two
+        # independently-run processes drifting apart even when each config
+        # value looks fine in isolation.
+        for s in servers:
+            declared = s.env.get("CELL_GATE_TIMEOUT_SEC")
+            if declared is None:
+                continue
+            declared_sec = float(declared)
+            if declared_sec != gate_timeout_sec:
+                raise ValueError(
+                    f"{config_path}: server '{s.name}' sets "
+                    f"CELL_GATE_TIMEOUT_SEC={declared!r}, but the config's "
+                    f"top-level gate_timeout_sec is {gate_timeout_sec!r}. "
+                    f"These must match -- they describe the same timeout "
+                    f"from two sides of the gate."
+                )
+
     loop_raw = raw["loop"]
     loop = LoopConfig(
         max_turns=int(loop_raw["max_turns"]),
@@ -150,4 +206,6 @@ def load_config(config_path: str | Path) -> AgentConfig:
         loop=loop,
         transcript_dir=transcript_dir,
         config_path=config_path,
+        mcp_client_timeout_sec=mcp_client_timeout_sec,
+        gate_timeout_sec=gate_timeout_sec,
     )

@@ -8,23 +8,26 @@ The one piece of cross-cutting behavior is the wait_for_event timeout rule,
 which exists because it is how a WatchDog run terminates once WatchDog has
 run out of things to watch for. The executor has no such tool and simply
 never takes that path (see agent_harness.mcp_client.WAIT_FOR_EVENT_TOOL).
+
+Termination-reason discipline (see the B1 postmortem this file was rewritten
+against): every path that can end the run either (a) records the response/
+result that was actually received before checking anything else, or (b) is
+driven by an explicit exception handler that classifies the failure and
+carries the exception type/message into run_end. There is no default value
+that a fallthrough can leave in place -- termination_reason starts at None and
+the loop condition itself (`while termination_reason is None`) is what stops
+it from ever masquerading as something it isn't.
 """
 
 from __future__ import annotations
 
-import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from agent_harness.config import AgentConfig
-from agent_harness.mcp_client import MCPClientPool, MCPToolError, WAIT_FOR_EVENT_TOOL
-from agent_harness.providers import (
-    FatalProviderError,
-    ProviderResponse,
-    TransientProviderError,
-    get_provider,
-)
+from agent_harness.mcp_client import MCPClientPool, WAIT_FOR_EVENT_TOOL
+from agent_harness.providers import ProviderResponse, get_provider
 from agent_harness.timebase import wall_ns
-from agent_harness.transcript import TranscriptWriter
+from agent_harness.transcript import TranscriptWriter, hash_file
 
 NUDGE_MESSAGE = (
     "You have not taken any action. If your work is complete, say so plainly. "
@@ -48,59 +51,42 @@ class RunResult:
     verdict_count: int | None = None
 
 
-def _git_commit(cwd: str) -> str | None:
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if out.returncode == 0:
-            return out.stdout.strip()
-    except Exception:
-        pass
-    return None
+def _exception_detail(e: Exception) -> dict:
+    return {"exception_type": type(e).__name__, "exception_message": str(e)}
 
 
 async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunResult:
     task_name = config.task_template.stem
     transcript = TranscriptWriter(config.transcript_dir, config.agent, task_name)
-
-    raw_config_for_log = {
-        "agent": config.agent,
-        "provider": config.provider,
-        "model": config.model,
-        "api_key_env": config.api_key_env,
-        "max_tokens": config.max_tokens,
-        "mcp_servers": [
-            {"name": s.name, "command": s.command, "args": s.args, "cwd": s.cwd, "env": s.env}
-            for s in config.mcp_servers
-        ],
-        "loop": {
-            "max_turns": config.loop.max_turns,
-            "wait_timeout_sec": config.loop.wait_timeout_sec,
-            "stop_after_consecutive_timeouts": config.loop.stop_after_consecutive_timeouts,
-        },
-    }
     transcript.run_start(
-        config=raw_config_for_log,
         agent=config.agent,
         provider=config.provider,
         model=config.model,
-        task_path=str(config.task_template),
-        git_commit=_git_commit(str(config.config_path.parent)),
+        task_name=task_name,
+        system_prompt_sha256=hash_file(config.system_prompt),
     )
 
     provider = get_provider(config.provider, config.model, config.api_key, config.max_tokens)
 
-    termination_reason = "max_turns_exhausted"
+    # B1: bind the loop bound directly from config, once, and assert it --
+    # so a future refactor that introduces a second local copy (the exact
+    # shape of the bug this replaced: a stale default masquerading as the
+    # real termination reason) cannot silently desync the loop from what the
+    # config actually says.
+    max_turns = config.loop.max_turns
+    assert max_turns == config.loop.max_turns and max_turns > 0, (
+        f"runner must use config.loop.max_turns as the loop bound; got {max_turns!r}"
+    )
+
+    # No default. If nothing below ever sets this, that is a bug in this
+    # function, not a completed-to-cap run -- see the final assert.
+    termination_reason: str | None = None
+    error_detail: dict | None = None
     turn_count = 0
     verdict_count = 0
 
     try:
-        async with MCPClientPool(config.mcp_servers) as pool:
+        async with MCPClientPool(config.mcp_servers, config.mcp_client_timeout_sec) as pool:
             discovered = await pool.list_tools()
             tool_dicts = [
                 {
@@ -116,27 +102,35 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             consecutive_no_tool_calls = 0
             consecutive_timeouts = 0
 
-            while True:
-                if turn_count >= config.loop.max_turns:
+            while termination_reason is None:
+                if turn_count >= max_turns:
                     termination_reason = "max_turns_exhausted"
                     break
                 turn_count += 1
 
-                transcript.llm_request(turn_count, system_prompt, messages)
+                transcript.llm_request(turn_count, messages)
                 try:
                     response: ProviderResponse = provider.complete(
                         system_prompt, messages, tool_dicts
                     )
-                except (FatalProviderError, TransientProviderError):
+                except Exception as e:
+                    # Any provider-call failure -- rate limit exhausted after
+                    # retries, auth/schema error, an invalid model name, a
+                    # timeout, or a bug in this harness's provider code --
+                    # ends the run here, labeled for what it is. It must
+                    # never fall through and read as turn-cap exhaustion.
                     termination_reason = "provider_error"
+                    error_detail = _exception_detail(e)
                     break
 
+                # B1: record the response immediately on return, before any
+                # termination check. A response that arrived is evidence
+                # regardless of what happens next.
                 transcript.llm_response(
                     turn_count,
                     response.text,
                     response.tool_calls,
                     response.stop_reason,
-                    response.raw,
                     response.usage,
                 )
 
@@ -158,17 +152,17 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                     }
                 )
 
-                mcp_error_occurred = False
                 for tc in response.tool_calls:
                     t0 = wall_ns()
-                    transcript.tool_call(turn_count, tc.name, tc.arguments, t0)
-                    try:
-                        result = await pool.call_tool(tc.name, tc.arguments)
-                    except MCPToolError:
-                        mcp_error_occurred = True
-                        break
+                    transcript.tool_call(turn_count, tc.name, tc.arguments)
+                    # Deliberately no try/except here: any exception (a
+                    # transport failure, or anything else) propagates to the
+                    # outer handler below, which classifies it as mcp_error.
+                    # tool_call has already been recorded, so the attempt is
+                    # on the record even though its result never arrived.
+                    result = await pool.call_tool(tc.name, tc.arguments)
                     t1 = wall_ns()
-                    transcript.tool_result(turn_count, tc.name, result, t1, t1 - t0)
+                    transcript.tool_result(turn_count, tc.name, result, t1 - t0)
                     messages.append(
                         {
                             "role": "tool_result",
@@ -188,15 +182,27 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         else:
                             consecutive_timeouts = 0
 
-                if mcp_error_occurred:
-                    termination_reason = "mcp_error"
-                    break
-
                 if consecutive_timeouts >= config.loop.stop_after_consecutive_timeouts:
                     termination_reason = "run_complete"
                     break
+    except Exception as e:
+        # Anything that escaped the loop above -- MCP pool connect/list_tools
+        # failure, a tool-call transport failure, or any other unhandled
+        # exception on the MCP/harness side (provider failures are already
+        # caught and labeled above and never reach here). Same treatment as
+        # B1 requires for provider failures: classify, don't default.
+        termination_reason = "mcp_error"
+        error_detail = _exception_detail(e)
     finally:
-        transcript.run_end(termination_reason, turn_count, verdict_count=verdict_count)
+        # By construction termination_reason is always set by this point:
+        # either a break above set it, or the except clause just did.
+        assert termination_reason is not None, (
+            "runner exited without setting a termination reason -- this is a "
+            "bug in runner.py, not a completed run"
+        )
+        transcript.run_end(
+            termination_reason, turn_count, verdict_count=verdict_count, error=error_detail
+        )
         transcript.close()
 
     return RunResult(

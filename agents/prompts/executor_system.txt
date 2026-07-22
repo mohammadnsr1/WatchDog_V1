@@ -41,6 +41,10 @@ For each step in the plan:
    plan around it. You are expected to recover from ordinary execution trouble on
    your own.
 
+   When you establish a physical relationship the rest of the step depends on,
+   such as closing the gripper on an object, call mark_phase to record that the
+   phase has been reached before continuing. Use a short descriptive phase name.
+
 5. Verify against the contract. When you believe the step is done, confirm it.
    Query the cell for the resulting state, the final object pose, the final
    gripper width, whatever the step's effect clauses concern, and check each
