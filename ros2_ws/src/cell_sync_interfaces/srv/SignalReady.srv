@@ -1,0 +1,6 @@
+string scope          # run | step | phase
+string step_id
+string phase
+---
+bool ok
+string message

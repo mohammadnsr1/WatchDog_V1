@@ -148,16 +148,56 @@ class VerdictPayload(BaseModel):
     explanation: str
 
 
+class PhasePayload(BaseModel):
+    """Executor declares a named mid-step phase has been reached.
+
+    Emitted by mark_phase when the executor establishes a physical
+    relationship the rest of the step depends on (e.g. closing the gripper
+    on an object). step_id is read from the current step state, not passed
+    by the caller, so a phase event can never be misattributed to the wrong
+    step.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    step_id: str
+    phase: str
+    detail: dict[str, Any] | None = None
+
+
+class WatchDogReadyPayload(BaseModel):
+    """WatchDog publishes a readiness signal, for the record.
+
+    This is the topic-side echo of the /cell/signal_ready service call --
+    the service call is what actually releases a blocked request_go; this
+    event exists only so the signal appears in the same timeline as
+    everything else.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    scope: str
+    step_id: str | None = None
+    phase: str | None = None
+
+
 class EventEnvelope(BaseModel):
     """Top-level wrapper shared by all event types.
 
     Fields
     ------
-    event_id      : UUID4 — deduplication key; stable ordering within one process.
-    event_type    : discriminator — one of the WatchDog event types.
-    timestamp_ns  : time.monotonic_ns() at emission — monotonic, sub-ms precision.
-    wall_time_iso : ISO-8601 UTC wall clock — for cross-process / cross-tool alignment.
-    payload       : typed payload serialized to plain dict for storage and transport.
+    event_id         : UUID4 — deduplication key; stable ordering within one process.
+    event_type       : discriminator — one of the WatchDog event types.
+    timestamp_ns     : time.monotonic_ns() at emission — monotonic, sub-ms precision.
+    wall_time_iso    : ISO-8601 UTC wall clock — for cross-process / cross-tool alignment.
+    payload          : typed payload serialized to plain dict for storage and transport.
+    subscriber_count : ROS publisher's subscription count at publish time (0 if no ROS
+                       publisher is configured). A begin_step recorded with
+                       subscriber_count: 0 is a provable drop, not an inferred one.
+    seq              : monotonic per-process sequence number, starting at 1. event_id
+                       (a UUID) identifies an event but cannot reveal a gap; seq can --
+                       a consumer that sees 7, 8, 10 knows 9 was lost. Scoped to the
+                       process, not the topic: two processes both publish seq=1.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -173,10 +213,14 @@ class EventEnvelope(BaseModel):
         "monitor_disarmed",
         "halt",
         "verdict",
+        "phase",
+        "watchdog_ready",
     ]
     timestamp_ns: int
     wall_time_iso: str
     payload: dict[str, Any]
+    subscriber_count: int = 0
+    seq: int = 0
 
 
 def make_event(
@@ -190,6 +234,8 @@ def make_event(
         "monitor_disarmed",
         "halt",
         "verdict",
+        "phase",
+        "watchdog_ready",
     ],
     payload: (
         BeginStepPayload
@@ -201,9 +247,16 @@ def make_event(
         | MonitorDisarmedPayload
         | HaltPayload
         | VerdictPayload
+        | PhasePayload
+        | WatchDogReadyPayload
     ),
 ) -> EventEnvelope:
-    """Create a timestamped EventEnvelope from a typed payload model."""
+    """Create a timestamped EventEnvelope from a typed payload model.
+
+    subscriber_count and seq are left at their defaults here -- EventBus.publish
+    fills them in at publish time, since only the bus knows the live
+    subscriber count and the process-scoped sequence counter.
+    """
     return EventEnvelope(
         event_id=str(uuid.uuid4()),
         event_type=event_type,

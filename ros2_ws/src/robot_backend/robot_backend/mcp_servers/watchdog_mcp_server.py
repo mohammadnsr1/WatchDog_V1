@@ -23,6 +23,7 @@ from robot_backend.events.schema import VerdictPayload, make_event
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
+from robot_backend.watchdog.ready import ReadyClient
 from robot_backend.watchdog.recorder import EvidenceRecorder, _load_registry
 from robot_backend.watchdog.timebase import wall_ns
 
@@ -48,6 +49,7 @@ class WatchDogContext:
     recorder: EvidenceRecorder
     engine: MonitorEngine
     halt_client: HaltClient
+    ready_client: ReadyClient
     wake_event: threading.Event
 
 
@@ -79,6 +81,7 @@ def _ensure_watchdog() -> WatchDogContext:
             wake_event=wake_event,
         )
         halt_client = HaltClient(node=node, event_bus=event_bus)
+        ready_client = ReadyClient(node=node, event_bus=event_bus)
         engine = MonitorEngine(
             event_bus=event_bus,
             halt_client=halt_client,
@@ -97,6 +100,7 @@ def _ensure_watchdog() -> WatchDogContext:
             recorder=recorder,
             engine=engine,
             halt_client=halt_client,
+            ready_client=ready_client,
             wake_event=wake_event,
         )
         return _CONTEXT
@@ -395,6 +399,67 @@ if mcp is not None:
             return _ok(command, result=result)
         except Exception as exc:
             return _error(command, exc)
+
+    @mcp.tool()
+    def signal_ready(
+        scope: str,
+        step_id: str | None = None,
+        phase: str | None = None,
+    ) -> dict[str, Any]:
+        """Publish a readiness signal for a run, step, or phase.
+
+        Calls the cell's /cell/signal_ready service (releasing any executor
+        blocked in request_go for this scope) and publishes a watchdog_ready
+        event to the topic for the record.
+
+        For scope="run", this first verifies the recorder buffers are warm:
+        at least one buffered pose for every object the registry declares,
+        and a non-empty joint-state sample buffer. If either is empty, the
+        signal is refused with a clear error rather than sent -- this is the
+        warm-up race in which a monitor could arm against a recorder that
+        has not sampled anything yet.
+
+        Parameters
+        ----------
+        scope:
+            One of "run", "step", "phase".
+        step_id:
+            Required for scope "step" or "phase".
+        phase:
+            Required for scope "phase".
+        """
+        command = "signal_ready"
+        _VALID_SCOPES = {"run", "step", "phase"}
+        try:
+            if scope not in _VALID_SCOPES:
+                raise ValueError(f"scope must be one of {sorted(_VALID_SCOPES)}.")
+            ctx = _ensure_watchdog()
+
+            if scope == "run":
+                object_ids = ctx.recorder.object_ids()
+                counts = ctx.recorder.counts()
+                pose_counts = counts.get("object_poses", {})
+                joint_count = counts.get("joint_states", 0)
+                cold_objects = [
+                    oid for oid in object_ids if pose_counts.get(oid, 0) < 1
+                ]
+                if cold_objects or joint_count < 1:
+                    return _error(
+                        command,
+                        "recorder buffers are not warm yet: "
+                        f"objects with no buffered pose={cold_objects}, "
+                        f"joint_state samples={joint_count}. Wait and retry "
+                        "rather than signalling run-scope readiness.",
+                        counts=counts,
+                        object_ids=object_ids,
+                    )
+                result = ctx.ready_client.signal(scope, step_id, phase)
+                return _ok(command, result=result, counts=counts, object_ids=object_ids)
+
+            result = ctx.ready_client.signal(scope, step_id, phase)
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc, scope=scope)
 
     @mcp.tool()
     def record_verdict(

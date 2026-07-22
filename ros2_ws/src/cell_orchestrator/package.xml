@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>cell_orchestrator</name>
+  <version>0.1.0</version>
+  <description>The cell's timing interlock: serves /cell/request_go and /cell/signal_ready, relaying between the executor stack and the monitoring agent. A plain ROS node -- no LLM, no reasoning, no knowledge of contracts or monitors.</description>
+  <maintainer email="mnasr3@asu.edu">TODO Maintainer</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!--
+    Deliberate: this package depends on rclpy and cell_sync_interfaces ONLY.
+    It must NEVER declare robot_backend or robot_backend_interfaces. The
+    orchestrator is the third party that gates the executor stack; it must
+    not depend on (or be read as part of) the stack it gates. If a future
+    change seems to need robot_backend here, that change belongs somewhere
+    else; see cell_orchestrator/node.py's module docstring.
+  -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>cell_sync_interfaces</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

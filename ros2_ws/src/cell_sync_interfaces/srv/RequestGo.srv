@@ -1,0 +1,8 @@
+string step_id
+string phase          # empty for the step-entry gate
+float64 timeout_sec
+---
+bool proceed
+bool timed_out
+float64 waited_sec
+string reason         # released | timeout | no_guard | error

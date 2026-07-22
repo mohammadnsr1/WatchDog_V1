@@ -1,8 +1,22 @@
 """EventBus: fire-and-forget publisher to a ROS 2 topic and a local JSONL log.
 
-One-way only — no acknowledgment, no blocking, no gating of callers.
-Any publish error is silently dropped so the skill execution path is never
-interrupted by observability infrastructure.
+One-way only — no acknowledgment, no gating of callers. Any publish error is
+silently dropped so the skill execution path is never interrupted by
+observability infrastructure.
+
+The one exception to "no blocking" is a bounded, one-time wait for a matched
+subscriber before this process's very first publish (see
+EventBus._wait_for_subscriber_once). This exists because DDS discovery is not
+instantaneous: a publish issued shortly after this process's publisher is
+constructed can beat discovery matching it to an already-running subscriber,
+and default (volatile) QoS retains no history for endpoints that match later
+-- the sample is silently discarded. The executor's first event is always
+begin_step, which is exactly the message the monitoring layer most needs, so
+this is worth a short bounded wait rather than leaving it to chance.
+Deliberately NOT solved with TRANSIENT_LOCAL durability: that would fix this
+drop but would also replay buffered begin_step events to any later-joining
+subscriber, which could arm monitors for steps that have already finished --
+replay is more dangerous here than loss.
 
 Singleton pattern
 -----------------
@@ -27,6 +41,8 @@ Path: log_path argument, or WATCHDOG_EVENT_LOG env var, or passed explicitly.
 
 from __future__ import annotations
 
+import os
+import time
 import warnings
 from pathlib import Path
 from typing import Any
@@ -43,6 +59,13 @@ from .schema import (
 _BUS: EventBus | None = None
 
 
+# Default bound on the first-publish subscriber wait (A1). Overridable via
+# WATCHDOG_EVENTBUS_WAIT_SEC for environments where DDS discovery is
+# consistently slower or faster than this default.
+_DEFAULT_SUBSCRIBER_WAIT_SEC = 2.0
+_SUBSCRIBER_POLL_INTERVAL_SEC = 0.02
+
+
 class EventBus:
     """Publish EventEnvelope instances to a ROS topic and/or a JSONL log file.
 
@@ -56,9 +79,15 @@ class EventBus:
         node: Any | None = None,
         log_path: Path | str | None = None,
     ) -> None:
+        self._node: Any = node
         self._publisher: Any = None
         self._String: Any = None
         self._log_file: Any = None
+        # A1: the bounded subscriber wait runs once per process, before the
+        # first publish only -- never per publish. This flag is the guard.
+        self._waited_for_subscriber = False
+        # A3: per-process monotonic sequence number, starting at 1.
+        self._seq = 0
 
         if node is not None:
             try:
@@ -84,9 +113,81 @@ class EventBus:
                     stacklevel=2,
                 )
 
+    def _wait_for_subscriber_once(self) -> None:
+        """Bounded poll for a matched subscriber, run once before the first publish.
+
+        A publish issued milliseconds after this process's publisher is
+        constructed can beat DDS discovery matching it to an already-running
+        subscriber (e.g. WatchDog's recorder). Default QoS is volatile, so
+        that sample is silently discarded -- and the executor's first event
+        is always begin_step, the one message the monitoring layer most
+        needs. This does not fix late-joining subscribers (nothing can,
+        short of TRANSIENT_LOCAL, which trades this problem for a worse one
+        -- see the module docstring); it only covers the already-running-but-
+        not-yet-matched case, which is what a cold-started publisher process
+        actually hits.
+
+        Never raises, never blocks past the timeout: running the executor
+        with no monitoring subscriber at all is a supported configuration.
+        """
+        if self._waited_for_subscriber or self._publisher is None:
+            return
+        self._waited_for_subscriber = True
+
+        timeout_sec = _DEFAULT_SUBSCRIBER_WAIT_SEC
+        override = os.environ.get("WATCHDOG_EVENTBUS_WAIT_SEC")
+        if override:
+            try:
+                timeout_sec = float(override)
+            except ValueError:
+                pass
+
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            try:
+                if self._publisher.get_subscription_count() > 0:
+                    return
+            except Exception:
+                return  # can't introspect subscriber count; don't block on it
+            time.sleep(_SUBSCRIBER_POLL_INTERVAL_SEC)
+
+        self._log_warn_once_no_subscriber(timeout_sec)
+
+    def _log_warn_once_no_subscriber(self, timeout_sec: float) -> None:
+        message = (
+            f"EventBus: no subscriber matched within {timeout_sec:.2f}s of the "
+            "first publish; publishing anyway. The first event on this topic "
+            "may be lost if a subscriber connects after this point."
+        )
+        logger = getattr(self._node, "get_logger", None)
+        if logger is not None:
+            try:
+                logger().warning(message)
+                return
+            except Exception:
+                pass
+        warnings.warn(message, stacklevel=2)
+
     def publish(self, event: EventEnvelope) -> None:
-        """Publish one event to all configured destinations. Non-blocking."""
-        json_str = event.model_dump_json()
+        """Publish one event to all configured destinations. Non-blocking (after
+        the one-time bounded subscriber wait on the very first publish; see
+        _wait_for_subscriber_once)."""
+        self._wait_for_subscriber_once()
+
+        subscriber_count = 0
+        if self._publisher is not None:
+            try:
+                subscriber_count = self._publisher.get_subscription_count()
+            except Exception:
+                subscriber_count = 0
+
+        self._seq += 1
+        # event is frozen; model_copy(update=...) returns a new instance
+        # rather than mutating it, which is what "frozen" is protecting.
+        stamped = event.model_copy(
+            update={"subscriber_count": subscriber_count, "seq": self._seq}
+        )
+        json_str = stamped.model_dump_json()
 
         if self._publisher is not None:
             try:

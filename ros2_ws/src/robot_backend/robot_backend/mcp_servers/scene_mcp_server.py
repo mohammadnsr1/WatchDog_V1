@@ -9,6 +9,12 @@ Tools:
   reset_object_state   — idempotent single-object recovery to WORLD_TRACKED.
   recover_scene        — reset all objects + clear octomap.
   begin_step           — open a WatchDog execution-step recording window.
+                         Blocks on the cell's synchronization gate (see
+                         robot_backend.cell.gate) after publishing its event,
+                         so a monitor has a chance to arm before anything
+                         moves. Fails open if no orchestrator is running.
+  mark_phase           — record that a named mid-step phase (e.g. a grasp)
+                         has been reached, and block on the gate again.
   end_step             — close the window and declare the claimed outcome.
   set_permitted_contacts — apply registry-declared permitted-contact pairs
                            to MoveIt's Allowed Collision Matrix.
@@ -39,6 +45,7 @@ import yaml
 import rclpy
 from rclpy.node import Node
 
+from robot_backend.cell.gate import request_go
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
@@ -67,6 +74,10 @@ _REGISTRY: dict[str, Any] | None = None
 _POSE_CLIENT = None
 _POSES_CLIENT = None
 _RESET_TF_CLIENT = None
+# Set by begin_step, read by mark_phase, cleared by end_step. mark_phase
+# takes its step_id from here rather than from the caller, so a phase event
+# can never be misattributed to the wrong step.
+_CURRENT_STEP_ID: str | None = None
 
 
 def _load_registry() -> dict[str, Any]:
@@ -126,12 +137,13 @@ def _call_service(client, request, service_name: str, timeout_sec: float = 5.0) 
 
 
 def _shutdown_backend() -> None:
-    global _NODE, _BACKEND, _REGISTRY, _POSE_CLIENT, _POSES_CLIENT, _RESET_TF_CLIENT
+    global _NODE, _BACKEND, _REGISTRY, _POSE_CLIENT, _POSES_CLIENT, _RESET_TF_CLIENT, _CURRENT_STEP_ID
     shutdown_bus()
     _POSE_CLIENT = None
     _POSES_CLIENT = None
     _RESET_TF_CLIENT = None
     _REGISTRY = None
+    _CURRENT_STEP_ID = None
     if _NODE is not None:
         _NODE.destroy_node()
         _NODE = None
@@ -357,10 +369,16 @@ if mcp is not None:
         object_ids: list[str] | None = None,
         notes: str = "",
     ) -> dict[str, Any]:
-        """Publish a begin_step event to the WatchDog event bus.
+        """Publish a begin_step event to the WatchDog event bus, then wait for
+        the cell's synchronization gate before returning.
 
         Declares the start of a named execution step and the objects in
-        scope for it.
+        scope for it. After the event is published, blocks on the cell's
+        request_go gate so a monitor has a chance to arm before anything
+        moves -- this call may take a moment to return; that is the cell's
+        interlock behaving normally, not an error. If no orchestrator is
+        running, this returns promptly (gate result reason "no_orchestrator")
+        and standalone runs are unaffected.
 
         Parameters
         ----------
@@ -372,15 +390,20 @@ if mcp is not None:
             Optional free-text annotation.
         """
         command = "begin_step"
+        global _CURRENT_STEP_ID
         try:
             if not isinstance(step_id, str) or not step_id.strip():
                 raise ValueError("step_id must be a non-empty string.")
             step_id = step_id.strip()
 
             _ensure_backend()
+            _CURRENT_STEP_ID = step_id
             from robot_backend.events.bus import get_bus
             get_bus().emit_begin_step(step_id=step_id, object_ids=object_ids, notes=notes)
-            return _ok(command, step_id=step_id, object_ids=object_ids or [])
+            # Order matters: the event must be published before we block, or
+            # the monitor cannot yet know a step began.
+            gate = request_go(_NODE, step_id)
+            return _ok(command, step_id=step_id, object_ids=object_ids or [], gate=gate)
         except Exception as exc:
             return _error(command, exc, step_id=step_id)
 
@@ -413,6 +436,7 @@ if mcp is not None:
         """
         command = "end_step"
         _VALID_OUTCOMES = {"success", "failure", "partial"}
+        global _CURRENT_STEP_ID
         try:
             if not isinstance(step_id, str) or not step_id.strip():
                 raise ValueError("step_id must be a non-empty string.")
@@ -429,10 +453,56 @@ if mcp is not None:
                 claim_detail=claim_detail,
                 notes=notes,
             )
+            if _CURRENT_STEP_ID == step_id.strip():
+                _CURRENT_STEP_ID = None
             return _ok(command, step_id=step_id.strip(), claimed_outcome=claimed_outcome)
         except Exception as exc:
             return _error(command, exc, step_id=step_id)
 
+    @mcp.tool()
+    def mark_phase(phase: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Record that a named phase of the current step has been reached.
+
+        Use this when you establish a physical relationship the rest of the
+        step depends on -- e.g. closing the gripper on an object -- so the
+        cell can re-arm and release its synchronization gate for what
+        follows. step_id is taken from the currently open step (the most
+        recent begin_step not yet closed by end_step), not from this call's
+        arguments, so a phase can never be misattributed to the wrong step.
+
+        Publishes a phase event, then blocks on the cell's synchronization
+        gate before returning, same as begin_step.
+
+        Parameters
+        ----------
+        phase:
+            Short descriptive name for the phase reached (e.g. "grasped").
+        detail:
+            Optional free-form detail about the phase.
+        """
+        command = "mark_phase"
+        try:
+            if not isinstance(phase, str) or not phase.strip():
+                raise ValueError("phase must be a non-empty string.")
+            phase = phase.strip()
+
+            _ensure_backend()
+            step_id = _CURRENT_STEP_ID
+            if not step_id:
+                raise ValueError(
+                    "mark_phase called with no open step -- call begin_step first."
+                )
+
+            from robot_backend.events.bus import get_bus
+            from robot_backend.events.schema import PhasePayload, make_event
+            event = make_event(
+                "phase", PhasePayload(step_id=step_id, phase=phase, detail=detail)
+            )
+            get_bus().publish(event)
+            gate = request_go(_NODE, step_id, phase=phase)
+            return _ok(command, step_id=step_id, phase=phase, gate=gate)
+        except Exception as exc:
+            return _error(command, exc, phase=phase)
 
     @mcp.tool()
     def set_permitted_contacts() -> dict[str, Any]:
