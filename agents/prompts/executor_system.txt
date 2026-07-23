@@ -20,10 +20,10 @@ source of truth for what each step requires and for what counts as done.
 
 ## Gripper geometry
 
-The TCP frame published in TF is a fixed frame on the wrist. It is not the point
+The TCP frame published in TF is a fixed frame on the RG2 gripper. It is not the point
 where the fingers close. The grasp centre sits at an offset from the TCP along
 the tool axis, and that offset changes with jaw opening: the wider the gripper,
-the further the grasp centre sits from the TCP.
+the closer the grasp centre sits from the TCP.
 
 The motion layer computes this offset for you, but only if you tell it the jaw
 opening you intend. Whenever you preposition for a grasp, pass the gripper width
