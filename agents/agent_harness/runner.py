@@ -22,6 +22,7 @@ it from ever masquerading as something it isn't.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from agent_harness.config import AgentConfig
 from agent_harness.mcp_client import MCPClientPool, WAIT_FOR_EVENT_TOOL
@@ -36,6 +37,7 @@ NUDGE_MESSAGE = (
 
 TERMINATION_REASONS = {
     "run_complete",
+    "no_execution_observed",
     "max_turns_exhausted",
     "agent_idle",
     "provider_error",
@@ -53,6 +55,25 @@ class RunResult:
 
 def _exception_detail(e: Exception) -> dict:
     return {"exception_type": type(e).__name__, "exception_message": str(e)}
+
+
+def _drained_begin_step(result: Any) -> bool:
+    """True if a wait_for_event result's drain contains a begin_step event.
+
+    Checks both the woken-on event (`wake`) and any events batched into the
+    same drain (`additional_events`) -- a begin_step can arrive bundled
+    behind another event in the same wake, and would otherwise never be
+    counted (see B1: a WatchDog run that never observed a begin_step must
+    not be labeled run_complete).
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get("wake") == "begin_step":
+        return True
+    for ev in result.get("additional_events", None) or []:
+        if isinstance(ev, dict) and ev.get("event_type") == "begin_step":
+            return True
+    return False
 
 
 async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunResult:
@@ -108,6 +129,14 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             messages: list[dict] = [{"role": "user", "content": task_text}]
             consecutive_no_tool_calls = 0
             consecutive_timeouts = 0
+            # B1: whether any wait_for_event drain has ever contained a
+            # begin_step -- i.e. whether the executor was ever observed
+            # doing anything at all. Meaningless for the executor config
+            # (never calls wait_for_event) but required to distinguish a
+            # WatchDog run that genuinely monitored a run from one that sat
+            # alone and timed itself out; see _drained_begin_step and the
+            # run_complete/no_execution_observed split below.
+            begin_step_observed = False
             # Index into `messages` of the first entry not yet logged to the
             # transcript. The provider always receives the full, growing
             # `messages` list (see providers.complete below) -- this index
@@ -204,18 +233,37 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         verdict_count += 1
 
                     if tc.name == WAIT_FOR_EVENT_TOOL:
+                        if _drained_begin_step(result):
+                            begin_step_observed = True
                         wake = result.get("wake") if isinstance(result, dict) else None
+                        # B2: increment only on a genuine wait_for_event
+                        # timeout. Reset on anything else -- a wake on a real
+                        # event, or any other tool call in this turn's list
+                        # (e.g. get_execution_state between two waits). A
+                        # turn that timed out, checked state, and resumed
+                        # waiting is diagnosing correctly and must not be
+                        # pushed toward termination; only two genuinely
+                        # back-to-back wait_for_event timeouts should be.
                         if wake == "timeout":
                             consecutive_timeouts += 1
                         else:
                             consecutive_timeouts = 0
+                    else:
+                        consecutive_timeouts = 0
 
                 if (
                     config.loop.stop_after_consecutive_timeouts is not None
                     and consecutive_timeouts
                     >= config.loop.stop_after_consecutive_timeouts
                 ):
-                    termination_reason = "run_complete"
+                    # B1: a run that reached this cap without ever observing
+                    # a begin_step monitored nothing -- an executor that
+                    # never started is indistinguishable, in its
+                    # consequences, from one that ran cleanly with no
+                    # violations, unless this is labeled distinctly.
+                    termination_reason = (
+                        "run_complete" if begin_step_observed else "no_execution_observed"
+                    )
                     break
     except Exception as e:
         # Anything that escaped the loop above -- MCP pool connect/list_tools

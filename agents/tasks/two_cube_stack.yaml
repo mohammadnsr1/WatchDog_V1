@@ -25,9 +25,12 @@ instruction_spec: |
       offset within green_cube's registry position tolerance of red_cube's
       horizontal position, and vertical offset consistent with green_cube
       resting on top of red_cube's collision geometry.
-    - green_cube and red_cube are in contact. This contact is permitted by
-      the registry's permitted_contacts entry [green_cube, red_cube] and is
-      the intended outcome of this step, not a violation.
+    - green_cube and red_cube are in contact. This contact is the intended
+      outcome of this step, not a violation. (The registry's
+      acm_allowed_object_pairs entry [green_cube, red_cube] disables planner
+      collision checking for this pair so the stack can be built at all --
+      it is a planner setting, not what makes this contact conformant; the
+      specification above is what makes it conformant.)
     - The gripper has released green_cube (open, no grasp retained) and
       green_cube remains at its placed pose after release (it does not
       topple or slide).
@@ -54,7 +57,9 @@ object_ids: |
   green_cube — 40 mm cube, graspable, to be picked and placed.
   red_cube   — 60 mm cube, graspable, stays in place as the stack base.
 
-  Registry-declared permitted contact for this run: [green_cube, red_cube].
+  Registry acm_allowed_object_pairs for this run: [green_cube, red_cube] --
+  a planner collision-checking setting, not a statement of task permission;
+  see step 2's effect clauses for what makes their contact conformant.
 # run_notes stays empty by design, including in fault-injection runs where the
 # registry has been deliberately corrupted: neither the executor nor WatchDog
 # may be told that, since being told would invalidate the comparison.

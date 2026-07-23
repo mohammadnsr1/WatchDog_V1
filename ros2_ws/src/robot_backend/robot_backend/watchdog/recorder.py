@@ -18,6 +18,19 @@ from .timebase import wall_ns
 JOINT_STATES_TOPIC = "/joint_states"
 EVENTS_TOPIC = "/watchdog/events"
 TF_SAMPLE_HZ = 20.0
+
+# WatchDog's own output event types, published to the same /watchdog/events
+# topic this recorder subscribes to. The recorder hears itself: without this
+# exclusion, wait_for_event wakes the agent on its own signal_ready /
+# arm_monitor / disarm_monitor / record_verdict calls, wasting a turn on
+# activity the agent already knows it just did. These are still appended to
+# `events` for the timeline -- only the wake path (_wait_events) excludes
+# them. monitor_fire is deliberately not in this set: it reaches the agent
+# through the engine's fire queue, a different path entirely, and must keep
+# waking it.
+_SELF_EMITTED_EVENT_TYPES = frozenset(
+    {"watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict"}
+)
 MAX_JOINT_SAMPLES = 60 * 60 * 10  # 60 Hz * 60 sec/min * 10 min.
 MAX_TF_SAMPLES = int(TF_SAMPLE_HZ * 60 * 10)  # 20 Hz * 60 sec/min * 10 min.
 
@@ -215,14 +228,17 @@ class EvidenceRecorder:
                 if isinstance(envelope.payload, dict)
                 else None
             )
+            is_self_emitted = envelope.event_type in _SELF_EMITTED_EVENT_TYPES
             with self.lock:
                 self.events.append(record)
-                self._wait_events.append(record)
+                if not is_self_emitted:
+                    self._wait_events.append(record)
                 if envelope.event_type == "begin_step" and isinstance(step_id, str):
                     self.current_step_id = step_id
                 elif envelope.event_type == "end_step":
                     self.current_step_id = None
-            self.wake_event.set()
+            if not is_self_emitted:
+                self.wake_event.set()
         except Exception as exc:
             self._log_warn(f"WatchDog event-tail callback failed: {exc}")
 

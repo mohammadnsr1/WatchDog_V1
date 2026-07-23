@@ -105,9 +105,9 @@ def main() -> int:
         time.sleep(2.0)
         registry = harness.recorder.registry
 
-        # Scene setup. sync is required before attach; permitted_contacts is
-        # required because Phase B deliberately stacks green on red, which is
-        # exactly the declared allowed-contact pair.
+        # Scene setup. sync is required before attach; set_permitted_contacts
+        # is required because Phase B deliberately stacks green on red, which
+        # is exactly the declared acm_allowed_object_pairs entry.
         backend.scene.sync_collision_objects([GREEN, RED])
         set_permitted_contacts_skill(backend, registry=registry)
 

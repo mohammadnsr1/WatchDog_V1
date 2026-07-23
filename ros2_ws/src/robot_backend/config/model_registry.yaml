@@ -39,9 +39,18 @@
 #                                units, not physical Newtons. Force control is therefore
 #                                approximate in sim; real-hardware deployments should
 #                                re-characterise and update these thresholds.
-#   tolerances.position_m      — allowable object pose error before / after pick [m]
+#   tolerances.position_m      — allowable object pose MEASUREMENT error before /
+#                                after pick [m]. Not a bound on permitted physical
+#                                displacement -- see disturbance_tolerance_m below.
 #   tolerances.orientation_deg — allowable orientation error [degrees]
 #   tolerances.lift_height_min_m — minimum vertical displacement to confirm grasp [m]
+#   tolerances.disturbance_tolerance_m — max permitted physical displacement for an
+#                                object a clause requires to stay undisturbed [m].
+#                                Source for stationarity's epsilon_m. Distinct from
+#                                position_m even where the values coincide: position_m
+#                                is about measurement tolerance on a still object,
+#                                this is about how far a still object is allowed to
+#                                actually move.
 #   limits.max_clamp_effort    — CONFORMANCE BOUND: the maximum clamp effort the object
 #                                tolerates [sim effort units] — manufacturing
 #                                documentation, not an engineering parameter of the
@@ -67,16 +76,42 @@
 #   max_clamp_effort = 4.0 — that margin is WHY 3 mm was chosen; 4 mm and 5 mm
 #   clearances measure above the bound and would violate it on every grasp.
 
-# permitted_contacts: object pairs that are allowed to physically touch
-# for the duration of a run (e.g. because the assembly plan requires
-# them to be in contact at some point). Declared once here and applied
-# to MoveIt's Allowed Collision Matrix at task start — persistent for
-# the session, not re-detected per attach/detach. This does NOT mean any
-# contact between the pair is automatically conformant: it only
-# suppresses the planner's collision block. WatchDog's own contact
-# predicates still judge whether a given contact event, at a given step,
-# matches what the contract expects.
-permitted_contacts:
+# cell: properties of the cell itself (robot + gripper), not of any one
+# tracked object -- the joint and frame names monitor primitives need but
+# that used to exist only inside English clause descriptions or nowhere at
+# all. Extracted from the expanded URDF at
+# ros2_ws/src/robot_description/urdf/ur5e_ros.urdf and cross-checked against
+# ros2_ws/src/isaac_trajectory_bridge/isaac_trajectory_bridge/rg2_controller.py
+# (DEFAULT_MASTER_JOINT_NAME) and ros2_ws/src/ur5e_moveit_config/config/ur5e.srdf
+# (virtual_joint world_joint's parent_frame). See get_contract, which surfaces
+# this section verbatim so monitor parameters are read, never guessed.
+cell:
+  gripper:
+    effort_joint_name: finger_joint   # the RG2's single actuated joint; all
+                                       # other finger joints mimic it, so this
+                                       # is the only one whose effort on
+                                       # /joint_states means anything as a
+                                       # clamp-force measurement.
+    tcp_frame: tcp                    # fixed tool-centre-point frame, joined
+                                       # to wrist_3_link by a fixed joint.
+    # No grasp-centre TF frame exists. The grasp centre is computed from
+    # commanded grasp width via the RG2 calibration table (see
+    # robot_backend.utils.rg2_geometry); it is not published to TF. Any
+    # monitor needing a gripper-side frame uses tcp_frame above.
+  base_frame: world                   # MoveIt's planning/fixed frame --
+                                       # ur5e.srdf's virtual_joint world_joint
+                                       # parents base_link to "world".
+
+# MoveIt Allowed Collision Matrix entries. Each pair disables collision checking
+# between two OBJECTS so that intended contact (stacking, insertion) does not
+# leave the planning scene permanently in collision and block subsequent motion.
+#
+# This is a planner tractability setting. It carries no task-level permission and
+# says nothing about which objects the robot may touch. Contact between the robot
+# and an object that the specification requires to stay undisturbed is a
+# conformance violation, detected by the supervisory monitor from physical
+# evidence, and is deliberately not prevented by the planner.
+acm_allowed_object_pairs:
   - [green_cube, red_cube]
 
 objects:
@@ -105,6 +140,14 @@ objects:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+        disturbance_tolerance_m: 0.005   # max displacement for stationarity when this
+                                          # object is required to stay undisturbed --
+                                          # a distinct quantity from position_m above
+                                          # even though it happens to share the same
+                                          # value here: position_m bounds pose
+                                          # MEASUREMENT error before a pick, this
+                                          # bounds permitted physical DISPLACEMENT of
+                                          # an object nothing should be touching.
       limits:
         max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
 
@@ -133,5 +176,13 @@ objects:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
         lift_height_min_m: 0.02   # 20 mm minimum lift for positive grasp confirmation
+        disturbance_tolerance_m: 0.005   # max displacement for stationarity when this
+                                          # object is required to stay undisturbed --
+                                          # a distinct quantity from position_m above
+                                          # even though it happens to share the same
+                                          # value here: position_m bounds pose
+                                          # MEASUREMENT error before a pick, this
+                                          # bounds permitted physical DISPLACEMENT of
+                                          # an object nothing should be touching.
       limits:
         max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates

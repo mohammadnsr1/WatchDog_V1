@@ -16,7 +16,7 @@ Recovery contract:
   reset_object_state       — single-object reset to WORLD_TRACKED, idempotent.
   recover_scene            — reset every tracked object + clear the octomap.
   get_scene_summary        — read-only audit of MoveIt's current beliefs.
-  set_permitted_contacts   — apply registry-declared permitted-contact pairs
+  set_permitted_contacts   — apply registry-declared acm_allowed_object_pairs
                              to MoveIt's Allowed Collision Matrix, once per
                              session (not a recovery primitive, but lives
                              here alongside the other scene-backend-only
@@ -180,27 +180,33 @@ def set_permitted_contacts(
     *,
     registry: dict[str, Any],
 ) -> dict[str, Any]:
-    """Apply the registry's declared permitted-contact pairs to the ACM.
+    """Apply the registry's declared ACM-allowed object pairs to MoveIt's ACM.
 
-    Reads registry["permitted_contacts"] (defaulting to an empty list when
-    absent), validates each pair references two known registry object IDs,
-    and applies them via backend.scene.set_permitted_contacts(). A typo'd
-    object_id raises immediately rather than silently being a no-op.
+    Reads registry["acm_allowed_object_pairs"] (defaulting to an empty list
+    when absent), validates each pair references two known registry object
+    IDs, and applies them via backend.scene.set_permitted_contacts(). A
+    typo'd object_id raises immediately rather than silently being a no-op.
+
+    This is a planner tractability setting (disables collision *checking*
+    for the pair so intended contact doesn't leave the planning scene
+    permanently in collision) -- it carries no task-level permission and
+    says nothing about which objects the robot may touch. See the field's
+    own comment in model_registry.yaml.
     """
     known_object_ids = set(registry.get("objects", {}).keys())
-    raw_pairs = registry.get("permitted_contacts") or []
+    raw_pairs = registry.get("acm_allowed_object_pairs") or []
 
     pairs: list[tuple[str, str]] = []
     for raw_pair in raw_pairs:
         if not isinstance(raw_pair, (list, tuple)) or len(raw_pair) != 2:
             raise ValueError(
-                f"permitted_contacts entry must be a 2-element list, got {raw_pair!r}."
+                f"acm_allowed_object_pairs entry must be a 2-element list, got {raw_pair!r}."
             )
         a, b = raw_pair
         for object_id in (a, b):
             if object_id not in known_object_ids:
                 raise ValueError(
-                    f"permitted_contacts references unknown object_id {object_id!r}; "
+                    f"acm_allowed_object_pairs references unknown object_id {object_id!r}; "
                     f"known objects are {sorted(known_object_ids)}."
                 )
         pairs.append((a, b))

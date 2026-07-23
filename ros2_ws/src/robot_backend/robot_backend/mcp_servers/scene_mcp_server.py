@@ -16,7 +16,7 @@ Tools:
   mark_phase           — record that a named mid-step phase (e.g. a grasp)
                          has been reached, and block on the gate again.
   end_step             — close the window and declare the claimed outcome.
-  set_permitted_contacts — apply registry-declared permitted-contact pairs
+  set_permitted_contacts — apply registry-declared acm_allowed_object_pairs
                            to MoveIt's Allowed Collision Matrix.
 
 Process pattern (same as gripper_mcp_server):
@@ -512,13 +512,14 @@ if mcp is not None:
 
     @mcp.tool()
     def set_permitted_contacts() -> dict[str, Any]:
-        """Apply the registry's declared permitted-contact pairs to MoveIt's
+        """Apply the registry's declared acm_allowed_object_pairs to MoveIt's
         Allowed Collision Matrix.
 
-        Reads permitted_contacts from model_registry.yaml and persistently
-        allows each declared object pair to be in contact without being
-        flagged as a planning-time collision. Does not affect any other
-        collision pair.
+        Reads acm_allowed_object_pairs from model_registry.yaml and
+        persistently allows each declared object pair to be in contact
+        without being flagged as a planning-time collision. Does not affect
+        any other collision pair. This is a planner tractability setting; it
+        carries no task-level permission about what the robot may touch.
         """
         command = "set_permitted_contacts"
         try:

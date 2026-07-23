@@ -27,6 +27,14 @@ from agent_harness.timebase import wall_ns
 
 _REDACT_KEY_RE = re.compile(r"key|token|secret|password", re.IGNORECASE)
 
+# Opaque provider blobs that must still be sent to the provider on every turn
+# (reasoning continuity across tool-call turns depends on them -- see
+# providers.py's provider_native threading) but carry no audit value on disk
+# and are large enough to dominate a transcript: OpenAI reasoning items'
+# encrypted_content, Anthropic's redacted_thinking content blocks' data.
+_OPAQUE_BLOB_KEY = "encrypted_content"
+_REDACTED_THINKING_TYPE = "redacted_thinking"
+
 
 def _redact(obj: Any) -> Any:
     if isinstance(obj, dict):
@@ -39,6 +47,30 @@ def _redact(obj: Any) -> Any:
         return out
     if isinstance(obj, list):
         return [_redact(v) for v in obj]
+    return obj
+
+
+def _strip_opaque_blobs(obj: Any) -> Any:
+    """Recursively drop encrypted/opaque reasoning blobs from a message tree.
+
+    Builds an entirely new nested structure rather than mutating obj in
+    place at any level, so this is safe to call even when obj shares
+    references with the live `messages` list the runner is about to send to
+    the provider on the next turn -- stripping here can never affect what
+    goes out on the wire.
+    """
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k == _OPAQUE_BLOB_KEY and v:
+                out[k] = f"<stripped: {len(str(v))} chars, not persisted>"
+            elif k == "data" and obj.get("type") == _REDACTED_THINKING_TYPE and v:
+                out[k] = f"<stripped: {len(str(v))} chars, not persisted>"
+            else:
+                out[k] = _strip_opaque_blobs(v)
+        return out
+    if isinstance(obj, list):
+        return [_strip_opaque_blobs(v) for v in obj]
     return obj
 
 
@@ -97,11 +129,18 @@ class TranscriptWriter:
         order. Turn 1's new_messages is the initial task message; turn 2's
         is whatever was appended (assistant response, tool result(s)) after
         turn 1; and so on.
+
+        Reasoning items echoed back for provider continuity (see
+        providers.py's provider_native) carry opaque encrypted blobs
+        (OpenAI's encrypted_content, Anthropic's redacted_thinking data)
+        that must keep going out on the wire every turn but have no reason
+        to live on disk -- they are stripped here, not from the outbound
+        payload, and never from the reasoning summaries themselves.
         """
         self._write(
             "llm_request",
             turn=turn,
-            new_messages=_jsonable(new_messages),
+            new_messages=_strip_opaque_blobs(_jsonable(new_messages)),
             tool_count=tool_count,
         )
 

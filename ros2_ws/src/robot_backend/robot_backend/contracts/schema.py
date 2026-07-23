@@ -38,6 +38,11 @@ class Clause(BaseModel):
     threshold:   the bound, always sourced from the registry spec block.
     description: human-readable explanation of what is being checked.
     unit:        physical unit of field and threshold (for display / logging).
+    joint_name:  structured joint id for clauses whose unit is "sim_effort",
+                 sourced from cell.gripper.effort_joint_name in the registry
+                 (see loader.py). None for clauses that concern no joint.
+                 Exists so effort_event's required joint_name parameter can be
+                 read from the contract rather than parsed out of description.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -47,6 +52,7 @@ class Clause(BaseModel):
     threshold: float
     description: str = ""
     unit: str = ""
+    joint_name: str | None = None
 
 
 class PickContract(BaseModel):

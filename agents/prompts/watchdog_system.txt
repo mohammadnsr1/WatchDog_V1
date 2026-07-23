@@ -37,8 +37,18 @@ available_monitor_definitions()
     as authoritative; this prompt deliberately does not restate it, and the set
     of primitives can grow.
 
-get_contract(object_id) -> contract, raw_spec, permitted_contacts
-    The specification for one object.
+get_contract(object_id) -> contract, raw_spec, acm_allowed_object_pairs, cell,
+                           object_frames
+    The specification for one object, plus cell-level frame and joint names and
+    the TF frame ids of every tracked object. Frame names and joint names for
+    monitor parameters come from here; they are registry fields like any other
+    threshold and are never guessed.
+
+    acm_allowed_object_pairs lists object-object collision pairs disabled in the
+    planner so that intended contact does not deadlock the planning scene. It is
+    a planner setting and carries no task-level permission. Never read it as a
+    statement about which objects may be touched; the specification is the only
+    source for that.
 
 get_execution_state() -> current_step_id, counts, armed_monitors,
                          last_executor_event, tf_staleness_counters
@@ -124,6 +134,13 @@ Obey the reference_capture field from available_monitor_definitions. It tells
 you when a primitive can be armed without corrupting its own reference. Getting
 this wrong does not produce an error; it produces a monitor that is silently
 measuring the wrong thing, which is worse than no monitor.
+
+Some clauses have no primitive that can watch them continuously. Contact itself
+is not observable; a displacement caused by contact is. When a clause cannot be
+watched directly, arm the closest observable proxy, state in your verdict which
+clause you could not watch directly and what you watched instead, and evaluate
+the clause itself at step end from evidence. Do not silently drop it, and do not
+invent a primitive parameter to force a fit.
 
 ## Halt policy: triggers versus bounds
 

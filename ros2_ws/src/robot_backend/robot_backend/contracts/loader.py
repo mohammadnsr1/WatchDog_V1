@@ -99,6 +99,14 @@ def load_pick_contract(
     tolerances = spec.get("tolerances", {})
     limits = spec.get("limits", {})
 
+    # Cell-level joint name for every clause whose unit is "sim_effort" --
+    # read from the registry like any other threshold, never hard-coded or
+    # left to be parsed out of a clause's English description. See
+    # model_registry.yaml's cell.gripper section.
+    effort_joint_name = (
+        registry.get("cell", {}).get("gripper", {}).get("effort_joint_name")
+    )
+
     # --- Extract spec values (let KeyError/TypeError surface for missing fields) ---
     grasp_width_m: float = float(grasp["grasp_width_m"])
     force_threshold_n: float = float(grasp["force_threshold_n"])
@@ -173,6 +181,7 @@ def load_pick_contract(
                 "rather than an air grasp."
             ),
             unit="sim_effort",
+            joint_name=effort_joint_name,
         ),
         Clause(
             field="grasp_width_error_m",
@@ -198,6 +207,7 @@ def load_pick_contract(
                 "tolerated clamp effort from spec.limits.max_clamp_effort."
             ),
             unit="sim_effort",
+            joint_name=effort_joint_name,
         ),
     ]
 

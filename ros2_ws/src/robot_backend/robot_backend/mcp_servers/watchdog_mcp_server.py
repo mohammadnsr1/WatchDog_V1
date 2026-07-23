@@ -205,18 +205,44 @@ if mcp is not None:
 
     @mcp.tool()
     def get_contract(object_id: str) -> dict[str, Any]:
-        """Return a pick contract and declared registry provenance for one object."""
+        """Return a pick contract and declared registry provenance for one object.
+
+        cell carries cell-level (not per-object) joint and frame names --
+        cell.gripper.effort_joint_name for effort_event's joint_name
+        parameter, cell.gripper.tcp_frame for a gripper-side relative_frame
+        parameter, cell.base_frame for MoveIt's planning frame. There is no
+        grasp-centre TF frame; it does not exist and none should be invented
+        -- the grasp centre is computed from commanded grasp width via the
+        RG2 calibration table, not published to TF. Any monitor needing a
+        gripper-side frame uses cell.gripper.tcp_frame.
+
+        object_frames carries the TF frame id (tf_frame) and MoveIt lookup
+        frame (lookup_frame) the recorder already tracks for every enabled
+        registry object, keyed by object_id -- the object-side half of a
+        relative_frame monitor's parent_frame/child_frame pair.
+
+        acm_allowed_object_pairs lists object-object pairs whose collision
+        checking is disabled in MoveIt's Allowed Collision Matrix so that
+        intended contact (stacking, insertion) does not leave the planning
+        scene permanently in collision. It is a planner tractability
+        setting, not a task-level permission -- it says nothing about which
+        objects the robot may touch. The specification is the only source
+        for that; contact with an object required to stay undisturbed is a
+        conformance violation regardless of what this list contains.
+        """
         command = "get_contract"
         try:
             ctx = _ensure_watchdog()
             contract = load_pick_contract(object_id)
-            permitted = ctx.registry.get("permitted_contacts", [])
+            acm_pairs = ctx.registry.get("acm_allowed_object_pairs", [])
             return _ok(
                 command,
                 object_id=object_id,
                 contract=contract.model_dump(mode="json"),
                 raw_spec=_object_spec(ctx, object_id),
-                permitted_contacts=permitted if isinstance(permitted, list) else [],
+                acm_allowed_object_pairs=acm_pairs if isinstance(acm_pairs, list) else [],
+                cell=ctx.registry.get("cell", {}),
+                object_frames=ctx.recorder.object_frames,
             )
         except Exception as exc:
             return _error(command, exc, object_id=object_id)

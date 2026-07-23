@@ -146,7 +146,17 @@ class RelativeFrameMonitor(MonitorPrimitive):
         "you intend to hold already exists: arming grasp retention before the "
         "grasp closes freezes the pre-grasp separation as the reference and the "
         "monitor will fire on the approach itself. The armed reference is "
-        "returned in reference_values.translation; check it."
+        "returned in reference_values.translation; check it. "
+        "The reference is a distance between two frames, so any rigidly attached "
+        "gripper-side frame serves; a semantically exact grasp point is not "
+        "required. Note that the offset between the TCP frame and the actual "
+        "grasp centre varies with gripper width. The armed reference is "
+        "therefore valid only while gripper width is held constant. If the "
+        "gripper re-grips or adjusts width after arming, the object moves "
+        "relative to the TCP frame and this monitor can fire on a grasp that "
+        "was never lost. Disarm and re-arm across any intentional width change. "
+        "This is a real property of the RG2 established by calibration, not a "
+        "hypothetical."
     )
     param_schema = [
         {"name": "parent_frame", "type": "string", "required": True,
