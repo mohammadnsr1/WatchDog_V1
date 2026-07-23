@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -494,11 +495,37 @@ if mcp is not None:
 
 
 def main() -> None:
-    """Run the WatchDog MCP server."""
+    """Run the WatchDog MCP server.
+
+    Eagerly constructs the node/recorder/engine before mcp.run() rather than
+    waiting for the first tool call. available_monitor_definitions()
+    deliberately does not boot the node (it returns static description and
+    must not depend on a live one -- see that tool's docstring), so without
+    this the recorder's TF/joint-state buffers are still empty by the time
+    the agent makes its first signal_ready(scope="run") call, and that call's
+    warm check fails on the first attempt. Eager init here means the recorder
+    has been buffering since process start, so by the time the agent has
+    spent a turn on available_monitor_definitions the buffers are warm.
+
+    Non-fatal: if ROS/the simulator isn't up yet, this logs a warning and
+    falls through to mcp.run() unchanged -- the lazy _ensure_watchdog() path
+    inside each tool remains the fallback, and --dry-run must keep working
+    with no simulator running.
+    """
     if mcp is None:
         raise RuntimeError(
             "The Python package 'mcp' is required to run watchdog_mcp_server."
         ) from _MCP_IMPORT_ERROR
+
+    try:
+        _ensure_watchdog()
+    except Exception as exc:
+        print(
+            f"WARNING: watchdog_mcp_server eager init failed ({exc}); "
+            "continuing -- the first tool call will retry initialization.",
+            file=sys.stderr,
+        )
+
     try:
         mcp.run()
     finally:

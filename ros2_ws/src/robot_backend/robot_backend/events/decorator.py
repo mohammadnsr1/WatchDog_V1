@@ -94,4 +94,5 @@ def emit_skill_events(func: Callable) -> Callable:
                 error=error,
             )
 
+    wrapper._emits_skill_events = True  # type: ignore[attr-defined]
     return wrapper

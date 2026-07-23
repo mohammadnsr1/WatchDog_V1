@@ -41,6 +41,28 @@ ReentrantCallbackGroup -- same precedent as
 robot_backend.nodes.scene_tf_sync_node.SceneTFSyncNode, which hit the
 equivalent problem (a service handler that must wait on another callback) and
 solved it the same way.
+
+guard_mode -- whether a run is monitored is experimental metadata and must be
+declared, not inferred. A heuristic that detects the absence of a monitor
+could silently classify a misconfigured run as an intentionally unmonitored
+one, and those two must never be confusable in results. The "guard_mode" ROS
+parameter ("guarded" | "unguarded", default "guarded") is read live on every
+RequestGo call, so `ros2 param set /cell_orchestrator guard_mode unguarded`
+takes effect on the next gate with no restart. Three, and only three, reason
+codes reach the executor and the log:
+  unguarded_by_config -- the operator declared this run unmonitored. Expected.
+  timeout_gate         -- a monitor was present and failed to arm in time for
+                           this one step. A coverage failure, counted in
+                           results.
+  unguarded_latched    -- guard_mode was "guarded" but no monitor ever
+                           signalled anything on this run's first gate. A
+                           misconfiguration: this run's results cover
+                           nothing. Logged at warning level once, when the
+                           latch trips; every gate after that returns
+                           unguarded_latched immediately without waiting. If
+                           a monitor signals at any point after latching, the
+                           latch clears and normal gating resumes from the
+                           next request onward.
 """
 
 from __future__ import annotations
@@ -58,6 +80,7 @@ import rclpy.executors
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 
+from rcl_interfaces.msg import SetParametersResult
 from cell_sync_interfaces.srv import RequestGo, SignalReady
 
 try:
@@ -69,6 +92,8 @@ except ImportError:
 
 _DEFAULT_LOG_DIR = Path.home() / ".watchdog" / "orchestrator"
 _DEFAULT_GATE_TIMEOUT_SEC = 90.0
+_DEFAULT_GUARD_MODE = "guarded"
+_VALID_GUARD_MODES = {"guarded", "unguarded"}
 
 
 def _gate_key(step_id: str, phase: str) -> tuple[str, str]:
@@ -81,17 +106,27 @@ class OrchestratorNode(Node):
     def __init__(self, log_dir: Path | None = None) -> None:
         super().__init__("cell_orchestrator")
 
-        # Both exposed as launch arguments (see launch/orchestrator.launch.py).
-        # gate_timeout_sec is used only as a fallback when a RequestGo caller
-        # sends timeout_sec <= 0 -- the normal path is driven entirely by the
-        # per-call timeout_sec the caller (robot_backend.cell.gate.request_go)
-        # sends, which must stay in sync with this default; see that module's
-        # config note on the MCP-client-vs-gate-timeout ordering requirement.
+        # All three exposed as launch arguments (see
+        # launch/orchestrator.launch.py). gate_timeout_sec is used only as a
+        # fallback when a RequestGo caller sends timeout_sec <= 0 -- the
+        # normal path is driven entirely by the per-call timeout_sec the
+        # caller (robot_backend.cell.gate.request_go) sends, which must stay
+        # in sync with this default; see that module's config note on the
+        # MCP-client-vs-gate-timeout ordering requirement.
+        #
+        # guard_mode is experimental metadata that must be declared, not
+        # inferred -- see module docstring addendum below. It is dynamically
+        # settable at runtime (`ros2 param set /cell_orchestrator guard_mode
+        # unguarded`) without restarting the node, since the simulator can
+        # take minutes to come up and flipping between guarded/unguarded runs
+        # must not require bouncing the cell.
         self.declare_parameter("gate_timeout_sec", _DEFAULT_GATE_TIMEOUT_SEC)
         self.declare_parameter("log_dir", str(_DEFAULT_LOG_DIR))
+        self.declare_parameter("guard_mode", _DEFAULT_GUARD_MODE)
         self._default_gate_timeout_sec = float(
             self.get_parameter("gate_timeout_sec").value
         )
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
         run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
         resolved_log_dir = log_dir or Path(
@@ -102,11 +137,21 @@ class OrchestratorNode(Node):
         self._log_file = self._log_path.open("a", encoding="utf-8", buffering=1)
 
         # State this node is allowed to keep: whether run-scope readiness has
-        # arrived, and a map of pending gates keyed by (step_id, phase).
-        # Nothing about contracts, monitors, or verdicts.
+        # arrived, a map of pending gates keyed by (step_id, phase), and the
+        # guard-mode safety latch (see _handle_request_go). Nothing about
+        # contracts, monitors, or verdicts.
         self._run_ready_event = threading.Event()
+        self._any_signal_received = threading.Event()
         self._state_lock = threading.Lock()
         self._gates: dict[tuple[str, str], threading.Event] = {}
+        self._first_gate_attempted = False
+        self._latched_unguarded = False
+
+        self._log(
+            "orchestrator_start",
+            guard_mode=self._get_guard_mode(),
+            gate_timeout_sec=self._default_gate_timeout_sec,
+        )
 
         # Both services share one ReentrantCallbackGroup so the
         # MultiThreadedExecutor can run a blocked RequestGo call and an
@@ -126,8 +171,29 @@ class OrchestratorNode(Node):
         self.get_logger().info(
             f"cell_orchestrator up; serving /cell/request_go and "
             f"/cell/signal_ready; default gate_timeout_sec="
-            f"{self._default_gate_timeout_sec}; log at {self._log_path}"
+            f"{self._default_gate_timeout_sec}; guard_mode="
+            f"{self._get_guard_mode()}; log at {self._log_path}"
         )
+
+    # ------------------------------------------------------------------
+    # guard_mode -- read live on every request so `ros2 param set` takes
+    # effect on the very next gate, with no node restart.
+    # ------------------------------------------------------------------
+
+    def _get_guard_mode(self) -> str:
+        return str(self.get_parameter("guard_mode").value)
+
+    def _on_set_parameters(self, params: list) -> SetParametersResult:
+        for param in params:
+            if param.name == "guard_mode" and param.value not in _VALID_GUARD_MODES:
+                return SetParametersResult(
+                    successful=False,
+                    reason=(
+                        f"guard_mode must be one of {sorted(_VALID_GUARD_MODES)}, "
+                        f"got {param.value!r}"
+                    ),
+                )
+        return SetParametersResult(successful=True)
 
     # ------------------------------------------------------------------
     # Logging -- one JSONL record per transition, each carrying wall_ns.
@@ -159,6 +225,21 @@ class OrchestratorNode(Node):
         self, request: SignalReady.Request, response: SignalReady.Response
     ) -> SignalReady.Response:
         scope = request.scope
+
+        # Any signal at all, of any scope, is proof a monitor is present.
+        # This is what the safety latch checks to distinguish "no monitor
+        # ever appeared" (unguarded_latched) from an ordinary slow step.
+        self._any_signal_received.set()
+        with self._state_lock:
+            was_latched = self._latched_unguarded
+            self._latched_unguarded = False
+        if was_latched:
+            self.get_logger().warning(
+                "cell_orchestrator: a monitor signalled after this run had "
+                "already latched unguarded -- clearing the latch and "
+                "resuming normal gating from the next request onward."
+            )
+            self._log("latch_cleared", scope=scope, step_id=request.step_id)
 
         if scope == "run":
             self._run_ready_event.set()
@@ -194,6 +275,46 @@ class OrchestratorNode(Node):
     ) -> RequestGo.Response:
         step_id = request.step_id
         phase = request.phase
+        guard_mode = self._get_guard_mode()
+
+        # unguarded_by_config: the operator declared this run unmonitored.
+        # Expected, not a defect -- never waits, ever.
+        if guard_mode == "unguarded":
+            response.proceed = True
+            response.timed_out = False
+            response.waited_sec = 0.0
+            response.reason = "unguarded_by_config"
+            self._log(
+                "gate_unguarded_by_config",
+                step_id=step_id,
+                phase=phase,
+                guard_mode=guard_mode,
+            )
+            return response
+
+        # unguarded_latched: this guarded run already discovered, on its
+        # first gate, that no monitor ever appeared. Every subsequent gate
+        # returns immediately rather than paying the full timeout again --
+        # see the latch-detection branch below for why.
+        with self._state_lock:
+            already_latched = self._latched_unguarded
+        if already_latched:
+            response.proceed = True
+            response.timed_out = False
+            response.waited_sec = 0.0
+            response.reason = "unguarded_latched"
+            self._log(
+                "gate_unguarded_latched",
+                step_id=step_id,
+                phase=phase,
+                guard_mode=guard_mode,
+            )
+            return response
+
+        with self._state_lock:
+            is_first_gate = not self._first_gate_attempted
+            self._first_gate_attempted = True
+
         timeout_sec = float(request.timeout_sec) if request.timeout_sec > 0 else (
             self._default_gate_timeout_sec
         )
@@ -214,21 +335,51 @@ class OrchestratorNode(Node):
             remaining = max(0.0, deadline - time.monotonic())
             run_ready = self._run_ready_event.wait(remaining)
             if not run_ready:
-                # The monitoring agent never came up (or never warmed) within
-                # the deadline. This is categorically worse than a single
-                # slow step: every step in the run is unguarded, not just
-                # this one. Distinguish it in the response and the log so a
-                # run full of these is never read as merely a slow run.
                 waited_sec = time.monotonic() - t0
                 response.proceed = True  # the gate never refuses
-                response.timed_out = True
                 response.waited_sec = waited_sec
-                response.reason = "timeout_run_ready"
+
+                # Latch only on the first gate of the run, and only if no
+                # monitor has signalled ANYTHING at all (any scope) by this
+                # point. Without the "first gate" guard, every gate in an
+                # unmonitored run would re-pay the full timeout_sec waiting
+                # on the same never-coming run_ready event -- at 90s and two
+                # gates per step, a single-step run gains three minutes of
+                # dead waiting. With it, the run pays the timeout exactly
+                # once, then latches.
+                if is_first_gate and not self._any_signal_received.is_set():
+                    with self._state_lock:
+                        self._latched_unguarded = True
+                    self.get_logger().warning(
+                        f"cell_orchestrator: guard_mode=guarded but no monitor "
+                        f"signalled anything within {waited_sec:.1f}s on this "
+                        f"run's first gate -- latching this run as unguarded. "
+                        f"Every subsequent gate will return immediately with "
+                        f"reason='unguarded_latched'. This run's results "
+                        f"cover nothing."
+                    )
+                    response.timed_out = True
+                    response.reason = "unguarded_latched"
+                    self._log(
+                        "gate_unguarded_latched",
+                        step_id=step_id,
+                        phase=phase,
+                        waited_sec=waited_sec,
+                        guard_mode=guard_mode,
+                    )
+                    return response
+
+                # Not the first gate, or a monitor has signalled something
+                # (just not run-scope readiness yet) -- an ordinary coverage
+                # failure for this step, not a whole-run misconfiguration.
+                response.timed_out = True
+                response.reason = "timeout_gate"
                 self._log(
-                    "gate_timeout_run_ready",
+                    "gate_timeout",
                     step_id=step_id,
                     phase=phase,
                     waited_sec=waited_sec,
+                    guard_mode=guard_mode,
                 )
                 return response
 
@@ -243,20 +394,29 @@ class OrchestratorNode(Node):
         if released:
             response.timed_out = False
             response.reason = "released"
-            self._log("gate_open", step_id=step_id, phase=phase, waited_sec=waited_sec)
+            self._log(
+                "gate_open",
+                step_id=step_id,
+                phase=phase,
+                waited_sec=waited_sec,
+                guard_mode=guard_mode,
+            )
             return response
 
         # Reaching this point already implies run-scope readiness was
         # received (the branch above returns early otherwise), so this is
-        # necessarily the "one step didn't finish arming in time" case, not
-        # the "no monitor at all" case -- that one is timeout_run_ready,
-        # above. Distinct reason and distinct log type on purpose: a run
-        # full of timeout_run_ready is a broken setup, a run with one
-        # timeout_gate is a slow turn on one step, and conflating them would
-        # make a broken run look like a merely slow one.
+        # necessarily "a monitor is present but this one step didn't finish
+        # arming in time" -- a coverage failure counted in results, not a
+        # whole-run misconfiguration (that's unguarded_latched, above).
         response.timed_out = True
         response.reason = "timeout_gate"
-        self._log("gate_timeout", step_id=step_id, phase=phase, waited_sec=waited_sec)
+        self._log(
+            "gate_timeout",
+            step_id=step_id,
+            phase=phase,
+            waited_sec=waited_sec,
+            guard_mode=guard_mode,
+        )
         return response
 
     def destroy_node(self) -> bool:

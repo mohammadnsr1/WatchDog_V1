@@ -36,6 +36,10 @@ def _launch_setup(context):
     target_frame = LaunchConfiguration("target_frame")
     output_stamp_mode = LaunchConfiguration("output_stamp_mode")
     launch_scene_sync = LaunchConfiguration("launch_scene_sync")
+    start_orchestrator = LaunchConfiguration("start_orchestrator")
+    guard_mode = LaunchConfiguration("guard_mode")
+    gate_timeout_sec = LaunchConfiguration("gate_timeout_sec")
+    orchestrator_log_dir = LaunchConfiguration("orchestrator_log_dir")
     start_rg2_controller = LaunchConfiguration("start_rg2_controller")
     rg2_open_position = LaunchConfiguration("rg2_open_position")
     rg2_close_position = LaunchConfiguration("rg2_close_position")
@@ -45,6 +49,7 @@ def _launch_setup(context):
     ur5e_launch_dir = PathJoinSubstitution([FindPackageShare("ur5e_moveit_config"), "launch"])
     bridge_launch_dir = PathJoinSubstitution([FindPackageShare("isaac_trajectory_bridge"), "launch"])
     sim_bringup_launch_dir = PathJoinSubstitution([FindPackageShare("sim_moveit_bringup"), "launch"])
+    orchestrator_launch_dir = PathJoinSubstitution([FindPackageShare("cell_orchestrator"), "launch"])
     filter_enabled = _is_truthy(filter_pointcloud.perform(context))
     raw_topic_value = raw_pointcloud_topic.perform(context)
     filtered_topic_value = filtered_pointcloud_topic.perform(context)
@@ -141,6 +146,23 @@ def _launch_setup(context):
             output="screen",
             parameters=[{"use_sim_time": use_sim_time}],
             condition=IfCondition(launch_scene_sync),
+        ),
+        # The cell's timing interlock. Cell infrastructure, not agent
+        # infrastructure -- it comes up with the cell so the monitoring agent
+        # and executor can be started independently afterward without either
+        # one owning the gate. See cell_orchestrator/node.py for why it is a
+        # third process and cell_orchestrator/launch/orchestrator.launch.py
+        # for its own argument documentation (guard_mode in particular).
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([orchestrator_launch_dir, "orchestrator.launch.py"])
+            ),
+            launch_arguments={
+                "guard_mode": guard_mode,
+                "gate_timeout_sec": gate_timeout_sec,
+                "log_dir": orchestrator_log_dir,
+            }.items(),
+            condition=IfCondition(start_orchestrator),
         ),
         LogInfo(
             msg=(
@@ -268,6 +290,45 @@ def generate_launch_description():
                     "Launch scene_tf_sync_node, which exposes the /sync_scene_objects service "
                     "so pick/place skills can pull TF-based collision objects into MoveIt on demand."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "start_orchestrator",
+                default_value="true",
+                description=(
+                    "Launch cell_orchestrator (the /cell/request_go and "
+                    "/cell/signal_ready timing interlock) as part of cell "
+                    "bringup. Cell infrastructure, not agent infrastructure -- "
+                    "the monitoring agent and executor are started separately "
+                    "afterward. See operator sequence in agents/README.md."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "guard_mode",
+                default_value="guarded",
+                description=(
+                    "Passed through to cell_orchestrator: \"guarded\" (default) "
+                    "or \"unguarded\". Set to unguarded for executor-only runs "
+                    "-- leaving it guarded with no monitor started produces an "
+                    "unguarded_latched run that completes but monitors "
+                    "nothing. Changeable at runtime without a restart: "
+                    "`ros2 param set /cell_orchestrator guard_mode "
+                    "<guarded|unguarded>`."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "gate_timeout_sec",
+                default_value="90.0",
+                description=(
+                    "Passed through to cell_orchestrator as its fallback gate "
+                    "timeout. Keep in sync with CELL_GATE_TIMEOUT_SEC in "
+                    "agents/config/executor_agent.yaml and comfortably below "
+                    "mcp_client_timeout_sec there -- see robot_backend/cell/gate.py."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "orchestrator_log_dir",
+                default_value="~/.watchdog/orchestrator",
+                description="Passed through to cell_orchestrator as its JSONL transition log directory.",
             ),
             DeclareLaunchArgument(
                 "start_rg2_controller",

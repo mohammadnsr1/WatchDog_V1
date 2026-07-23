@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import atexit
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ import rclpy
 from rclpy.node import Node
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import close_gripper_skill
 from robot_backend.skills.gripper_skills import grasp_skill
@@ -227,6 +229,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def get_gripper_state() -> dict[str, Any]:
         """Return backend gripper bindings, width-mapping mode, and calibration metadata."""
 
@@ -285,6 +288,7 @@ if mcp is not None:
             return _error(command, exc, object_id=object_id)
 
     @mcp.tool()
+    @emit_skill_events
     def set_gripper_joint_position(position_rad: float) -> dict[str, Any]:
         """Send a raw RG2 master joint target in radians.
 
@@ -312,12 +316,29 @@ if mcp is not None:
 
 
 def main() -> None:
-    """Run the gripper MCP server."""
+    """Run the gripper MCP server.
+
+    Eagerly constructs the backend/node/event bus before mcp.run() -- see
+    scene_mcp_server.main()'s docstring for why (DDS discovery during the
+    ~40s the runner spends on the first LLM turn, before any tool call
+    lands). Non-fatal: a failure here logs a warning and falls through to
+    mcp.run() unchanged, so --dry-run keeps working with no simulator up and
+    the lazy _ensure_backend() path inside each tool remains the fallback.
+    """
 
     if mcp is None:
         raise RuntimeError(
             "The Python package 'mcp' is required to run gripper_mcp_server."
         ) from _MCP_IMPORT_ERROR
+
+    try:
+        _ensure_backend()
+    except Exception as exc:
+        print(
+            f"WARNING: gripper_mcp_server eager init failed ({exc}); "
+            "continuing -- the first tool call will retry initialization.",
+            file=sys.stderr,
+        )
 
     try:
         mcp.run()

@@ -20,6 +20,7 @@ from __future__ import annotations
 import atexit
 import math
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ import rclpy
 from rclpy.node import Node
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.utils.geometry import make_pose
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
@@ -326,6 +328,7 @@ def _compute_approach_geometry(
 if mcp is not None:
 
     @mcp.tool()
+    @emit_skill_events
     def get_robot_state() -> dict[str, Any]:
         """Return planning metadata and the latest observed arm joint state."""
 
@@ -339,6 +342,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def move_to_joint_positions(joint_positions: list[float]) -> dict[str, Any]:
         """Move to explicit UR5e joint targets in fixed joint order."""
 
@@ -365,6 +369,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def move_to_named_safe_joint_pose(name: str) -> dict[str, Any]:
         """Move to a small whitelist of agent-safe named joint poses."""
 
@@ -402,6 +407,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def move_tcp_to_pose(
         frame_id: str,
         x: float,
@@ -453,6 +459,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def move_grasp_center_to_pose(
         frame_id: str,
         x: float,
@@ -635,6 +642,7 @@ if mcp is not None:
 
 
     @mcp.tool()
+    @emit_skill_events
     def execute_approach_and_preposition(
         frame_id: str,
         x: float,
@@ -799,12 +807,29 @@ if mcp is not None:
 
 
 def main() -> None:
-    """Run the motion MCP server."""
+    """Run the motion MCP server.
+
+    Eagerly constructs the backend/node/event bus before mcp.run() -- see
+    scene_mcp_server.main()'s docstring for why (DDS discovery during the
+    ~40s the runner spends on the first LLM turn, before any tool call
+    lands). Non-fatal: a failure here logs a warning and falls through to
+    mcp.run() unchanged, so --dry-run keeps working with no simulator up and
+    the lazy _ensure_backend() path inside each tool remains the fallback.
+    """
 
     if mcp is None:
         raise RuntimeError(
             "The Python package 'mcp' is required to run motion_mcp_server."
         ) from _MCP_IMPORT_ERROR
+
+    try:
+        _ensure_backend()
+    except Exception as exc:
+        print(
+            f"WARNING: motion_mcp_server eager init failed ({exc}); "
+            "continuing -- the first tool call will retry initialization.",
+            file=sys.stderr,
+        )
 
     try:
         mcp.run()

@@ -33,6 +33,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ from rclpy.node import Node
 
 from robot_backend.cell.gate import request_go
 from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
 from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
@@ -177,6 +179,7 @@ if mcp is not None:
     # ------------------------------------------------------------------
 
     @mcp.tool()
+    @emit_skill_events
     def get_object_pose(object_id: str) -> dict[str, Any]:
         """Return the current TF pose of a registry object in its lookup frame.
 
@@ -224,6 +227,7 @@ if mcp is not None:
             return _error(command, exc, object_id=object_id)
 
     @mcp.tool()
+    @emit_skill_events
     def get_object_poses(graspable_only: bool = False) -> dict[str, Any]:
         """Return current TF poses for all enabled registry objects.
 
@@ -257,6 +261,7 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
+    @emit_skill_events
     def reset_tf() -> dict[str, Any]:
         """Flush and recreate the TF buffer in scene_tf_sync_node.
 
@@ -295,6 +300,7 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
+    @emit_skill_events
     def sync_scene(object_ids: list[str] | None = None) -> dict[str, Any]:
         """Push TF-derived object poses into MoveIt's collision scene.
 
@@ -524,11 +530,34 @@ if mcp is not None:
 
 
 def main() -> None:
-    """Run the scene MCP server."""
+    """Run the scene MCP server.
+
+    Eagerly constructs the backend/node/event bus before mcp.run() rather
+    than waiting for the first tool call. The runner spawns all three
+    executor server subprocesses ~40s before the first LLM turn lands (that
+    turn is what triggers the first tool call), so doing this here lets DDS
+    discovery of /watchdog/events complete during that idle window instead of
+    paying the bounded subscriber wait on the first real publish.
+
+    Non-fatal: if the simulator/ROS graph isn't up yet, this logs a warning
+    and falls through to mcp.run() unchanged. The lazy _ensure_backend() path
+    inside each tool remains the fallback, exactly as before -- this must
+    never make --dry-run (which is expected to work with no simulator
+    running) fail to start.
+    """
     if mcp is None:
         raise RuntimeError(
             "The Python package 'mcp' is required to run scene_mcp_server."
         ) from _MCP_IMPORT_ERROR
+
+    try:
+        _ensure_backend()
+    except Exception as exc:
+        print(
+            f"WARNING: scene_mcp_server eager init failed ({exc}); "
+            "continuing -- the first tool call will retry initialization.",
+            file=sys.stderr,
+        )
 
     try:
         mcp.run()

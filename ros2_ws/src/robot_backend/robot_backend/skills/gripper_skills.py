@@ -72,16 +72,19 @@ def _get_grasp_spec(
 # ---------------------------------------------------------------------------
 
 
+@emit_skill_events
 def open_gripper_skill(backend: RobotBackend) -> Any:
     """Open the gripper via the backend only."""
     return backend.gripper.open()
 
 
+@emit_skill_events
 def close_gripper_skill(backend: RobotBackend) -> Any:
     """Close the gripper via the backend only."""
     return backend.gripper.close()
 
 
+@emit_skill_events
 def set_gripper_width_skill(backend: RobotBackend, width_m: float) -> Any:
     """Set the target gripper width in meters via the backend only."""
     return backend.gripper.set_width(width_m)

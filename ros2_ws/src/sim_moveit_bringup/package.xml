@@ -24,6 +24,7 @@
   <exec_depend>ur5e_moveit_config</exec_depend>
   <exec_depend>robot_backend</exec_depend>
   <exec_depend>robot_backend_interfaces</exec_depend>
+  <exec_depend>cell_orchestrator</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
