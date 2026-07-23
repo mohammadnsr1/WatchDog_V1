@@ -2,7 +2,15 @@ agent: watchdog
 provider: openai
 model: gpt-5
 api_key_env: OPENAI_API_KEY
-max_tokens: 4096
+max_tokens: 8192
+
+# reasoning_effort: openai only (minimal | low | medium | high), ignored by
+# the anthropic provider. thinking_budget_tokens: anthropic only, ignored by
+# the openai provider. WatchDog's reasoning burden (arming discipline,
+# trigger-vs-bound judgment) differs from the executor's, so these are tuned
+# independently per agent even though both default to the same value here.
+reasoning_effort: medium
+thinking_budget_tokens: 4096
 
 system_prompt: prompts/watchdog_system.txt
 task_template: prompts/watchdog_task.txt

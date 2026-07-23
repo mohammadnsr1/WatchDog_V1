@@ -18,6 +18,9 @@ import yaml
 
 _WATCHDOG_SERVER_NAME = "watchdog"
 _EXECUTOR_SERVER_NAMES = {"gripper", "motion", "scene"}
+_VALID_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
+_DEFAULT_REASONING_EFFORT = "medium"
+_DEFAULT_THINKING_BUDGET_TOKENS = 4096
 
 
 @dataclass
@@ -57,6 +60,12 @@ class AgentConfig:
     # robot_backend.cell.gate (i.e. the executor's scene server). None for
     # configs (like WatchDog's) that never call request_go at all.
     gate_timeout_sec: float | None = None
+    # openai: valid values minimal/low/medium/high. Ignored by the anthropic
+    # provider.
+    reasoning_effort: str = _DEFAULT_REASONING_EFFORT
+    # anthropic: extended-thinking token budget. Ignored by the openai
+    # provider.
+    thinking_budget_tokens: int = _DEFAULT_THINKING_BUDGET_TOKENS
 
     @property
     def api_key(self) -> str:
@@ -200,6 +209,32 @@ def load_config(config_path: str | Path) -> AgentConfig:
         ),
     )
 
+    # Reasoning visibility config. Both fields are read regardless of which
+    # provider this config targets -- reasoning_effort is ignored by
+    # AnthropicProvider and thinking_budget_tokens by OpenAIProvider (see
+    # get_provider) -- so a config can be pointed at either provider without
+    # editing this block. Validated here, at load time, rather than left to
+    # fail at request time with an opaque provider error.
+    max_tokens_val = int(raw["max_tokens"])
+
+    reasoning_effort = str(raw.get("reasoning_effort", _DEFAULT_REASONING_EFFORT))
+    if reasoning_effort not in _VALID_REASONING_EFFORTS:
+        raise ValueError(
+            f"{config_path}: reasoning_effort must be one of "
+            f"{sorted(_VALID_REASONING_EFFORTS)}, got {reasoning_effort!r}."
+        )
+
+    thinking_budget_tokens = int(
+        raw.get("thinking_budget_tokens", _DEFAULT_THINKING_BUDGET_TOKENS)
+    )
+    if thinking_budget_tokens > max_tokens_val:
+        raise ValueError(
+            f"{config_path}: thinking_budget_tokens ({thinking_budget_tokens}) must not "
+            f"exceed max_tokens ({max_tokens_val}) -- Anthropic's extended-thinking "
+            f"budget is part of max_tokens, not additional to it, and this config "
+            f"would otherwise fail at request time with an opaque provider error."
+        )
+
     transcript_dir = resolve_relative(raw["transcript_dir"])
     transcript_dir.mkdir(parents=True, exist_ok=True)
 
@@ -208,7 +243,7 @@ def load_config(config_path: str | Path) -> AgentConfig:
         provider=raw["provider"],
         model=raw["model"],
         api_key_env=api_key_env,
-        max_tokens=int(raw["max_tokens"]),
+        max_tokens=max_tokens_val,
         system_prompt=system_prompt,
         task_template=task_template,
         mcp_servers=servers,
@@ -217,4 +252,6 @@ def load_config(config_path: str | Path) -> AgentConfig:
         config_path=config_path,
         mcp_client_timeout_sec=mcp_client_timeout_sec,
         gate_timeout_sec=gate_timeout_sec,
+        reasoning_effort=reasoning_effort,
+        thinking_budget_tokens=thinking_budget_tokens,
     )

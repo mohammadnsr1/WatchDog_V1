@@ -2,7 +2,15 @@ agent: executor
 provider: openai
 model: gpt-5
 api_key_env: OPENAI_API_KEY
-max_tokens: 4096
+max_tokens: 8192
+
+# reasoning_effort: openai only (minimal | low | medium | high), ignored by
+# the anthropic provider. thinking_budget_tokens: anthropic only, ignored by
+# the openai provider. Both are validated at config load -- see
+# agent_harness/config.py -- so a bad value here fails loudly before any
+# provider call rather than with an opaque request-time error.
+reasoning_effort: medium
+thinking_budget_tokens: 4096
 
 system_prompt: prompts/executor_system.txt
 task_template: prompts/executor_task.txt

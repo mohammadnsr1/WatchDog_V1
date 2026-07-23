@@ -283,6 +283,32 @@ response and any tool result(s)); and so on. To reconstruct the full context
 as of any turn N, concatenate `new_messages` from every `llm_request` record
 with `turn <= N`, in order.
 
+`llm_response` carries a `reasoning` field — `{"summary": <str or None>,
+"tokens": <int or None>}` — the provider's reasoning summary (OpenAI) or
+extended-thinking text (Anthropic) for that turn, plus the reasoning token
+count from `usage` when the provider reports one. `summary` is `None`
+whenever the provider generated no reasoning content for that turn; the API
+can withhold reasoning summaries for reasons outside this harness's control
+(observed directly: gpt-5 sometimes emits zero summary text on a turn that
+goes straight to a tool call with little deliberation, and a non-empty
+summary on a turn that reasons through a failure before acting), and this is
+a normal outcome, never an error. This is deliberately narrower than the full
+provider response: only the extracted summary text and token count are kept,
+never the raw payload — restoring `raw` wholesale was considered and
+rejected, since the reasoning content was the only part of it worth keeping.
+
+OpenAI reasoning summaries require the Responses API — Chat Completions does
+not expose them for reasoning models, so `OpenAIProvider` uses
+`client.responses.create`, not `client.chat.completions.create`. Reasoning
+continuity across turns depends on echoing the model's own prior reasoning
+output items back on the next call (OpenAI's own guidance, not just this
+harness's convention) and Anthropic's extended thinking has an equivalent
+requirement for thinking blocks preceding a tool-use turn — losing either
+degrades reasoning quality silently, it does not raise. Both providers carry
+this forward via `provider_native` on the assistant message, an opaque field
+`runner.py` copies through without reading; only the originating provider's
+own message-conversion method interprets it.
+
 ## Switching providers
 
 Each agent's provider, model, and API key source are independent config
@@ -292,11 +318,17 @@ values:
 provider: anthropic       # or: openai
 model: claude-opus-4-8    # or any model string that provider's SDK accepts
 api_key_env: ANTHROPIC_API_KEY
+reasoning_effort: medium          # openai only: minimal | low | medium | high
+thinking_budget_tokens: 4096      # anthropic only; part of max_tokens, not additional to it
 ```
 
-WatchDog on one provider and the executor on another is fully supported —
-adding a new provider means adding a class to `agent_harness/providers.py`
-and one line in its factory map; nothing in `runner.py` changes.
+Both reasoning fields are always present in config and validated at load
+time regardless of which provider the config targets — `reasoning_effort` is
+ignored by `AnthropicProvider`, `thinking_budget_tokens` by `OpenAIProvider`
+— so switching `provider:` doesn't require editing them out. WatchDog on one
+provider and the executor on another is fully supported — adding a new
+provider means adding a class to `agent_harness/providers.py` and one line
+in its factory map; nothing in `runner.py` changes.
 
 ## Skill event coverage
 

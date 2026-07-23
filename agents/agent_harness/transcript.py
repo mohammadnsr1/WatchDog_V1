@@ -109,14 +109,24 @@ class TranscriptWriter:
         self,
         turn: int,
         text: str | None,
+        reasoning: Any,
         tool_calls: list,
         stop_reason: str,
         usage: dict,
     ) -> None:
+        """reasoning is a providers.ReasoningTrace (summary, tokens), or None.
+
+        Only the extracted summary text and token count are recorded here --
+        never the full raw provider payload. summary is None whenever the
+        provider returned no reasoning content; that is a normal outcome
+        (the API may withhold it), not something this call treats as an
+        error.
+        """
         self._write(
             "llm_response",
             turn=turn,
             text=text,
+            reasoning=_jsonable(reasoning),
             tool_calls=_jsonable(tool_calls),
             stop_reason=stop_reason,
             usage=usage,

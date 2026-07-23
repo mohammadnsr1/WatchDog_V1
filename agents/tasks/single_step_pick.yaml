@@ -16,8 +16,8 @@ step_plan: |
     transport action.
 
 object_ids: |
-  green_cube: manipulated this run
-  red_cube: must not be touched this run
+  green_cube — 40 mm cube, graspable
+  red_cube   — 60 mm cube, graspable
 
 run_notes: ""
 # run_notes stays empty by design, including for fault-injection runs later.

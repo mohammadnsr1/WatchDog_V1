@@ -66,7 +66,14 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
         system_prompt_sha256=hash_file(config.system_prompt),
     )
 
-    provider = get_provider(config.provider, config.model, config.api_key, config.max_tokens)
+    provider = get_provider(
+        config.provider,
+        config.model,
+        config.api_key,
+        config.max_tokens,
+        reasoning_effort=config.reasoning_effort,
+        thinking_budget_tokens=config.thinking_budget_tokens,
+    )
 
     # B1: bind the loop bound directly from config, once, and assert it --
     # so a future refactor that introduces a second local copy (the exact
@@ -138,6 +145,7 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                 transcript.llm_response(
                     turn_count,
                     response.text,
+                    response.reasoning,
                     response.tool_calls,
                     response.stop_reason,
                     response.usage,
@@ -145,7 +153,17 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
 
                 if not response.tool_calls:
                     consecutive_no_tool_calls += 1
-                    messages.append({"role": "assistant", "content": response.text})
+                    # provider_native is opaque here -- only the originating
+                    # provider's own *_to_*_messages/input reads it, to
+                    # reconstruct this turn (with its reasoning) on a later
+                    # call. See providers.py's module docstring.
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": response.text,
+                            "provider_native": response.provider_native,
+                        }
+                    )
                     if consecutive_no_tool_calls >= 2:
                         termination_reason = "agent_idle"
                         break
@@ -158,6 +176,7 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         "role": "assistant",
                         "content": response.text,
                         "tool_calls": response.tool_calls,
+                        "provider_native": response.provider_native,
                     }
                 )
 
