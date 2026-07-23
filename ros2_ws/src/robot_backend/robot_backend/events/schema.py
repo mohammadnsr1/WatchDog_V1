@@ -223,6 +223,81 @@ class EventEnvelope(BaseModel):
     seq: int = 0
 
 
+# Which side of the executor/WatchDog boundary publishes each event type.
+# Used by available_event_types() (watchdog_mcp_server.py) so the monitoring
+# agent can tell, for any type it might filter wait_for_event on, whether it
+# is something the executor did or something WatchDog itself already knows
+# it did.
+_EXECUTOR_EVENT_TYPES = frozenset(
+    {"begin_step", "end_step", "skill_start", "skill_end", "phase"}
+)
+_WATCHDOG_EVENT_TYPES = frozenset(
+    {"monitor_fire", "monitor_armed", "monitor_disarmed", "halt", "verdict", "watchdog_ready"}
+)
+
+# event_type -> its payload model. The single source _available_event_types()
+# and KNOWN_EVENT_TYPES are built from, so neither can drift from the actual
+# schema the way a hand-written list could.
+EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
+    "begin_step": BeginStepPayload,
+    "end_step": EndStepPayload,
+    "skill_start": SkillStartPayload,
+    "skill_end": SkillEndPayload,
+    "monitor_fire": MonitorFirePayload,
+    "monitor_armed": MonitorArmedPayload,
+    "monitor_disarmed": MonitorDisarmedPayload,
+    "halt": HaltPayload,
+    "verdict": VerdictPayload,
+    "phase": PhasePayload,
+    "watchdog_ready": WatchDogReadyPayload,
+}
+
+# The event_type vocabulary itself, read off EventEnvelope's own Literal
+# rather than repeated as a separate list -- one place that can add a type,
+# not two that can drift apart.
+KNOWN_EVENT_TYPES: tuple[str, ...] = tuple(
+    EventEnvelope.model_fields["event_type"].annotation.__args__
+)
+
+
+def event_type_origin(event_type: str) -> str:
+    """"executor" or "watchdog": which side publishes this event type."""
+    if event_type in _EXECUTOR_EVENT_TYPES:
+        return "executor"
+    if event_type in _WATCHDOG_EVENT_TYPES:
+        return "watchdog"
+    raise ValueError(f"unknown event_type {event_type!r}")
+
+
+def available_event_type_definitions() -> list[dict[str, Any]]:
+    """Build available_event_types()'s response from the schema itself.
+
+    Derives name, one-line description, payload fields, and origin from
+    EVENT_TYPE_PAYLOAD_CLASSES and KNOWN_EVENT_TYPES -- never a hand-written
+    list, so it cannot drift from what the schema actually declares the way
+    a wait_for_event(event_types=["skill_phase"]) typo (there is no
+    skill_phase; the real type is "phase") was able to.
+    """
+    definitions = []
+    for event_type in KNOWN_EVENT_TYPES:
+        payload_cls = EVENT_TYPE_PAYLOAD_CLASSES[event_type]
+        doc = (payload_cls.__doc__ or "").strip()
+        description = doc.splitlines()[0].strip() if doc else ""
+        payload_fields = {
+            name: getattr(field.annotation, "__name__", None) or str(field.annotation)
+            for name, field in payload_cls.model_fields.items()
+        }
+        definitions.append(
+            {
+                "event_type": event_type,
+                "description": description,
+                "payload_fields": payload_fields,
+                "origin": event_type_origin(event_type),
+            }
+        )
+    return definitions
+
+
 def make_event(
     event_type: Literal[
         "begin_step",

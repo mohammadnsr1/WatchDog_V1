@@ -20,12 +20,17 @@ from rclpy.node import Node
 
 from robot_backend.contracts.loader import load_pick_contract
 from robot_backend.events.bus import EventBus
-from robot_backend.events.schema import VerdictPayload, make_event
+from robot_backend.events.schema import (
+    KNOWN_EVENT_TYPES,
+    VerdictPayload,
+    available_event_type_definitions,
+    make_event,
+)
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
 from robot_backend.watchdog.ready import ReadyClient
-from robot_backend.watchdog.recorder import EvidenceRecorder, _load_registry
+from robot_backend.watchdog.recorder import EvidenceRecorder, _load_registry, event_wrapper
 from robot_backend.watchdog.timebase import wall_ns
 
 try:
@@ -195,8 +200,8 @@ def _drain_wait(
         first = events[0]
         return {
             "wake": first.get("event_type"),
-            "event": first.get("envelope", first),
-            "additional_events": [event.get("envelope", event) for event in events[1:]],
+            "event": event_wrapper(first),
+            "additional_events": [event_wrapper(event) for event in events[1:]],
         }
     return None
 
@@ -330,9 +335,26 @@ if mcp is not None:
         timeout_sec: float = 120.0,
         event_types: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Block until a monitor fire, an executor event of the requested types, or timeout."""
+        """Block until a monitor fire, an executor event of the requested types, or timeout.
+
+        event_types must be exact names from available_event_types() -- a
+        filter naming a type that does not exist matches nothing and would
+        otherwise wait out the full timeout for no reason, believing it is
+        watching for something. Rejected immediately instead, naming the
+        unknown entries and the valid vocabulary.
+        """
         command = "wait_for_event"
         try:
+            if event_types:
+                unknown = sorted(set(event_types) - set(KNOWN_EVENT_TYPES))
+                if unknown:
+                    return _error(
+                        command,
+                        f"unknown event_types {unknown}; valid event types are "
+                        f"{sorted(KNOWN_EVENT_TYPES)}. Call available_event_types() "
+                        f"for descriptions and payload fields.",
+                        event_types=event_types,
+                    )
             ctx = _ensure_watchdog()
             timeout = min(max(float(timeout_sec), 0.0), 600.0)
             wanted = set(event_types) if event_types else None
@@ -362,8 +384,34 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
+    def available_event_types() -> dict[str, Any]:
+        """Return every event type the executor and monitor publish, with its
+        meaning and payload fields.
+
+        Built from the event schema definitions in events/schema.py, not a
+        hand-written list, so it cannot drift from what is actually
+        publishable. Call this once at the start of the run, before using
+        event_types filters on wait_for_event -- filter names must match
+        exactly, and a filter naming a type that does not exist here is
+        rejected rather than silently matching nothing.
+
+        Static description only -- does not depend on a live node, same as
+        available_monitor_definitions.
+        """
+        command = "available_event_types"
+        try:
+            return _ok(command, event_types=available_event_type_definitions())
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
     def get_events(since_wall_ns: int | None = None) -> dict[str, Any]:
-        """Return buffered executor and monitor events from the shared topic tail."""
+        """Return buffered executor and monitor events from the shared topic tail.
+
+        All timestamps are wall-clock nanoseconds -- take them from each
+        event's own wall_ns field, never from timestamp_ns inside envelope
+        (a per-process monotonic clock, not comparable across processes).
+        """
         command = "get_events"
         try:
             ctx = _ensure_watchdog()
@@ -371,7 +419,7 @@ if mcp is not None:
                 events = ctx.recorder.latest_events(100)
             else:
                 events = ctx.recorder.get_events_window(int(since_wall_ns), wall_ns())
-            return _ok(command, events=events)
+            return _ok(command, events=[event_wrapper(e) for e in events])
         except Exception as exc:
             return _error(command, exc, since_wall_ns=since_wall_ns)
 
@@ -384,7 +432,18 @@ if mcp is not None:
         joint_names: list[str] | None = None,
         max_samples: int = 200,
     ) -> dict[str, Any]:
-        """Return downsampled evidence windows from recorder buffers."""
+        """Return downsampled evidence windows from recorder buffers.
+
+        start_wall_ns/end_wall_ns are wall-clock nanoseconds -- the same
+        wall_ns field every event and every recorder buffer uses, never
+        envelope.timestamp_ns (a per-process monotonic clock; using it here
+        will silently select an empty window). If the requested window
+        overlaps no buffered sample on any requested channel, this returns
+        an error carrying the actually buffered range rather than empty
+        arrays -- an empty result is reserved for "nothing happened in a
+        window that genuinely was buffered", a real and different outcome
+        from "this window was never buffered at all".
+        """
         command = "get_evidence"
         try:
             ctx = _ensure_watchdog()
@@ -394,22 +453,35 @@ if mcp is not None:
             if unknown:
                 raise ValueError(f"unknown channels: {sorted(unknown)}")
             limit = max(1, min(int(max_samples), 1000))
+            start_ns, end_ns = int(start_wall_ns), int(end_wall_ns)
             evidence: dict[str, Any] = {}
             if "joint_states" in requested:
                 evidence["joint_states"] = ctx.recorder.get_joint_window(
-                    int(start_wall_ns), int(end_wall_ns), joint_names, limit
+                    start_ns, end_ns, joint_names, limit
                 )
             if "object_poses" in requested:
                 ids = object_ids if object_ids is not None else ctx.recorder.object_ids()
                 evidence["object_poses"] = {
-                    oid: ctx.recorder.get_object_pose_window(
-                        int(start_wall_ns), int(end_wall_ns), oid, limit
-                    )
+                    oid: ctx.recorder.get_object_pose_window(start_ns, end_ns, oid, limit)
                     for oid in ids
                 }
             if "events" in requested:
-                evidence["events"] = ctx.recorder.get_events_window(
-                    int(start_wall_ns), int(end_wall_ns)
+                evidence["events"] = [
+                    event_wrapper(e)
+                    for e in ctx.recorder.get_events_window(start_ns, end_ns)
+                ]
+
+            any_samples = any(
+                (bool(v) if key != "object_poses" else any(v.values()))
+                for key, v in evidence.items()
+            )
+            if not any_samples:
+                return _error(
+                    command,
+                    "requested window does not overlap any buffered evidence",
+                    requested={"start_wall_ns": start_ns, "end_wall_ns": end_ns},
+                    buffered_range=ctx.recorder.buffered_range(object_ids),
+                    now_wall_ns=wall_ns(),
                 )
             return _ok(command, evidence=evidence)
         except Exception as exc:

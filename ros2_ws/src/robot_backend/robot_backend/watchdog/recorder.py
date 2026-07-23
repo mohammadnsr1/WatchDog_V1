@@ -105,6 +105,25 @@ def _stamp(sample: Any) -> int:
     return int(sample[0])
 
 
+def event_wrapper(record: dict[str, Any]) -> dict[str, Any]:
+    """Project an internal event record into the agent-facing event shape.
+
+    Every path that hands an event to an agent (wait_for_event's drain,
+    get_events, get_evidence's events channel) uses this, so the agent
+    always receives a directly usable wall_ns -- the same field name and
+    axis as recorder buffers -- instead of having to find (or guess) it
+    inside the envelope. envelope is passed through unmodified for
+    provenance; the raw internal record (wall_ns_received, envelope_wall_ns)
+    is not part of the agent-facing shape.
+    """
+    return {
+        "wall_ns": record.get("wall_ns", record.get("wall_ns_received")),
+        "wall_ns_source": record.get("wall_ns_source", "received"),
+        "event_type": record.get("event_type"),
+        "envelope": record.get("envelope", record),
+    }
+
+
 class EvidenceRecorder:
     """Rolling recorder for joint states, object TF poses, and executor events."""
 
@@ -216,9 +235,23 @@ class EvidenceRecorder:
             received = wall_ns()
             envelope = EventEnvelope.model_validate_json(msg.data)
             envelope_dict = envelope.model_dump(mode="json")
+            envelope_wall_ns = _parse_wall_time_iso(envelope.wall_time_iso)
+            # wall_ns is the resolved, agent-facing timestamp: the publishing
+            # process's own wall clock (parsed from wall_time_iso) when
+            # available, falling back to this process's receipt time only if
+            # that parse failed. Either way it is on the same wall_ns axis as
+            # every recorder buffer (joint/pose samples all use wall_ns()) --
+            # unlike envelope.timestamp_ns, a per-process monotonic clock
+            # that is not comparable across processes and would silently
+            # select an empty evidence window if used for one. See
+            # get_evidence and _stamp, which windows on this field.
+            resolved_wall_ns = envelope_wall_ns if envelope_wall_ns is not None else received
+            wall_ns_source = "envelope" if envelope_wall_ns is not None else "received"
             record = {
                 "wall_ns_received": received,
-                "envelope_wall_ns": _parse_wall_time_iso(envelope.wall_time_iso),
+                "envelope_wall_ns": envelope_wall_ns,
+                "wall_ns": resolved_wall_ns,
+                "wall_ns_source": wall_ns_source,
                 "event_type": envelope.event_type,
                 "payload": envelope.payload,
                 "envelope": envelope_dict,
@@ -342,6 +375,27 @@ class EvidenceRecorder:
             self._wait_events = remaining
         return matched
 
+    def buffered_range(self, object_ids: list[str] | None = None) -> dict[str, Any]:
+        """Return [first, last] wall_ns currently buffered per channel.
+
+        None for a channel/object with no buffered samples at all. Used to
+        tell an out-of-range get_evidence window apart from a legitimate
+        "nothing happened here" -- see get_evidence in watchdog_mcp_server.py.
+        """
+        with self.lock:
+            joint_stamps = [int(s[0]) for s in self.joint_samples]
+            events_stamps = [_stamp(e) for e in self.events]
+            ids = object_ids if object_ids is not None else list(self.object_pose_samples)
+            pose_ranges: dict[str, list[int] | None] = {}
+            for oid in ids:
+                stamps = [int(s[0]) for s in self.object_pose_samples.get(oid, ())]
+                pose_ranges[oid] = [stamps[0], stamps[-1]] if stamps else None
+        return {
+            "joint_states": [joint_stamps[0], joint_stamps[-1]] if joint_stamps else None,
+            "object_poses": pose_ranges,
+            "events": [events_stamps[0], events_stamps[-1]] if events_stamps else None,
+        }
+
     def counts(self) -> dict[str, Any]:
         with self.lock:
             return {
@@ -382,4 +436,5 @@ __all__ = [
     "MAX_TF_SAMPLES",
     "TF_SAMPLE_HZ",
     "_uniform_downsample",
+    "event_wrapper",
 ]

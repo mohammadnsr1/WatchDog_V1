@@ -18,6 +18,19 @@ cell's state through the tools that report poses, joint values, and object
 information. The instruction specification and the object contracts are your
 source of truth for what each step requires and for what counts as done.
 
+## Gripper geometry
+
+The TCP frame published in TF is a fixed frame on the wrist. It is not the point
+where the fingers close. The grasp centre sits at an offset from the TCP along
+the tool axis, and that offset changes with jaw opening: the wider the gripper,
+the further the grasp centre sits from the TCP.
+
+The motion layer computes this offset for you, but only if you tell it the jaw
+opening you intend. Whenever you preposition for a grasp, pass the gripper width
+you are going to close from, taken from the object's contract. If you omit it,
+the motion layer applies a default that will not match your actual grasp, and the
+gripper will arrive at the wrong height for the object.
+
 ## How to work a step
 
 For each step in the plan:

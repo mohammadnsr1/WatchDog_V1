@@ -146,6 +146,12 @@ class OrchestratorNode(Node):
         self._gates: dict[tuple[str, str], threading.Event] = {}
         self._first_gate_attempted = False
         self._latched_unguarded = False
+        # (monotonic_time, phase) per step_id, for every phase-scope
+        # SignalReady this node has ever received -- lets a timed-out
+        # phase gate check whether a signal arrived for the same step_id
+        # under a DIFFERENT phase name during its own wait. See
+        # _find_near_miss_phases.
+        self._phase_signal_log: dict[str, list[tuple[float, str]]] = {}
 
         self._log(
             "orchestrator_start",
@@ -216,6 +222,20 @@ class OrchestratorNode(Node):
                 self._gates[key] = event
             return event
 
+    def _find_near_miss_phases(
+        self, step_id: str, phase: str, t0: float, t1: float
+    ) -> list[str]:
+        """Phase names signalled for step_id, other than phase, within [t0, t1].
+
+        A phase gate timing out while a *different* phase name was signalled
+        for the same step during the same wait is a name mismatch between
+        the executor and the monitor, not a slow monitor -- surfacing it
+        here turns a cross-transcript comparison into one log line.
+        """
+        with self._state_lock:
+            entries = list(self._phase_signal_log.get(step_id, []))
+        return sorted({p for (t, p) in entries if t0 <= t <= t1 and p != phase})
+
     # ------------------------------------------------------------------
     # SignalReady -- monitor side. Record the signal, release the matching
     # event, return immediately. Never blocks.
@@ -254,6 +274,10 @@ class OrchestratorNode(Node):
         elif scope == "phase":
             event = self._get_gate_event(request.step_id, request.phase)
             event.set()
+            with self._state_lock:
+                self._phase_signal_log.setdefault(request.step_id, []).append(
+                    (time.monotonic(), request.phase)
+                )
             response.ok = True
             response.message = (
                 f"phase readiness recorded for step_id={request.step_id!r}, "
@@ -408,6 +432,32 @@ class OrchestratorNode(Node):
         # necessarily "a monitor is present but this one step didn't finish
         # arming in time" -- a coverage failure counted in results, not a
         # whole-run misconfiguration (that's unguarded_latched, above).
+        #
+        # Diagnostic only, does not change the outcome: a phase gate timing
+        # out is still timeout_gate even when a near-miss name is found --
+        # the executor really did wait the full timeout regardless of why.
+        # This just makes the likely cause (a name mismatch, not a slow
+        # monitor) visible in one log line instead of a cross-transcript
+        # comparison. No fuzzy matching or auto-correction -- names must
+        # match exactly; this only reports that they didn't.
+        if phase:
+            near_misses = self._find_near_miss_phases(step_id, phase, t0, time.monotonic())
+            if near_misses:
+                self.get_logger().warning(
+                    f"cell_orchestrator: RequestGo for step_id={step_id!r} "
+                    f"phase={phase!r} timed out, but signal_ready was received "
+                    f"for the same step_id under a different phase name during "
+                    f"the wait: {near_misses}. This looks like a phase-name "
+                    f"mismatch between the executor and the monitor, not a slow "
+                    f"monitor."
+                )
+                self._log(
+                    "gate_timeout_near_miss_phase",
+                    step_id=step_id,
+                    requested_phase=phase,
+                    signalled_phases=near_misses,
+                )
+
         response.timed_out = True
         response.reason = "timeout_gate"
         self._log(
