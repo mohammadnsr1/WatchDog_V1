@@ -171,44 +171,72 @@ unguarded step is a recorded finding, never a deadlock. Executor-alone runs
 
 ## Launch protocol for a run
 
-Three separate processes, in a fixed order, none of them launching another —
-coupling their lifecycles in code would blur the independence the study rests
-on:
+The orchestrator is cell infrastructure, not agent infrastructure: it comes up
+with the cell (`sim_moveit_bringup.launch.py` includes it by default, gated
+behind `start_orchestrator:=true`), not with either agent. The operator
+sequence is therefore:
 
 ```bash
-# 1. Orchestrator — plain ROS node, no LLM, own colcon package
-ros2 run cell_orchestrator orchestrator_node
-# or, to override its two launch arguments:
-ros2 launch cell_orchestrator orchestrator.launch.py gate_timeout_sec:=90.0 log_dir:=~/.watchdog/orchestrator
+# 1. Bring up the cell — this starts cell_orchestrator too (start_orchestrator
+# defaults to true). For an executor-only run, declare that up front:
+ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py guard_mode:=unguarded
+# or leave the default (guard_mode:=guarded) for a monitored run:
+ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py
 
-# 2. WatchDog — warms its recorder buffers and signals run-scope readiness
+# 2. WatchDog — warms its recorder buffers and signals run-scope readiness.
+# Skip this step entirely for an executor-only run.
 python3 run_agent.py --config config/watchdog_agent.yaml --task tasks/two_cube_stack.yaml
 
 # 3. Executor — its first begin_step blocks until WatchDog releases it
+# (guarded mode) or returns immediately (unguarded mode)
 python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_stack.yaml
 ```
 
-**Orchestrator first, then WatchDog, then the executor — always.** The
-executor's first `begin_step` blocks on the gate; if the orchestrator isn't up
-yet the call resolves immediately with `gated: False`, `reason:
-"no_orchestrator"`, and no guarding happens at all for that run. If the
-orchestrator is up but WatchDog hasn't signalled run-scope readiness within
-the gate's timeout, `begin_step` proceeds anyway with `reason:
-"timeout_run_ready"` — every step in the run is unguarded, not just this one,
-so a run full of these is a broken setup, not a slow one. If run-scope
-readiness *did* arrive but this particular step/phase's own signal didn't
-land in time, the reason is `"timeout_gate"` instead — one step unguarded, not
-the whole run. Both are logged distinctly in the orchestrator's own JSONL
-(`gate_timeout_run_ready` vs `gate_timeout`) for exactly this reason: don't
-conflate a broken run with a merely slow step. Launching in order is what
-makes a run actually guarded, not just structurally capable of being guarded.
-Both waits inside the orchestrator's `RequestGo` handler share a single
-deadline computed at handler entry, so total wall time in that call never
-exceeds the caller's own `timeout_sec` regardless of which wait consumes it.
+To run the orchestrator standalone instead of through cell bringup (e.g. for
+the gate tests below), `ros2 launch cell_orchestrator orchestrator.launch.py
+guard_mode:=guarded gate_timeout_sec:=90.0 log_dir:=~/.watchdog/orchestrator`
+still works exactly as before.
 
-This is a manual, three-terminal (or three-job) operation every time, by
-design — the orchestrator does not launch either agent, and neither agent
-launches the other.
+**Cell (with orchestrator), then WatchDog, then the executor — always**, for a
+guarded run. For an executor-only run, skip WatchDog and set
+`guard_mode:=unguarded` at launch (or flip it later with `ros2 param set
+/cell_orchestrator guard_mode unguarded` — takes effect on the very next gate,
+no restart, since the simulator can take minutes to come back up).
+
+Whether a run is guarded is declared, not inferred — a heuristic that detects
+"no monitor" could silently misclassify a broken run as an intentionally
+unmonitored one, and those two must never be confusable in results. Every gate
+response and log record carries one of exactly three reason codes:
+
+- **`unguarded_by_config`** — the operator declared this run unmonitored
+  (`guard_mode:=unguarded`). Expected, not a defect. The gate returns in
+  milliseconds, never waits.
+- **`timeout_gate`** — a monitor was present (it signalled run-scope
+  readiness, or something else, at some point) but failed to arm this
+  particular step in time. A coverage failure for one step, counted in
+  results, not a broken run.
+- **`unguarded_latched`** — `guard_mode` was left `guarded` but no monitor
+  ever signalled anything at all by the time this run's *first* gate timed
+  out. This is a misconfiguration, not a slow step: **leaving `guard_mode`
+  guarded without starting a monitor produces a run that completes but
+  monitors nothing, and its results cover nothing.** The orchestrator logs
+  this once at warning level the moment it latches, then every subsequent
+  gate in the run returns `unguarded_latched` immediately (no re-paying the
+  timeout — at 90s and two gates per step, that would otherwise cost a
+  single-step run three minutes of dead waiting). If a monitor signals at any
+  point afterward, the latch clears and normal gating resumes from the next
+  request onward.
+
+`released` (gate opened normally) and `error`/`no_orchestrator` (the
+`robot_backend.cell.gate` client's own fail-open reasons, used when the
+orchestrator process itself isn't reachable at all — a corner case now that
+it comes up with the cell, but still a supported one) round out the full set
+of reasons a `begin_step`/`mark_phase` call can report.
+
+This is still a manual, three-step operation every time, by design — the
+orchestrator does not launch either agent, and neither agent launches the
+other; only the orchestrator now shares a lifecycle with the cell itself
+rather than needing its own separate terminal.
 
 `--provider` and `--model` CLI flags on `run_agent.py` override the config
 file if you need to swap providers for a single run without editing YAML.
@@ -270,13 +298,44 @@ WatchDog on one provider and the executor on another is fully supported —
 adding a new provider means adding a class to `agent_harness/providers.py`
 and one line in its factory map; nothing in `runner.py` changes.
 
+## Skill event coverage
+
+Every executor MCP tool that changes or queries the physical cell or the
+planning scene emits a `skill_start`/`skill_end` pair on `/watchdog/events`
+(directly via `@emit_skill_events`, or by delegating to an internally
+decorated skill function — `grasp`/`release`/`open_gripper`/etc.), or emits
+its own dedicated event type (`begin_step`/`end_step`/`mark_phase`). Only
+pure local computation that touches nothing (`compute_grasp_approach_poses`,
+pose geometry only) is exempt. `ros2_ws/src/robot_backend/test/
+test_skill_event_coverage.py` enumerates every tool actually registered on
+each server's FastMCP instance and fails if any tool is neither decorated nor
+in its allowlist (which documents *why* each exemption is safe) — this is
+what stops a newly added tool from silently reopening a coverage gap. Run it
+whenever a tool is added, renamed, or its call path changes.
+
 ## EventBus hardening
 
-`robot_backend.events.bus.EventBus` waits, once per process and only before
-its first publish, for a matched subscriber on `/watchdog/events` (bounded by
-`WATCHDOG_EVENTBUS_WAIT_SEC`, default 2.0s) — this covers the DDS discovery
-race that can silently drop a cold-started publisher's very first message
-(always `begin_step`, for the executor's servers) under default volatile QoS.
+Every executor MCP server (`scene`, `motion`, `gripper`) and the WatchDog
+server construct their backend/node/event bus **eagerly in `main()`**, before
+`mcp.run()`, rather than waiting for the first tool call. The runner spawns
+all server subprocesses roughly 40s before the first LLM turn lands (that
+turn is what triggers the first real tool call), so this lets DDS discovery
+of `/watchdog/events` complete during that idle window instead of paying the
+bounded subscriber wait below on the first real publish — and it means
+WatchDog's recorder has been buffering TF/joint state since process start, so
+its first `signal_ready(scope="run")` warm check passes on the first try
+instead of needing a retry. Eager init is non-fatal: if it fails (simulator
+not up, ROS overlay not sourced), each server logs a warning and falls
+through to `mcp.run()` unchanged — the lazy `_ensure_backend()` /
+`_ensure_watchdog()` path inside each tool remains the fallback, and
+`--dry-run` keeps working with no simulator running at all.
+
+Separately, `robot_backend.events.bus.EventBus` waits, once per process and
+only before its first publish, for a matched subscriber on
+`/watchdog/events` (bounded by `WATCHDOG_EVENTBUS_WAIT_SEC`, default 2.0s) —
+this covers the DDS discovery race that can silently drop a cold-started
+publisher's very first message (always `begin_step`, for the executor's
+servers) under default volatile QoS.
 It logs once at warning level and publishes anyway if the wait times out; it
 never raises and never blocks on any publish after the first. Every event
 envelope also carries `subscriber_count` (captured at publish time — an event
@@ -338,27 +397,54 @@ Each of these is a gate — do them in order before trusting a full run:
 2. **Runner termination.** Force a provider failure with an invalid model
    name; `run_end` must say `provider_error`. Then run with `max_turns: 3` and
    confirm a real cap reports `max_turns_exhausted`.
-3. **Gate fail-open.** Run the executor alone, no orchestrator. `begin_step`
-   must return promptly with `gated: False`, `reason: "no_orchestrator"`.
+3. **Guard mode.** (Replaces the old "gate fail-open" check, which expected
+   `reason: "no_orchestrator"` — that was only correct back when the
+   orchestrator had to be started by hand and a run without it was the normal
+   executor-alone case. Now that the orchestrator comes up with cell bringup,
+   the primary behavior to verify is guard_mode, not orchestrator absence.)
+   Orchestrator alone (`ros2 launch cell_orchestrator orchestrator.launch.py`)
+   for all four sub-checks:
+   - **3a, unguarded by config.** `guard_mode:=unguarded`. Call
+     `/cell/request_go` — must return in milliseconds with `proceed: True`,
+     `timed_out: False`, `reason: "unguarded_by_config"`.
+   - **3b, guarded with no monitor latches.** `guard_mode:=guarded`, no
+     `signal_ready` call ever made. The *first* `/cell/request_go` must block
+     for the full `gate_timeout_sec` before returning `reason:
+     "unguarded_latched"`, and the orchestrator must log a warning-level
+     message at that moment. Every subsequent `/cell/request_go` call (any
+     `step_id`) must then return immediately (milliseconds) with the same
+     `reason: "unguarded_latched"` — confirm it does *not* re-pay the
+     timeout.
+   - **3c, guarded with a monitor.** `guard_mode:=guarded`. Call
+     `/cell/signal_ready` (scope `run`, then scope `step` for the step you're
+     about to request) before calling `/cell/request_go` — the gate must
+     return `reason: "released"`. Confirm `unguarded_by_config` never appears
+     anywhere in a run where a monitor actually signalled.
+   - **3d, dynamic reconfiguration.** With the node still up from 3b or 3c,
+     `ros2 param set /cell_orchestrator guard_mode unguarded` — the *next*
+     `/cell/request_go` call must immediately return `unguarded_by_config`,
+     with no node restart.
 4. **Service concurrency.** Orchestrator alone. Call `/cell/request_go` from
    the command line, and while it blocks, call `/cell/signal_ready` from a
    second terminal. The first call must return. If it hangs, the callback
    group or executor is wrong — test this before involving any agent.
-   - **4b, deadline sharing.** Orchestrator alone. Call `/cell/request_go`
-     with `timeout_sec: 5.0` and never signal run-readiness — the call must
-     return in ~5s (not 10), with `reason: "timeout_run_ready"` and
-     `proceed: True`. Then signal run-readiness, call again with a *different*
-     `step_id` and no step signal, and confirm ~5s with `reason:
-     "timeout_gate"`.
+   - **4b, deadline sharing.** Orchestrator alone, `guard_mode:=guarded`.
+     Call `/cell/request_go` with `timeout_sec: 5.0` and never signal
+     anything — the call must return in ~5s (not 10), with `reason:
+     "unguarded_latched"` and `proceed: True` (this is 3b's timing bound
+     restated: exactly one full timeout, not two). Then signal run + step
+     readiness, call again with a *different* `step_id`, and confirm ~5s with
+     `reason: "timeout_gate"` if you withhold that step's own signal.
    - **4c, timeout ordering.** Confirm `agent_harness/config.py` rejects a
      config where `mcp_client_timeout_sec` is at or below `gate_timeout_sec`
      (e.g. set both to the same value in `executor_agent.yaml` and try to
      load it) — it must raise at config load, before any process starts.
-5. **Gate closed-loop.** Orchestrator, then WatchDog, then executor.
-   `begin_step` must block, WatchDog must arm and signal, and `begin_step`
-   must return with `waited_sec` in the seconds. Confirm from the
-   orchestrator's own JSONL that the ordering was `run_ready`, `gate_open`
-   (not `gate_timeout_run_ready` or `gate_timeout`).
+5. **Gate closed-loop.** Cell bringup (orchestrator included, default
+   `guard_mode:=guarded`), then WatchDog, then executor. `begin_step` must
+   block, WatchDog must arm and signal, and `begin_step` must return with
+   `waited_sec` in the seconds. Confirm from the orchestrator's own JSONL
+   that the ordering was `orchestrator_start` (with `guard_mode: "guarded"`),
+   `run_ready`, `gate_open` — not `gate_unguarded_latched` or `gate_timeout`.
 6. **A full step end to end** — an `end_step` with `claimed_outcome` and a
    populated `claim_detail`.
 
