@@ -1,0 +1,25 @@
+name: single_step_pick
+instruction_spec: |
+  Pick up green_cube and lift it clear of the table, then hold it steady.
+  green_cube must not be released, dropped, or brought into contact with
+  red_cube or the table surface once lifted. red_cube must remain
+  completely undisturbed for the duration of this task.
+
+step_plan: |
+  step_id: pick_green_cube
+  object_id: green_cube
+  intent: >
+    Approach green_cube, establish a secure grasp per its contract, and
+    lift it to a clear height above the table. red_cube must not be
+    touched or displaced at any point during this step. Once the grasp
+    is established, hold position; do not proceed to any placement or
+    transport action.
+
+object_ids: |
+  green_cube: manipulated this run
+  red_cube: must not be touched this run
+
+run_notes: ""
+# run_notes stays empty by design, including for fault-injection runs later.
+# The agent must never be told the registry is corrupted, or the class-4
+# result proves nothing.

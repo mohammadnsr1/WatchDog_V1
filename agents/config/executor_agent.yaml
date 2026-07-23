@@ -28,9 +28,7 @@ mcp_servers:
       CELL_GATE_TIMEOUT_SEC: "90.0"
 
 loop:
-  max_turns: 300
-  wait_timeout_sec: 120.0
-  stop_after_consecutive_timeouts: 2
+  max_turns: 60
 
 transcript_dir: transcripts
 

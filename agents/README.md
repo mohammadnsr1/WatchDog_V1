@@ -246,6 +246,15 @@ is redacted wherever it appears. The transcript is never truncated, even for
 large `get_evidence` payloads — an overflowing result is itself a finding, not
 something to shorten quietly.
 
+Each turn resends the full, growing conversation to the provider — required
+by the stateless completions API, not a bug — but `llm_request` records only
+`new_messages`: the messages appended since the previous turn's
+`llm_request`, not the whole history. Turn 1's `new_messages` is the initial
+task message; turn 2's is whatever was appended after turn 1 (the assistant's
+response and any tool result(s)); and so on. To reconstruct the full context
+as of any turn N, concatenate `new_messages` from every `llm_request` record
+with `turn <= N`, in order.
+
 ## Switching providers
 
 Each agent's provider, model, and API key source are independent config

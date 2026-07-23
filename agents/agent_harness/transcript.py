@@ -83,8 +83,27 @@ class TranscriptWriter:
     def tools_discovered(self, tools: list[dict]) -> None:
         self._write("tools_discovered", tools=tools)
 
-    def llm_request(self, turn: int, messages: list) -> None:
-        self._write("llm_request", turn=turn, messages=_jsonable(messages))
+    def llm_request(self, turn: int, new_messages: list, tool_count: int) -> None:
+        """Log only the messages appended to the conversation since the
+        previous turn's llm_request, not the full running history.
+
+        Every turn still resends the full messages array to the provider
+        (see runner.py/providers.py) -- that repetition is required by the
+        stateless API and is unrelated to this. Only the on-disk record
+        stops repeating message 1 inside every subsequent turn's record.
+
+        To reconstruct the full context as of any turn N, concatenate
+        new_messages from every llm_request record with turn <= N, in
+        order. Turn 1's new_messages is the initial task message; turn 2's
+        is whatever was appended (assistant response, tool result(s)) after
+        turn 1; and so on.
+        """
+        self._write(
+            "llm_request",
+            turn=turn,
+            new_messages=_jsonable(new_messages),
+            tool_count=tool_count,
+        )
 
     def llm_response(
         self,

@@ -32,8 +32,11 @@ class MCPServerConfig:
 @dataclass
 class LoopConfig:
     max_turns: int
-    wait_timeout_sec: float
-    stop_after_consecutive_timeouts: int
+    # Both meaningful only for an agent that can call wait_for_event (i.e.
+    # WatchDog). None for configs (like the executor's) that never take the
+    # wait_for_event timeout path at all.
+    wait_timeout_sec: float | None = None
+    stop_after_consecutive_timeouts: int | None = None
 
 
 @dataclass
@@ -185,9 +188,15 @@ def load_config(config_path: str | Path) -> AgentConfig:
     loop_raw = raw["loop"]
     loop = LoopConfig(
         max_turns=int(loop_raw["max_turns"]),
-        wait_timeout_sec=float(loop_raw["wait_timeout_sec"]),
-        stop_after_consecutive_timeouts=int(
-            loop_raw["stop_after_consecutive_timeouts"]
+        wait_timeout_sec=(
+            float(loop_raw["wait_timeout_sec"])
+            if "wait_timeout_sec" in loop_raw
+            else None
+        ),
+        stop_after_consecutive_timeouts=(
+            int(loop_raw["stop_after_consecutive_timeouts"])
+            if "stop_after_consecutive_timeouts" in loop_raw
+            else None
         ),
     )
 

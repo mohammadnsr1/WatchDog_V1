@@ -101,6 +101,12 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             messages: list[dict] = [{"role": "user", "content": task_text}]
             consecutive_no_tool_calls = 0
             consecutive_timeouts = 0
+            # Index into `messages` of the first entry not yet logged to the
+            # transcript. The provider always receives the full, growing
+            # `messages` list (see providers.complete below) -- this index
+            # only narrows what record_llm_request writes to disk, so the
+            # same message isn't re-recorded inside every later turn.
+            logged_upto = 0
 
             while termination_reason is None:
                 if turn_count >= max_turns:
@@ -108,7 +114,10 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                     break
                 turn_count += 1
 
-                transcript.llm_request(turn_count, messages)
+                transcript.llm_request(
+                    turn_count, messages[logged_upto:], len(tool_dicts)
+                )
+                logged_upto = len(messages)
                 try:
                     response: ProviderResponse = provider.complete(
                         system_prompt, messages, tool_dicts
@@ -182,7 +191,11 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         else:
                             consecutive_timeouts = 0
 
-                if consecutive_timeouts >= config.loop.stop_after_consecutive_timeouts:
+                if (
+                    config.loop.stop_after_consecutive_timeouts is not None
+                    and consecutive_timeouts
+                    >= config.loop.stop_after_consecutive_timeouts
+                ):
                     termination_reason = "run_complete"
                     break
     except Exception as e:
