@@ -33,6 +33,12 @@ class Comparison(str, Enum):
 class Clause(BaseModel):
     """A single checkable assertion: field <comparison> threshold.
 
+    clause_id:   stable identifier of the form "<section>.<field>" (e.g.
+                 "effects.object_lift_height_m"), set by the loader from the
+                 clause's own section and field -- never authored by hand, so
+                 it can't drift from where the clause actually lives. Lets a
+                 verdict's clause_results be checked for coverage against the
+                 contract by set comparison on this id, not free-text matching.
     field:       sensor / computed field name that the WatchDog will evaluate.
     comparison:  relational operator (see Comparison enum).
     threshold:   the bound, always sourced from the registry spec block.
@@ -47,6 +53,7 @@ class Clause(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    clause_id: str
     field: str
     comparison: Comparison
     threshold: float

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import atexit
 import os
+import re
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,6 +64,39 @@ class WatchDogContext:
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
 _VALID_VERDICTS = {"conformant", "non_conformant", "valid_variation", "inconclusive"}
+# "<section>.<field>", matching how the loader derives clause_id in
+# contracts/loader.py's _make_clause -- e.g. "effects.object_lift_height_m".
+_CLAUSE_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_clause_results(clause_results: list[dict[str, Any]]) -> None:
+    """Shape-check clause_results for record_verdict.
+
+    Every entry must carry a well-formed clause_id, or clause_id: null paired
+    with source: "instruction" for an instruction-level requirement with no
+    contract counterpart. Does not check clause_id against the actual
+    contract -- this server does not know which object a step concerned, and
+    is not the place to look it up just to validate a string.
+    """
+    for i, entry in enumerate(clause_results):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"clause_results[{i}] must be an object, got {type(entry).__name__}."
+            )
+        clause_id = entry.get("clause_id")
+        if clause_id is None:
+            if entry.get("source") != "instruction":
+                raise ValueError(
+                    f"clause_results[{i}] has clause_id: null but no "
+                    f'source: "instruction" -- null clause_id is reserved for '
+                    f"instruction-level requirements that have no contract clause."
+                )
+            continue
+        if not isinstance(clause_id, str) or not _CLAUSE_ID_RE.match(clause_id):
+            raise ValueError(
+                f"clause_results[{i}] has a malformed clause_id {clause_id!r}; "
+                f'expected "<section>.<field>", e.g. "effects.object_lift_height_m".'
+            )
 
 
 def _ensure_watchdog() -> WatchDogContext:
@@ -272,7 +307,12 @@ if mcp is not None:
 
     @mcp.tool()
     def query_snapshot(object_ids: list[str] | None = None) -> dict[str, Any]:
-        """Return latest buffered object poses and joint state."""
+        """Return latest buffered object poses, cell frame poses, and joint state.
+
+        frames carries the latest sample of every cell-level TF frame (e.g.
+        the gripper tcp_frame), keyed by frame id -- the instantaneous
+        counterpart to get_evidence's frames channel.
+        """
         command = "query_snapshot"
         try:
             ctx = _ensure_watchdog()
@@ -280,6 +320,10 @@ if mcp is not None:
             return _ok(
                 command,
                 objects={oid: ctx.recorder.latest_object_pose(oid) for oid in ids},
+                frames={
+                    fid: ctx.recorder.latest_frame_pose(fid)
+                    for fid in ctx.recorder.frame_ids()
+                },
                 joint_state=ctx.recorder.latest_joint_state(),
             )
         except Exception as exc:
@@ -342,6 +386,16 @@ if mcp is not None:
         otherwise wait out the full timeout for no reason, believing it is
         watching for something. Rejected immediately instead, naming the
         unknown entries and the valid vocabulary.
+
+        Waits out its full budget rather than returning wake="timeout" the
+        moment some OTHER, non-matching event sets the wake condition (e.g.
+        a skill_start arriving while filtered on ["phase", "end_step"]) --
+        such a wakeup drains nothing matching the filter and must resume
+        waiting on the remaining budget, not report a timeout that never
+        happened. waited_sec is always returned, on every outcome, so a
+        wake="timeout" that actually waited only a fraction of the requested
+        timeout_sec is visible on the record rather than passing as a real
+        timeout.
         """
         command = "wait_for_event"
         try:
@@ -358,19 +412,29 @@ if mcp is not None:
             ctx = _ensure_watchdog()
             timeout = min(max(float(timeout_sec), 0.0), 600.0)
             wanted = set(event_types) if event_types else None
-            immediate = _drain_wait(ctx, wanted)
-            if immediate is not None:
-                return _ok(command, **immediate)
-            ctx.wake_event.clear()
-            immediate = _drain_wait(ctx, wanted)
-            if immediate is not None:
-                return _ok(command, **immediate)
-            if not ctx.wake_event.wait(timeout):
-                return _ok(command, wake="timeout")
-            immediate = _drain_wait(ctx, wanted)
-            if immediate is not None:
-                return _ok(command, **immediate)
-            return _ok(command, wake="timeout")
+
+            t0 = time.monotonic()
+            deadline = t0 + timeout
+            while True:
+                immediate = _drain_wait(ctx, wanted)
+                if immediate is not None:
+                    return _ok(command, waited_sec=time.monotonic() - t0, **immediate)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return _ok(command, wake="timeout", waited_sec=time.monotonic() - t0)
+                ctx.wake_event.clear()
+                # Re-drain after clearing: an event may have arrived between
+                # the drain above and the clear, and clearing would
+                # otherwise discard that wakeup.
+                immediate = _drain_wait(ctx, wanted)
+                if immediate is not None:
+                    return _ok(command, waited_sec=time.monotonic() - t0, **immediate)
+                ctx.wake_event.wait(remaining)
+                # Loop back around: wake_event may have been set by a
+                # non-matching event (or spuriously), in which case the next
+                # drain finds nothing and the loop waits out what's left of
+                # the budget instead of reporting a timeout that didn't
+                # happen.
         except Exception as exc:
             return _error(command, exc)
 
@@ -429,10 +493,17 @@ if mcp is not None:
         end_wall_ns: int,
         channels: list[str],
         object_ids: list[str] | None = None,
+        frame_ids: list[str] | None = None,
         joint_names: list[str] | None = None,
         max_samples: int = 200,
     ) -> dict[str, Any]:
         """Return downsampled evidence windows from recorder buffers.
+
+        channels is any of joint_states, object_poses, frames, events. The
+        frames channel carries cell frames such as the gripper TCP, sampled
+        on the same tick as object poses so samples pair by index -- use it
+        to verify relative_frame clauses from evidence rather than reporting
+        that a monitor did not fire.
 
         start_wall_ns/end_wall_ns are wall-clock nanoseconds -- the same
         wall_ns field every event and every recorder buffer uses, never
@@ -447,7 +518,7 @@ if mcp is not None:
         command = "get_evidence"
         try:
             ctx = _ensure_watchdog()
-            allowed = {"joint_states", "object_poses", "events"}
+            allowed = {"joint_states", "object_poses", "frames", "events"}
             requested = set(channels)
             unknown = requested - allowed
             if unknown:
@@ -465,6 +536,12 @@ if mcp is not None:
                     oid: ctx.recorder.get_object_pose_window(start_ns, end_ns, oid, limit)
                     for oid in ids
                 }
+            if "frames" in requested:
+                fids = frame_ids if frame_ids is not None else ctx.recorder.frame_ids()
+                evidence["frames"] = {
+                    fid: ctx.recorder.get_frame_window(start_ns, end_ns, fid, limit)
+                    for fid in fids
+                }
             if "events" in requested:
                 evidence["events"] = [
                     event_wrapper(e)
@@ -472,7 +549,7 @@ if mcp is not None:
                 ]
 
             any_samples = any(
-                (bool(v) if key != "object_poses" else any(v.values()))
+                (any(v.values()) if key in ("object_poses", "frames") else bool(v))
                 for key, v in evidence.items()
             )
             if not any_samples:
@@ -480,7 +557,7 @@ if mcp is not None:
                     command,
                     "requested window does not overlap any buffered evidence",
                     requested={"start_wall_ns": start_ns, "end_wall_ns": end_ns},
-                    buffered_range=ctx.recorder.buffered_range(object_ids),
+                    buffered_range=ctx.recorder.buffered_range(object_ids, frame_ids),
                     now_wall_ns=wall_ns(),
                 )
             return _ok(command, evidence=evidence)
@@ -571,12 +648,23 @@ if mcp is not None:
         """Publish a conformance verdict with free-form clause result dicts.
 
         clause_results entries are expected to contain field, comparison,
-        threshold, observed, and pass keys.
+        threshold, observed, and pass keys, plus clause_id: every entry that
+        corresponds to a contract clause must carry that clause's clause_id
+        (from get_contract) unchanged. An instruction-level requirement with
+        no contract clause carries clause_id: null and source: "instruction"
+        instead. This is what lets coverage be checked afterward by set
+        comparison against the contract's own clause_ids, not free text.
+
+        A malformed clause_id (not "<section>.<field>", and not null with
+        source: "instruction") is rejected here. This only checks shape --
+        it does not check the id against the actual contract, which would
+        require this server to know which object the step concerned.
         """
         command = "record_verdict"
         try:
             if verdict not in _VALID_VERDICTS:
                 raise ValueError(f"verdict must be one of {sorted(_VALID_VERDICTS)}.")
+            _validate_clause_results(clause_results)
             ctx = _ensure_watchdog()
             payload = VerdictPayload(
                 step_id=step_id,

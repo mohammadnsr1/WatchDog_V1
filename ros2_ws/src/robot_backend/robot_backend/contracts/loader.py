@@ -36,6 +36,17 @@ _GRASP_EFFORT_FLOOR: float = 0.05
 _GRASP_WIDTH_TOL_M: float = 0.005
 
 
+def _make_clause(section: str, field: str, **kwargs: Any) -> Clause:
+    """Build a Clause with clause_id derived from its section and field.
+
+    "<section>.<field>" (e.g. "effects.object_lift_height_m") -- never
+    authored by hand, so it can't drift from where the clause is actually
+    declared below. This is what lets a verdict's clause coverage be checked
+    by set comparison on clause_id rather than matching on free text.
+    """
+    return Clause(clause_id=f"{section}.{field}", field=field, **kwargs)
+
+
 def _load_registry(path: Path | None) -> dict[str, Any]:
     if path is not None:
         resolved = path
@@ -120,8 +131,9 @@ def load_pick_contract(
     # a logical constant (open=true), not a per-object spec value. All other
     # thresholds are sourced from the registry spec above.
     preconditions: list[Clause] = [
-        Clause(
-            field="object_position_error_m",
+        _make_clause(
+            "preconditions",
+            "object_position_error_m",
             comparison=Comparison.LE,
             threshold=position_tol,
             description=(
@@ -130,8 +142,9 @@ def load_pick_contract(
             ),
             unit="m",
         ),
-        Clause(
-            field="object_orientation_error_deg",
+        _make_clause(
+            "preconditions",
+            "object_orientation_error_deg",
             comparison=Comparison.LE,
             threshold=orientation_tol,
             description=(
@@ -140,8 +153,9 @@ def load_pick_contract(
             ),
             unit="deg",
         ),
-        Clause(
-            field="gripper_is_open",
+        _make_clause(
+            "preconditions",
+            "gripper_is_open",
             comparison=Comparison.EQ,
             threshold=1.0,
             description="Gripper must be fully open (1=open, 0=closed) before approach.",
@@ -151,8 +165,9 @@ def load_pick_contract(
 
     # --- Effects: must hold AFTER a claimed-success outcome ---
     effects: list[Clause] = [
-        Clause(
-            field="object_lift_height_m",
+        _make_clause(
+            "effects",
+            "object_lift_height_m",
             comparison=Comparison.GE,
             threshold=lift_height_min,
             description=(
@@ -161,8 +176,9 @@ def load_pick_contract(
             ),
             unit="m",
         ),
-        Clause(
-            field="object_tcp_offset_m",
+        _make_clause(
+            "effects",
+            "object_tcp_offset_m",
             comparison=Comparison.LE,
             threshold=position_tol,
             description=(
@@ -171,8 +187,9 @@ def load_pick_contract(
             ),
             unit="m",
         ),
-        Clause(
-            field="grasp_effort_plateau",
+        _make_clause(
+            "effects",
+            "grasp_effort_plateau",
             comparison=Comparison.GE,
             threshold=_GRASP_EFFORT_FLOOR,
             description=(
@@ -183,8 +200,9 @@ def load_pick_contract(
             unit="sim_effort",
             joint_name=effort_joint_name,
         ),
-        Clause(
-            field="grasp_width_error_m",
+        _make_clause(
+            "effects",
+            "grasp_width_error_m",
             comparison=Comparison.LE,
             threshold=_GRASP_WIDTH_TOL_M,
             description=(
@@ -198,8 +216,9 @@ def load_pick_contract(
 
     # --- Invariants: must hold THROUGHOUT execution ---
     invariants: list[Clause] = [
-        Clause(
-            field="grasp_effort_instantaneous",
+        _make_clause(
+            "invariants",
+            "grasp_effort_instantaneous",
             comparison=Comparison.LE,
             threshold=max_clamp_effort,
             description=(

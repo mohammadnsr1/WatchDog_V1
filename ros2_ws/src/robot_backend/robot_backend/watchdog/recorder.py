@@ -75,6 +75,35 @@ def _enabled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]
     return frames
 
 
+def _cell_frame_ids(registry: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """frame_id -> {tf_frame, lookup_frame} for every *_frame field under
+    cell.gripper (at minimum tcp_frame), looked up against cell.base_frame.
+
+    These are cell-level TF frames, not registry objects -- there is no
+    per-object entry for the gripper TCP. Without sampling them the same way
+    object poses are sampled, a relative_frame clause over a cell frame (e.g.
+    grasp retention, tcp vs an object) can only ever be checked live by the
+    monitor itself; get_evidence could never return a trajectory for it, and
+    a verdict would have to fall back to "monitor didn't fire" as its only
+    evidence -- exactly the "conformance from absence of fire" the system
+    prompt forbids, forced by a buffering gap rather than chosen.
+    """
+    cell = registry.get("cell", {})
+    if not isinstance(cell, dict):
+        return {}
+    base_frame = cell.get("base_frame")
+    if not isinstance(base_frame, str) or not base_frame:
+        return {}
+    gripper = cell.get("gripper", {})
+    if not isinstance(gripper, dict):
+        return {}
+    frames: dict[str, dict[str, str]] = {}
+    for key, value in gripper.items():
+        if key.endswith("_frame") and isinstance(value, str) and value:
+            frames[value] = {"tf_frame": value, "lookup_frame": base_frame}
+    return frames
+
+
 def _parse_wall_time_iso(value: Any) -> int | None:
     if not isinstance(value, str) or not value:
         return None
@@ -142,13 +171,21 @@ class EvidenceRecorder:
         self.wake_event = wake_event or threading.Event()
         self.registry = registry if registry is not None else _load_registry(registry_path)
         self.object_frames = _enabled_object_frames(self.registry)
+        self.cell_frames = _cell_frame_ids(self.registry)
         self.joint_samples: collections.deque[Any] = collections.deque(maxlen=MAX_JOINT_SAMPLES)
         self.object_pose_samples: dict[str, collections.deque[Any]] = {
             oid: collections.deque(maxlen=MAX_TF_SAMPLES) for oid in self.object_frames
         }
+        self.frame_samples: dict[str, collections.deque[Any]] = {
+            frame_id: collections.deque(maxlen=MAX_TF_SAMPLES) for frame_id in self.cell_frames
+        }
         self.events: collections.deque[dict[str, Any]] = collections.deque(maxlen=5000)
         self._wait_events: collections.deque[dict[str, Any]] = collections.deque(maxlen=1000)
+        # Shared by object ids and cell frame ids -- both are "a TF lookup
+        # that just failed", the same kind of staleness regardless of which
+        # side of the object/frame distinction it's on.
         self.tf_staleness_counters: dict[str, int] = {oid: 0 for oid in self.object_frames}
+        self.tf_staleness_counters.update({fid: 0 for fid in self.cell_frames})
         self.current_step_id: str | None = None
         self.tf_buffer: Any | None = None
         self.tf_listener: Any | None = None
@@ -211,11 +248,17 @@ class EvidenceRecorder:
 
     def _on_tf_timer(self) -> None:
         try:
+            # One stamp for the whole tick, shared by every object pose and
+            # cell frame sampled in it -- so a relative_frame clause can pair
+            # a TCP sample with an object sample by identical wall_ns (a
+            # zip) rather than needing to interpolate between mismatched
+            # timestamps.
+            tick_wall_ns = wall_ns()
             for object_id in list(self.object_frames):
                 frame = self.object_frames[object_id]
                 try:
                     transform = self.lookup_transform(frame["lookup_frame"], frame["tf_frame"])
-                    pose = self._transform_to_pose_tuple(wall_ns(), object_id, transform)
+                    pose = self._transform_to_pose_tuple(tick_wall_ns, object_id, transform)
                     with self.lock:
                         self.object_pose_samples.setdefault(
                             object_id, collections.deque(maxlen=MAX_TF_SAMPLES)
@@ -224,6 +267,20 @@ class EvidenceRecorder:
                     with self.lock:
                         self.tf_staleness_counters[object_id] = (
                             self.tf_staleness_counters.get(object_id, 0) + 1
+                        )
+            for frame_id in list(self.cell_frames):
+                frame = self.cell_frames[frame_id]
+                try:
+                    transform = self.lookup_transform(frame["lookup_frame"], frame["tf_frame"])
+                    pose = self._transform_to_pose_tuple(tick_wall_ns, frame_id, transform)
+                    with self.lock:
+                        self.frame_samples.setdefault(
+                            frame_id, collections.deque(maxlen=MAX_TF_SAMPLES)
+                        ).append(pose)
+                except Exception:
+                    with self.lock:
+                        self.tf_staleness_counters[frame_id] = (
+                            self.tf_staleness_counters.get(frame_id, 0) + 1
                         )
             if self.engine is not None:
                 self.engine.on_tf_tick(self)
@@ -334,6 +391,32 @@ class EvidenceRecorder:
         bounded = [s for s in samples if start_wall_ns <= int(s[0]) <= end_wall_ns]
         return [self._pose_tuple_to_dict(s) for s in _uniform_downsample(bounded, max_samples)]
 
+    def get_frame_window(
+        self,
+        start_wall_ns: int,
+        end_wall_ns: int,
+        frame_id: str,
+        max_samples: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Mirrors get_object_pose_window, for a cell frame (e.g. tcp)."""
+        with self.lock:
+            samples = list(self.frame_samples.get(frame_id, ()))
+        bounded = [s for s in samples if start_wall_ns <= int(s[0]) <= end_wall_ns]
+        return [
+            self._pose_tuple_to_dict(s, id_key="frame_id")
+            for s in _uniform_downsample(bounded, max_samples)
+        ]
+
+    def latest_frame_pose(self, frame_id: str) -> dict[str, Any] | None:
+        with self.lock:
+            samples = self.frame_samples.get(frame_id)
+            if not samples:
+                return None
+            return self._pose_tuple_to_dict(samples[-1], id_key="frame_id")
+
+    def frame_ids(self) -> list[str]:
+        return list(self.cell_frames)
+
     def get_events_window(self, start_wall_ns: int, end_wall_ns: int) -> list[dict[str, Any]]:
         with self.lock:
             return [
@@ -375,11 +458,15 @@ class EvidenceRecorder:
             self._wait_events = remaining
         return matched
 
-    def buffered_range(self, object_ids: list[str] | None = None) -> dict[str, Any]:
+    def buffered_range(
+        self,
+        object_ids: list[str] | None = None,
+        frame_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Return [first, last] wall_ns currently buffered per channel.
 
-        None for a channel/object with no buffered samples at all. Used to
-        tell an out-of-range get_evidence window apart from a legitimate
+        None for a channel/object/frame with no buffered samples at all. Used
+        to tell an out-of-range get_evidence window apart from a legitimate
         "nothing happened here" -- see get_evidence in watchdog_mcp_server.py.
         """
         with self.lock:
@@ -390,9 +477,15 @@ class EvidenceRecorder:
             for oid in ids:
                 stamps = [int(s[0]) for s in self.object_pose_samples.get(oid, ())]
                 pose_ranges[oid] = [stamps[0], stamps[-1]] if stamps else None
+            fids = frame_ids if frame_ids is not None else list(self.frame_samples)
+            frame_ranges: dict[str, list[int] | None] = {}
+            for fid in fids:
+                stamps = [int(s[0]) for s in self.frame_samples.get(fid, ())]
+                frame_ranges[fid] = [stamps[0], stamps[-1]] if stamps else None
         return {
             "joint_states": [joint_stamps[0], joint_stamps[-1]] if joint_stamps else None,
             "object_poses": pose_ranges,
+            "frames": frame_ranges,
             "events": [events_stamps[0], events_stamps[-1]] if events_stamps else None,
         }
 
@@ -418,11 +511,13 @@ class EvidenceRecorder:
     def object_ids(self) -> list[str]:
         return list(self.object_frames)
 
-    def _pose_tuple_to_dict(self, sample: tuple[Any, ...]) -> dict[str, Any]:
-        stamp, object_id, x, y, z, qx, qy, qz, qw = sample
+    def _pose_tuple_to_dict(
+        self, sample: tuple[Any, ...], id_key: str = "object_id"
+    ) -> dict[str, Any]:
+        stamp, ident, x, y, z, qx, qy, qz, qw = sample
         return {
             "wall_ns": int(stamp),
-            "object_id": object_id,
+            id_key: ident,
             "pose": {
                 "position": {"x": float(x), "y": float(y), "z": float(z)},
                 "orientation": {"x": float(qx), "y": float(qy), "z": float(qz), "w": float(qw)},
