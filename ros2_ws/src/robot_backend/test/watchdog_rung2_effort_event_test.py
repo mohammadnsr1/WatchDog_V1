@@ -10,8 +10,9 @@ Phase A — COMPLIANCE check, using the real safety clause:
     max_clamp_effort is the conformance BOUND (spec.limits.max_clamp_effort) —
     what the object tolerates — distinct from force_threshold_n, the guarded
     close's stop TRIGGER, which cannot bound achievable effort. The monitor is
-    armed with comparison="gt", threshold=max_clamp_effort — i.e. it fires
-    exactly when that invariant is violated. A normal, healthy grasp is
+    armed with comparison="le", threshold=max_clamp_effort — the same
+    comparison and threshold as the clause itself, copied unchanged — and it
+    fires exactly when that invariant is violated. A normal, healthy grasp is
     EXPECTED to pass this (no fire): at the configured 3 mm clearance, settled
     effort is ~3.42, under the 4.0 bound. So Phase A's correct, designed
     outcome is NO FIRE — that is what "the grasp is conformant with its own
@@ -112,13 +113,13 @@ def _do_grasp(backend, registry, recorder) -> bool:
 
 def _run_phase(harness, engine, backend, registry, *, threshold: float,
                clause: dict | None, expect_fire: bool, label: str) -> tuple[bool, list]:
-    print(f"\n{label}: threshold={threshold} comparison=gt, "
+    print(f"\n{label}: threshold={threshold} comparison=le, "
           f"expect_fire={expect_fire}")
     if not _do_grasp(backend, registry, harness.recorder):
         return False, []
 
     monitor = EffortEventMonitor(
-        params={"joint_name": FINGER_JOINT, "comparison": "gt",
+        params={"joint_name": FINGER_JOINT, "comparison": "le",
                  "threshold": threshold, "sustained_ticks": 3},
         step_id="rung2_effort_event_test",
         clause=clause,
@@ -219,7 +220,7 @@ def main() -> int:
             threshold=threshold_b,
             clause={
                 "field": "grasp_effort_instantaneous",
-                "comparison": "gt",
+                "comparison": "le",
                 "threshold": threshold_b,
                 "description": (
                     f"Mechanism check only: {PHASE_B_THRESHOLD_FACTOR} x "

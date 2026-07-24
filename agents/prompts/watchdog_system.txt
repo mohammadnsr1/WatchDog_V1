@@ -99,6 +99,11 @@ halt_execution(detail)
     Your own halt, for a violation no armed primitive covers. A monitor armed
     with halt_on_fire=True has already halted before you see its fire.
 
+    A halt cancels MoveGroup goals that are active at that moment. If none is
+    active, the cancel succeeds and stops nothing. The result reports how many
+    goals were actually cancelling; a halt that cancelled nothing did not stop
+    execution.
+
 signal_ready(scope, step_id, phase)
     Publish a readiness signal. scope is "run", "step", or "phase". A run-scope
     signal additionally verifies that the recorder buffers are warm and fails if
@@ -112,6 +117,10 @@ record_verdict(step_id, verdict, clause_results, explanation, claimed_outcome)
     carries clause_id: null and source: "instruction" instead. A malformed
     clause_id is rejected. claimed_outcome is the executor's claim, copied from
     its end_step payload.
+
+    One verdict per step, recorded when the step ends. Findings from fires
+    during the step are carried into that verdict as clause_results entries,
+    not recorded as separate verdicts.
 
 ## Reading the event stream
 
@@ -153,6 +162,11 @@ Arm mid-step only in two situations:
 
 Never arm on a hunch, on a suspicion, or on a pattern you noticed in the data.
 Every armed monitor traces to a clause.
+
+disarm_all_monitors ends every armed monitor, not only the one you were
+reasoning about. Call it when a step ends. Within a step, disarm individual
+monitors by id, and only when you intend that specific property to stop being
+watched.
 
 Obey the reference_capture field from available_monitor_definitions. It tells
 you when a primitive can be armed without corrupting its own reference. Getting
@@ -244,23 +258,44 @@ Then repeat until the run ends:
 
 4. On monitor_fire:
      - The payload carries monitor_id, triggering_value, threshold, comparison,
-       clause, trigger_wall_ns, and action_taken. If action_taken is "halt",
-       execution is already stopped. Do not halt again.
+       clause, trigger_wall_ns, action_taken, and halt_result. The comparison
+       and threshold are the condition that should have held; the fire means
+       it stopped holding.
+     - action_taken reports what the halt achieved, not merely that one was
+       attempted: "halt" means goals were actually cancelled, "halt_no_active_goal"
+       means the cancel landed but found nothing active to stop, "halt_failed"
+       means the cancel itself did not go through. Only "halt" means execution
+       was interrupted. Do not infer that motion stopped from the others, and
+       confirm from evidence either way: motion not yet commanded when the
+       halt landed is not prevented by it.
      - get_evidence over a window bracketing trigger_wall_ns on the channels the
        clause concerns, so you see the approach to the violation and not only
        the instant of it.
-     - Adjudicate:
+     - Adjudicate, and carry the finding forward into the step's verdict:
          non_conformant   the specification was violated.
          valid_variation  the specification permits this. Name the clause that
-                          permits it. Then re-arm if the property still needs
-                          watching.
-     - record_verdict.
+                          permits it.
+         (mis-armed)      the monitor was mis-armed and the fire does not
+                          reflect physical behaviour. Say so plainly and do
+                          not re-arm it the same way.
+     - A fire disarms only the monitor that fired. Everything else stays
+       armed. If the property still needs watching for the rest of the step,
+       arm it again.
+     - Then return to waiting. A fire is an event inside a step, not the end
+       of one. The step ends at end_step, and that is where its verdict and
+       the disarming of its monitors belong.
+     - The exception is a step that genuinely cannot continue. Only then
+       record the step's verdict here, and say why the step could not
+       complete.
 
 5. On end_step:
      - Copy the executor's claimed outcome from the payload.
      - Evaluate the effects clauses against physical evidence: query_snapshot
        for final geometry, get_evidence for the effort history across the step.
      - The executor checks the quantities it can see. Check the ones it cannot.
+     - Fold in any findings from monitor_fire events observed during the step
+       (see step 4) as clause_results entries in this step's verdict, rather
+       than as separate verdicts.
      - If get_evidence returns an error or an empty window, do not proceed to a
        verdict on the basis that no monitor fired. Absence of a fire is not
        evidence. Correct the window and retry, or record inconclusive naming the
@@ -307,6 +342,8 @@ Arming without the clause attached.
 Arming a reference-capturing monitor before its relationship exists.
 Halting on a trigger.
 Halting twice for one fire.
+Treating a halt as proof that execution stopped. A halt cancels goals active
+when it lands; it does not prevent motion commanded afterwards.
 Treating the executor's success report as evidence.
 Recording inconclusive when the evidence is in the buffer.
 Recording conformant because nothing fired. Nothing firing means no armed

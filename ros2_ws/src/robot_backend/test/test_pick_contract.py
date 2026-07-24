@@ -66,8 +66,10 @@ def minimal_registry(tmp_path: Path) -> Path:
                 position_m: 0.004
                 orientation_deg: 3.0
                 lift_height_min_m: 0.015
+                grasp_width_tolerance_m: 0.005
               limits:
                 max_clamp_effort: 10.0
+                grasp_effort_floor: 0.05
     """)
     registry = tmp_path / "model_registry.yaml"
     registry.write_text(content, encoding="utf-8")
@@ -164,7 +166,7 @@ class TestLoadFromRegistry:
             c for c in red_cube_contract.effects if c.field == "grasp_effort_plateau"
         )
         assert clause.comparison == Comparison.GE
-        # Threshold = _GRASP_EFFORT_FLOOR = 0.05
+        # Threshold sourced from registry spec.limits.grasp_effort_floor: 0.05
         assert clause.threshold == pytest.approx(0.05)
         assert clause.unit == "sim_effort"
 
@@ -173,9 +175,123 @@ class TestLoadFromRegistry:
             c for c in red_cube_contract.effects if c.field == "grasp_width_error_m"
         )
         assert clause.comparison == Comparison.LE
-        # Threshold = _GRASP_WIDTH_TOL_M = 0.005
+        # Threshold sourced from registry spec.tolerances.grasp_width_tolerance_m: 0.005
         assert clause.threshold == pytest.approx(0.005)
         assert clause.unit == "m"
+
+    def test_grasp_effort_floor_and_width_tolerance_come_from_registry(
+        self, minimal_registry: Path
+    ) -> None:
+        """Both thresholds are read from the registry, not a Python constant --
+        changing the registry value changes the loaded contract's threshold.
+        """
+        content = textwrap.dedent("""\
+            objects:
+              test_cube:
+                enabled: true
+                object_id: test_cube
+                tf_frame: test_cube
+                lookup_frame: world
+                graspable: true
+                collision:
+                  type: box
+                  dimensions: [0.05, 0.05, 0.05]
+                  pose_offset:
+                    position: {x: 0.0, y: 0.0, z: 0.0}
+                    orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                spec:
+                  grasp:
+                    grasp_center_offset:
+                      position: {x: 0.0, y: 0.0, z: 0.0}
+                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                    grasp_width_m: 0.055
+                    force_threshold_n: 0.42
+                  tolerances:
+                    position_m: 0.004
+                    orientation_deg: 3.0
+                    lift_height_min_m: 0.015
+                    grasp_width_tolerance_m: 0.011
+                  limits:
+                    max_clamp_effort: 10.0
+                    grasp_effort_floor: 0.09
+        """)
+        registry = minimal_registry.parent / "custom_thresholds.yaml"
+        registry.write_text(content, encoding="utf-8")
+        contract = load_pick_contract("test_cube", registry_path=registry)
+        plateau = next(c for c in contract.effects if c.field == "grasp_effort_plateau")
+        width_err = next(c for c in contract.effects if c.field == "grasp_width_error_m")
+        assert plateau.threshold == pytest.approx(0.09)
+        assert width_err.threshold == pytest.approx(0.011)
+
+    def test_missing_grasp_effort_floor_raises(self, tmp_path: Path) -> None:
+        content = textwrap.dedent("""\
+            objects:
+              test_cube:
+                enabled: true
+                object_id: test_cube
+                tf_frame: test_cube
+                lookup_frame: world
+                graspable: true
+                collision:
+                  type: box
+                  dimensions: [0.05, 0.05, 0.05]
+                  pose_offset:
+                    position: {x: 0.0, y: 0.0, z: 0.0}
+                    orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                spec:
+                  grasp:
+                    grasp_center_offset:
+                      position: {x: 0.0, y: 0.0, z: 0.0}
+                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                    grasp_width_m: 0.055
+                    force_threshold_n: 0.42
+                  tolerances:
+                    position_m: 0.004
+                    orientation_deg: 3.0
+                    lift_height_min_m: 0.015
+                    grasp_width_tolerance_m: 0.005
+                  limits:
+                    max_clamp_effort: 10.0
+        """)
+        registry = tmp_path / "no_effort_floor.yaml"
+        registry.write_text(content, encoding="utf-8")
+        with pytest.raises(KeyError):
+            load_pick_contract("test_cube", registry_path=registry)
+
+    def test_missing_grasp_width_tolerance_raises(self, tmp_path: Path) -> None:
+        content = textwrap.dedent("""\
+            objects:
+              test_cube:
+                enabled: true
+                object_id: test_cube
+                tf_frame: test_cube
+                lookup_frame: world
+                graspable: true
+                collision:
+                  type: box
+                  dimensions: [0.05, 0.05, 0.05]
+                  pose_offset:
+                    position: {x: 0.0, y: 0.0, z: 0.0}
+                    orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                spec:
+                  grasp:
+                    grasp_center_offset:
+                      position: {x: 0.0, y: 0.0, z: 0.0}
+                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+                    grasp_width_m: 0.055
+                    force_threshold_n: 0.42
+                  tolerances:
+                    position_m: 0.004
+                    orientation_deg: 3.0
+                    lift_height_min_m: 0.015
+                  limits:
+                    max_clamp_effort: 10.0
+                    grasp_effort_floor: 0.05
+        """)
+        registry = tmp_path / "no_width_tol.yaml"
+        registry.write_text(content, encoding="utf-8")
+        with pytest.raises(KeyError):
+            load_pick_contract("test_cube", registry_path=registry)
 
     def test_grasp_effort_instantaneous_invariant(self, red_cube_contract: PickContract) -> None:
         clause = next(

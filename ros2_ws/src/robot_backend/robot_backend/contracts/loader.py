@@ -28,13 +28,6 @@ _DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
 )
 
-# System-wide constants for grasp success criteria clauses.
-# Instrument characterization constant: empirical RG2 air-close floor in
-# Isaac Sim, above the ~0.03 idle noise floor.
-_GRASP_EFFORT_FLOOR: float = 0.05
-# Mirrors gripper_skills.GRASP_WIDTH_TOLERANCE_M; keep in sync manually.
-_GRASP_WIDTH_TOL_M: float = 0.005
-
 
 def _make_clause(section: str, field: str, **kwargs: Any) -> Clause:
     """Build a Clause with clause_id derived from its section and field.
@@ -125,6 +118,13 @@ def load_pick_contract(
     orientation_tol: float = float(tolerances["orientation_deg"])
     lift_height_min: float = float(tolerances["lift_height_min_m"])
     max_clamp_effort: float = float(limits["max_clamp_effort"])
+    # Same provenance requirement as every other threshold above: sourced from
+    # the registry, not a Python constant, so it is part of the auditable
+    # clause-to-parameter-to-registry chain and shows up in get_contract's
+    # raw_spec. A missing field fails loudly here rather than silently
+    # reintroducing a hardcoded value.
+    grasp_width_tol_m: float = float(tolerances["grasp_width_tolerance_m"])
+    grasp_effort_floor: float = float(limits["grasp_effort_floor"])
 
     # --- Preconditions: must hold BEFORE skill execution ---
     # "gripper_is_open" uses threshold 1.0 (boolean encoded as float); this is
@@ -191,7 +191,7 @@ def load_pick_contract(
             "effects",
             "grasp_effort_plateau",
             comparison=Comparison.GE,
-            threshold=_GRASP_EFFORT_FLOOR,
+            threshold=grasp_effort_floor,
             description=(
                 "Mean finger_joint effort at the detected plateau must exceed the "
                 "air-close floor, confirming physical contact with the object "
@@ -204,7 +204,7 @@ def load_pick_contract(
             "effects",
             "grasp_width_error_m",
             comparison=Comparison.LE,
-            threshold=_GRASP_WIDTH_TOL_M,
+            threshold=grasp_width_tol_m,
             description=(
                 "Absolute deviation between the measured grip width at plateau and "
                 "spec.grasp.grasp_width_m must stay within the plausibility band. "

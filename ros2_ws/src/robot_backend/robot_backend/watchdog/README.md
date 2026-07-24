@@ -24,10 +24,12 @@ original envelope for provenance.
 ## Provenance Example
 
 1. `get_contract("green_cube")` returns a clause such as
-   `grasp_effort_instantaneous <= spec.grasp.force_threshold_n`.
+   `grasp_effort_instantaneous <= spec.limits.max_clamp_effort`.
 2. The agent arms an `effort_event` monitor with params copied from that
-   clause, for example `joint_name="finger_joint"`, `comparison="gt"`, and
-   `threshold=0.18`, passing the clause dict through unchanged.
+   clause unchanged, for example `joint_name="finger_joint"`,
+   `comparison="le"`, and `threshold=4.0` -- the comparison the effort must
+   satisfy for conformance, not its inverse. The monitor fires when the
+   condition stops holding.
 3. A violating `/joint_states` sample creates a `monitor_fire` event containing
    the monitor id, clause, triggering value, threshold, comparison, and
    `trigger_wall_ns`.

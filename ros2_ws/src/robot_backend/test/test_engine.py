@@ -35,7 +35,7 @@ class FakeHalt:
     def halt(self, step_id, monitor_id, detail):
         self.order.append("halt")
         self.calls.append((step_id, monitor_id, detail))
-        return {"ok": True, "detail": "cancelled"}
+        return {"ok": True, "detail": "cancelled", "goals_cancelled": 1}
 
 
 def joint_state(effort):
@@ -51,7 +51,7 @@ def test_engine_fire_queues_wakes_and_auto_disarms():
     monitor = EffortEventMonitor(
         {
             "joint_name": "finger_joint",
-            "comparison": "gt",
+            "comparison": "le",
             "threshold": 0.2,
             "sustained_ticks": 1,
         },

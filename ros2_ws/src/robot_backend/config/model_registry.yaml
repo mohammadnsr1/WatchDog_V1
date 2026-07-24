@@ -148,8 +148,15 @@ objects:
                                           # MEASUREMENT error before a pick, this
                                           # bounds permitted physical DISPLACEMENT of
                                           # an object nothing should be touching.
+        grasp_width_tolerance_m: 0.005   # plausibility band the executor checks measured
+                                          # grip width against at plateau; fixed across
+                                          # clean and fault-injected runs -- the fault
+                                          # perturbs grasp geometry, never this band.
       limits:
         max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
+        grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
+                                   # air-close floor in Isaac Sim, above the ~0.03 idle
+                                   # noise floor.
 
   green_cube:
     enabled: true
@@ -184,5 +191,12 @@ objects:
                                           # MEASUREMENT error before a pick, this
                                           # bounds permitted physical DISPLACEMENT of
                                           # an object nothing should be touching.
+        grasp_width_tolerance_m: 0.005   # plausibility band the executor checks measured
+                                          # grip width against at plateau; fixed across
+                                          # clean and fault-injected runs -- the fault
+                                          # perturbs grasp geometry, never this band.
       limits:
         max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
+        grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
+                                   # air-close floor in Isaac Sim, above the ~0.03 idle
+                                   # noise floor.

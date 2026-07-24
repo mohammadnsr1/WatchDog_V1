@@ -120,16 +120,27 @@ class MonitorEngine:
     def _handle_fire(self, monitor: MonitorPrimitive, triggering_value: float) -> None:
         trigger_stamp = wall_ns()
         action_taken = "flag"
+        halt_result: dict[str, Any] | None = None
         if monitor.halt_on_fire and self.halt_client is not None:
-            action_taken = "halt"
             try:
-                self.halt_client.halt(
+                halt_result = self.halt_client.halt(
                     monitor.step_id,
                     monitor.monitor_id,
                     f"monitor {monitor.monitor_id} fired",
                 )
             except Exception as exc:
                 self._log_warn(f"halt client raised for {monitor.monitor_id}: {exc}")
+                halt_result = {"ok": False, "detail": str(exc), "goals_cancelled": None}
+            # action_taken reports what the halt actually achieved, not merely
+            # that it was attempted: goals_cancelled distinguishes "cancelled
+            # something active" from "the cancel landed but nothing was
+            # active to stop" from "the cancel itself failed or timed out".
+            if not halt_result.get("ok"):
+                action_taken = "halt_failed"
+            elif halt_result.get("goals_cancelled"):
+                action_taken = "halt"
+            else:
+                action_taken = "halt_no_active_goal"
         payload = MonitorFirePayload(
             monitor_id=monitor.monitor_id,
             monitor_type=monitor.monitor_type,
@@ -140,6 +151,7 @@ class MonitorEngine:
             comparison=monitor.comparison,
             clause=monitor.clause,
             action_taken=action_taken,
+            halt_result=halt_result,
         )
         fire_dict = payload.model_dump(mode="json")
         with self.lock:

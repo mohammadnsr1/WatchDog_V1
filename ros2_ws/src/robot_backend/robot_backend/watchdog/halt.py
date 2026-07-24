@@ -24,6 +24,12 @@ class HaltClient:
     def halt(self, step_id: str, monitor_id: str, detail: str) -> dict[str, Any]:
         ok = False
         cancel_detail = "cancel not attempted"
+        # None until a response is actually received: 0 must mean "answered,
+        # and nothing was cancelling", never "never answered". See
+        # goals_canceling in action_msgs/srv/CancelGoal.srv -- the return_code
+        # alone cannot tell "cancel succeeded, N goals stopped" apart from
+        # "cancel succeeded, nothing was active to stop".
+        goals_cancelled: int | None = None
         try:
             self._ensure_clients()
             if self._cancel_client is None or self._CancelGoal is None or self._GoalInfo is None:
@@ -45,15 +51,20 @@ class HaltClient:
             if done.wait(self.timeout_sec):
                 result = future.result()
                 return_code = getattr(result, "return_code", None)
+                canceling = list(getattr(result, "goals_canceling", []) or [])
+                goals_cancelled = len(canceling)
                 ok = return_code in (None, 0)
-                cancel_detail = f"cancel-all requested; return_code={return_code}"
+                cancel_detail = (
+                    f"cancel-all requested; return_code={return_code}; "
+                    f"goals_canceling={goals_cancelled}"
+                )
             else:
                 cancel_detail = f"cancel-all timed out after {self.timeout_sec:.1f}s"
         except Exception as exc:
             cancel_detail = str(exc)
         finally:
             self._publish_halt(step_id, monitor_id, detail)
-        return {"ok": bool(ok), "detail": cancel_detail}
+        return {"ok": bool(ok), "detail": cancel_detail, "goals_cancelled": goals_cancelled}
 
     def _ensure_clients(self) -> None:
         with self._lock:

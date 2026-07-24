@@ -27,9 +27,12 @@ TF_SAMPLE_HZ = 20.0
 # `events` for the timeline -- only the wake path (_wait_events) excludes
 # them. monitor_fire is deliberately not in this set: it reaches the agent
 # through the engine's fire queue, a different path entirely, and must keep
-# waking it.
+# waking it. halt is in this set for the same reason as the others: only
+# WatchDog ever publishes it, and the agent already learns of the halt
+# through that same monitor_fire fire (action_taken/halt_result) -- a
+# separate wake on its own echo would burn a turn for no new information.
 _SELF_EMITTED_EVENT_TYPES = frozenset(
-    {"watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict"}
+    {"watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict", "halt"}
 )
 MAX_JOINT_SAMPLES = 60 * 60 * 10  # 60 Hz * 60 sec/min * 10 min.
 MAX_TF_SAMPLES = int(TF_SAMPLE_HZ * 60 * 10)  # 20 Hz * 60 sec/min * 10 min.

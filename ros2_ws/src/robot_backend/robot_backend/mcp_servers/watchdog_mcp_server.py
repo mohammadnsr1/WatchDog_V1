@@ -64,6 +64,12 @@ class WatchDogContext:
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
 _VALID_VERDICTS = {"conformant", "non_conformant", "valid_variation", "inconclusive"}
+# Per-process record of step_ids a verdict has already been published for.
+# Detection, not prevention -- a second verdict for a retried step may be
+# legitimate, and silently dropping it would be worse than recording it as
+# suspicious. Guarded by _CONTEXT_LOCK rather than its own lock since it is
+# always touched alongside _CONTEXT.
+_RECORDED_VERDICT_STEP_IDS: set[str] = set()
 # "<section>.<field>", matching how the loader derives clause_id in
 # contracts/loader.py's _make_clause -- e.g. "effects.object_lift_height_m".
 _CLAUSE_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
@@ -659,6 +665,11 @@ if mcp is not None:
         source: "instruction") is rejected here. This only checks shape --
         it does not check the id against the actual contract, which would
         require this server to know which object the step concerned.
+
+        One verdict is expected per step_id, recorded at end_step. This is
+        detected, not prevented: a repeated step_id still publishes (a retried
+        step may legitimately produce a second verdict) but the return carries
+        duplicate_step_id: true and a warning is logged.
         """
         command = "record_verdict"
         try:
@@ -675,7 +686,20 @@ if mcp is not None:
             )
             event = make_event("verdict", payload)
             ctx.event_bus.publish(event)
-            return _ok(command, event=event.model_dump(mode="json"))
+            with _CONTEXT_LOCK:
+                is_duplicate = step_id in _RECORDED_VERDICT_STEP_IDS
+                _RECORDED_VERDICT_STEP_IDS.add(step_id)
+            if is_duplicate:
+                ctx.node.get_logger().warning(
+                    f"record_verdict: a second verdict was recorded for "
+                    f"step_id={step_id!r}. One verdict per step is expected; "
+                    f"this may be legitimate for a retried step, but check."
+                )
+            return _ok(
+                command,
+                event=event.model_dump(mode="json"),
+                duplicate_step_id=is_duplicate,
+            )
         except Exception as exc:
             return _error(command, exc, step_id=step_id, verdict=verdict)
 

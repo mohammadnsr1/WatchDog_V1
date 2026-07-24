@@ -114,6 +114,11 @@ class MonitorFirePayload(BaseModel):
     comparison: str
     clause: dict[str, Any] | None
     action_taken: str
+    # HaltClient.halt()'s full return dict ({"ok", "detail", "goals_cancelled"})
+    # when halt_on_fire triggered a cancel attempt; None when this fire was
+    # flag-only (halt_on_fire=False). action_taken alone cannot say whether a
+    # halt actually stopped anything active -- this is that detail.
+    halt_result: dict[str, Any] | None = None
 
 
 class MonitorDisarmedPayload(BaseModel):

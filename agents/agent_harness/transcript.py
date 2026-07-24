@@ -83,17 +83,113 @@ def hash_file(path: Path) -> str:
     return h.hexdigest()
 
 
+_DEFAULT_SIDECAR_THRESHOLD_BYTES = 8192
+
+
+def _summarize(payload: Any) -> Any:
+    """Collapse a payload to its shape for the on-disk record when the full
+    payload has been sidecared: top-level scalars (e.g. ok, command) kept
+    as-is, every list or dict value replaced by its length or key count.
+    Generic on purpose -- no per-tool summariser to maintain.
+    """
+    if isinstance(payload, dict):
+        return {
+            k: (f"<{type(v).__name__} len={len(v)}>" if isinstance(v, (dict, list)) else v)
+            for k, v in payload.items()
+        }
+    if isinstance(payload, list):
+        return f"<list len={len(payload)}>"
+    return payload
+
+
 class TranscriptWriter:
-    def __init__(self, transcript_dir: Path, agent: str, task_name: str):
+    def __init__(
+        self,
+        transcript_dir: Path,
+        agent: str,
+        task_name: str,
+        sidecar_threshold_bytes: int = _DEFAULT_SIDECAR_THRESHOLD_BYTES,
+    ):
         transcript_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        self.path = transcript_dir / f"{agent}_{task_name}_{ts}.jsonl"
+        stem = f"{agent}_{task_name}_{ts}"
+        self.path = transcript_dir / f"{stem}.jsonl"
         self._fh = open(self.path, "a", buffering=1)
+        self._sidecar_dir = transcript_dir / f"{stem}_results"
+        self._sidecar_threshold_bytes = sidecar_threshold_bytes
+        self._sidecar_seq = 0
+        # content-hash -> {"result_ref", "result_summary"}. A tool result
+        # that recurs verbatim -- once in its own tool_result record, again
+        # inside the following turn's llm_request.new_messages, since a tool
+        # result becomes a message in the history the provider is resent --
+        # is sidecared once; both records reference the same file rather
+        # than each writing their own copy.
+        self._sidecar_cache: dict[str, dict[str, Any]] = {}
 
     def _write(self, record_type: str, **fields: Any) -> None:
         record = {"type": record_type, "wall_ns": wall_ns(), **fields}
         self._fh.write(json.dumps(record, default=str) + "\n")
         self._fh.flush()
+
+    def _maybe_sidecar(
+        self, payload: Any, turn: int, tool_name: str
+    ) -> dict[str, Any] | None:
+        """Write payload to a sidecar file and return its ref/summary if it
+        exceeds the size threshold, else return None (caller keeps payload
+        inline). Content-addressed: the same payload seen twice (see the
+        cache note in __init__) is written once and both callers get the
+        same result_ref.
+        """
+        try:
+            serialized = json.dumps(payload, default=str)
+        except Exception:
+            return None
+        if len(serialized.encode("utf-8")) <= self._sidecar_threshold_bytes:
+            return None
+        key = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        cached = self._sidecar_cache.get(key)
+        if cached is not None:
+            return cached
+        self._sidecar_dir.mkdir(parents=True, exist_ok=True)
+        self._sidecar_seq += 1
+        sidecar_path = self._sidecar_dir / f"{turn}_{self._sidecar_seq}_{tool_name}.json"
+        with open(sidecar_path, "w") as f:
+            f.write(serialized)
+        ref = {
+            "result_ref": str(sidecar_path.relative_to(self.path.parent)),
+            "result_summary": _summarize(payload),
+        }
+        self._sidecar_cache[key] = ref
+        return ref
+
+    def _sidecar_tool_result_messages(self, messages: list, turn: int) -> list:
+        """Shallow-copy new_messages, substituting result_ref/result_summary
+        for any tool-result message's content that exceeds the sidecar
+        threshold -- the same substitution tool_result() applies, so a large
+        payload embedded in this turn's history is not written to disk a
+        second time in full. Redacted the same way tool_result() redacts, so
+        the content hash used for dedup matches regardless of which call site
+        reaches a given payload first.
+
+        Builds a new list/dicts throughout; never mutates a message object
+        that runner.py's live `messages` list still holds a reference to, so
+        this can never affect what is sent to the provider on the next turn.
+        """
+        out = []
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "tool_result" and "content" in msg:
+                redacted = _redact(msg["content"])
+                ref = self._maybe_sidecar(redacted, turn, str(msg.get("name", "unknown")))
+                new_msg = {k: v for k, v in msg.items() if k != "content"}
+                if ref is not None:
+                    new_msg["result_ref"] = ref["result_ref"]
+                    new_msg["result_summary"] = ref["result_summary"]
+                else:
+                    new_msg["content"] = redacted
+                out.append(new_msg)
+            else:
+                out.append(msg)
+        return out
 
     def run_start(
         self,
@@ -136,11 +232,18 @@ class TranscriptWriter:
         that must keep going out on the wire every turn but have no reason
         to live on disk -- they are stripped here, not from the outbound
         payload, and never from the reasoning summaries themselves.
+
+        A tool-result message in new_messages carries the exact payload
+        already written by a prior tool_result() call (a tool result becomes
+        a message in the history, resent every turn) -- large ones are
+        sidecared here the same way, so a large get_evidence payload is not
+        stored twice in full. See _sidecar_tool_result_messages.
         """
+        sidecared = self._sidecar_tool_result_messages(new_messages, turn)
         self._write(
             "llm_request",
             turn=turn,
-            new_messages=_strip_opaque_blobs(_jsonable(new_messages)),
+            new_messages=_strip_opaque_blobs(_jsonable(sidecared)),
             tool_count=tool_count,
         )
 
@@ -175,13 +278,22 @@ class TranscriptWriter:
         self._write("tool_call", turn=turn, name=name, arguments=_redact(arguments))
 
     def tool_result(self, turn: int, name: str, result: Any, elapsed_ns: int) -> None:
-        self._write(
-            "tool_result",
-            turn=turn,
-            name=name,
-            result=_redact(result),
-            elapsed_ns=elapsed_ns,
-        )
+        """Large results (default over 8192 bytes serialized, e.g.
+        get_evidence) are sidecared to a file next to the transcript rather
+        than written inline; the record then carries result_ref and a
+        generic result_summary instead of result. Never truncated or
+        silently dropped -- the full payload is always on disk, just not
+        duplicated inline in the transcript. See _maybe_sidecar.
+        """
+        redacted = _redact(result)
+        ref = self._maybe_sidecar(redacted, turn, name)
+        fields: dict[str, Any] = {"turn": turn, "name": name, "elapsed_ns": elapsed_ns}
+        if ref is not None:
+            fields["result_ref"] = ref["result_ref"]
+            fields["result_summary"] = ref["result_summary"]
+        else:
+            fields["result"] = redacted
+        self._write("tool_result", **fields)
 
     def run_end(
         self,

@@ -91,10 +91,13 @@ def test_region_monitor_modes():
 
 
 def test_effort_event_monitor_debounce_and_reset():
+    # comparison/threshold express the condition that must HOLD ("effort <=
+    # 0.5" is conformant); the monitor fires once that condition is violated
+    # on sustained_ticks consecutive samples.
     monitor = EffortEventMonitor(
         {
             "joint_name": "finger_joint",
-            "comparison": "gt",
+            "comparison": "le",
             "threshold": 0.5,
             "sustained_ticks": 3,
         },
@@ -106,6 +109,24 @@ def test_effort_event_monitor_debounce_and_reset():
     assert monitor.evaluate(joint_state(0.6)) is None
     assert monitor.evaluate(joint_state(0.6)) is None
     assert monitor.evaluate(joint_state(0.6)) == pytest.approx(0.6)
+
+
+def test_effort_event_monitor_conformant_never_fires():
+    monitor = EffortEventMonitor(
+        {
+            "joint_name": "finger_joint",
+            "comparison": "le",
+            "threshold": 4.0,
+            "sustained_ticks": 3,
+        },
+        step_id="step",
+    )
+    assert monitor.evaluate(joint_state(0.0)) is None
+    assert monitor.evaluate(joint_state(2.0)) is None
+    assert monitor.evaluate(joint_state(3.9)) is None
+    assert monitor.evaluate(joint_state(4.5)) is None
+    assert monitor.evaluate(joint_state(4.5)) is None
+    assert monitor.evaluate(joint_state(4.5)) == pytest.approx(4.5)
 
 
 def test_param_validation_errors_are_precise():

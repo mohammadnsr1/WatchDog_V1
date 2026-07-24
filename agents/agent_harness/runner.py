@@ -21,6 +21,7 @@ it from ever masquerading as something it isn't.
 
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,19 +43,56 @@ TERMINATION_REASONS = {
     "agent_idle",
     "provider_error",
     "mcp_error",
+    "user_abort",
 }
 
-
-@dataclass
-class RunResult:
-    termination_reason: str
-    turn_count: int
-    transcript_path: str
-    verdict_count: int | None = None
+_TRACEBACK_FRAME_LIMIT = 20
 
 
-def _exception_detail(e: Exception) -> dict:
-    return {"exception_type": type(e).__name__, "exception_message": str(e)}
+def _exception_detail(e: BaseException) -> dict:
+    """Recursively describe an exception, including any nested exception
+    group members and __cause__ chain, each with a truncated traceback.
+
+    A KeyboardInterrupt raised inside an anyio/asyncio TaskGroup surfaces
+    here as an ExceptionGroup whose sub-exceptions carry the real cause --
+    without recursing into `exceptions`, an operator Ctrl-C is
+    indistinguishable on the record from a genuine transport failure. See
+    _contains_keyboard_interrupt, which walks the same structure to decide
+    termination_reason.
+    """
+    detail: dict[str, Any] = {
+        "exception_type": type(e).__name__,
+        "exception_message": str(e),
+        "traceback": traceback.format_exception(
+            type(e), e, e.__traceback__, limit=_TRACEBACK_FRAME_LIMIT
+        ),
+    }
+    subs = getattr(e, "exceptions", None)
+    if subs:
+        detail["sub_exceptions"] = [_exception_detail(sub) for sub in subs]
+    if e.__cause__ is not None:
+        detail["cause"] = _exception_detail(e.__cause__)
+    return detail
+
+
+def _contains_keyboard_interrupt(e: BaseException) -> bool:
+    """True if e, or anything nested inside it (exception group members or
+    the __cause__ chain), is a KeyboardInterrupt.
+
+    Needed because an operator Ctrl-C during an `async with` block (e.g.
+    MCPClientPool's TaskGroup) does not arrive here as a bare
+    KeyboardInterrupt -- it is wrapped in an ExceptionGroup, whose top-level
+    type is just "ExceptionGroup" with no indication of what is inside
+    unless this recurses.
+    """
+    if isinstance(e, KeyboardInterrupt):
+        return True
+    for sub in getattr(e, "exceptions", None) or []:
+        if _contains_keyboard_interrupt(sub):
+            return True
+    if e.__cause__ is not None and _contains_keyboard_interrupt(e.__cause__):
+        return True
+    return False
 
 
 def _drained_begin_step(result: Any) -> bool:
@@ -265,13 +303,33 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         "run_complete" if begin_step_observed else "no_execution_observed"
                     )
                     break
+    except (KeyboardInterrupt, BaseExceptionGroup) as e:
+        # Two distinct ways an operator Ctrl-C can reach here, neither
+        # caught by `except Exception` below: a bare KeyboardInterrupt
+        # raised outside the `async with` block, or a BaseExceptionGroup --
+        # what anyio's TaskGroup raises when a KeyboardInterrupt is one of
+        # its sub-exceptions. BaseExceptionGroup is a BaseException, not an
+        # Exception (only ExceptionGroup, its all-Exception-subclass sibling,
+        # is), so it silently skips `except Exception` entirely; without this
+        # clause it would escape this function altogether and the finally
+        # block's assert would fire instead of a clean user_abort.
+        termination_reason = "user_abort" if _contains_keyboard_interrupt(e) else "mcp_error"
+        error_detail = _exception_detail(e)
     except Exception as e:
         # Anything that escaped the loop above -- MCP pool connect/list_tools
         # failure, a tool-call transport failure, or any other unhandled
         # exception on the MCP/harness side (provider failures are already
         # caught and labeled above and never reach here). Same treatment as
         # B1 requires for provider failures: classify, don't default.
-        termination_reason = "mcp_error"
+        #
+        # An operator Ctrl-C during an `async with` block (MCPClientPool's
+        # TaskGroup) surfaces here as an ExceptionGroup, not a bare
+        # KeyboardInterrupt -- _contains_keyboard_interrupt recurses into it
+        # so this is still labeled user_abort, not a mislabeled mcp_error.
+        if _contains_keyboard_interrupt(e):
+            termination_reason = "user_abort"
+        else:
+            termination_reason = "mcp_error"
         error_detail = _exception_detail(e)
     finally:
         # By construction termination_reason is always set by this point:

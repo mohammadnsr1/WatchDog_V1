@@ -132,7 +132,8 @@ class RelativeFrameMonitor(MonitorPrimitive):
     feed = "tf"
     description = (
         "Fires when the straight-line distance between two TF frames departs "
-        "from its armed reference by more than max_delta_m."
+        "from its armed reference by more than max_delta_m. Parameters express "
+        "the condition that must hold. The monitor fires when it is violated."
     )
     serves = (
         "Clauses bounding the relative displacement of two frames: grasp "
@@ -198,7 +199,8 @@ class StationarityMonitor(MonitorPrimitive):
     feed = "tf"
     description = (
         "Fires when an object's position displaces more than epsilon_m from its "
-        "armed reference position."
+        "armed reference position. Parameters express the condition that must "
+        "hold. The monitor fires when it is violated."
     )
     serves = (
         "Invariants asserting an object is not to be disturbed: untouched-object "
@@ -251,7 +253,8 @@ class RegionMonitor(MonitorPrimitive):
     feed = "tf"
     description = (
         "Fires when an object leaves an axis-aligned box (stay_inside) or "
-        "enters one (stay_outside)."
+        "enters one (stay_outside). Parameters express the condition that must "
+        "hold. The monitor fires when it is violated."
     )
     serves = "Pose corridors, keep-out volumes, workspace bounds."
     reference_capture = (
@@ -309,10 +312,17 @@ class EffortEventMonitor(MonitorPrimitive):
 
     feed = "joint_states"
     description = (
-        "Fires when the absolute effort reported for a named joint satisfies "
-        "comparison against threshold on sustained_ticks consecutive samples."
+        "Watches the absolute effort reported for a named joint against a "
+        "condition that must hold. Fires when that condition is violated on "
+        "sustained_ticks consecutive samples."
     )
-    serves = "Contact signatures, clamp-force bounds, load clauses."
+    serves = (
+        "Continuous invariants on joint effort, such as clamp-force bounds. Not "
+        "for effect clauses that need to hold only at one moment, such as a "
+        "minimum plateau effort confirming contact; a continuous monitor for "
+        "those would fire from the start of the step, before the moment they "
+        "describe has arrived. Evaluate those at step end from evidence."
+    )
     reference_capture = (
         "none. The threshold is absolute, so this primitive can be armed at any "
         "time with identical meaning."
@@ -321,7 +331,12 @@ class EffortEventMonitor(MonitorPrimitive):
         {"name": "joint_name", "type": "string", "required": True,
          "notes": "Must appear in the name array of /joint_states."},
         {"name": "comparison", "type": "enum", "required": True,
-         "values": ["gt", "ge", "lt", "le"]},
+         "values": ["gt", "ge", "lt", "le"],
+         "notes": "The comparison the effort must SATISFY for conformance, "
+                  "copied unchanged from the contract clause. The monitor "
+                  "fires on violation, not on satisfaction. An invariant of "
+                  "'effort <= 4.0' is armed with comparison 'le' and threshold "
+                  "4.0 and fires when effort exceeds 4.0."},
         {"name": "threshold", "type": "number", "required": True,
          "units": "effort units as reported on /joint_states",
          "notes": "Compared against the absolute value of the reported effort. "
@@ -359,7 +374,10 @@ class EffortEventMonitor(MonitorPrimitive):
             self._streak = 0
             return None
         value = abs(float(efforts[idx]))
-        if _compare(value, self.comparison, self.threshold):
+        # comparison/threshold express the condition that must HOLD, matching
+        # the other three primitives and the meaning of these fields in
+        # MonitorFirePayload. Fire when it stops holding.
+        if not _compare(value, self.comparison, self.threshold):
             self._streak += 1
             if self._streak >= self.sustained_ticks:
                 return value
