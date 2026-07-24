@@ -5,4 +5,4 @@ float64 timeout_sec
 bool proceed
 bool timed_out
 float64 waited_sec
-string reason         # released | timeout | no_guard | error
+string reason         # released | timeout | no_guard | aborted | error

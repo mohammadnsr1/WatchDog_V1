@@ -28,7 +28,11 @@ class ReadyClient:
         self._lock = threading.Lock()
 
     def signal(
-        self, scope: str, step_id: str | None = None, phase: str | None = None
+        self,
+        scope: str,
+        step_id: str | None = None,
+        phase: str | None = None,
+        detail: str | None = None,
     ) -> dict[str, Any]:
         ok = False
         message = "signal not attempted"
@@ -43,6 +47,12 @@ class ReadyClient:
             request.scope = scope
             request.step_id = step_id or ""
             request.phase = phase or ""
+            # detail is only meaningful for scope="abort"; harmless (empty
+            # string) for every other scope. Guarded with getattr so a client
+            # built against an older SignalReady.srv without the field still
+            # works.
+            if hasattr(request, "detail"):
+                request.detail = detail or ""
 
             done = threading.Event()
             holder: dict[str, Any] = {}

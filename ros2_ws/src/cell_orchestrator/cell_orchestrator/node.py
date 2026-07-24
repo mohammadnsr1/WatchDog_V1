@@ -146,6 +146,15 @@ class OrchestratorNode(Node):
         self._gates: dict[tuple[str, str], threading.Event] = {}
         self._first_gate_attempted = False
         self._latched_unguarded = False
+        # Run-scoped abort. Set by a SignalReady(scope="abort") and never
+        # cleared for the rest of the run: once the monitor declares the run
+        # should not continue, every subsequent gate refuses immediately with
+        # reason="aborted", and any gate already blocked is released to the
+        # same refusal rather than left to time out. This is the executor's
+        # only signal, and it is told nothing about who aborted or why -- it
+        # sees a cell interlock declining to release a step.
+        self._aborted = threading.Event()
+        self._abort_detail: str = ""
         # (monotonic_time, phase) per step_id, for every phase-scope
         # SignalReady this node has ever received -- lets a timed-out
         # phase gate check whether a signal arrived for the same step_id
@@ -222,6 +231,33 @@ class OrchestratorNode(Node):
                 self._gates[key] = event
             return event
 
+    def _abort_response(
+        self,
+        response: RequestGo.Response,
+        step_id: str,
+        phase: str,
+        waited_sec: float = 0.0,
+    ) -> RequestGo.Response:
+        """Fill a RequestGo response for an aborted run: proceed=False.
+
+        The only place the gate refuses. reason="aborted" is the executor's
+        sole signal; it learns nothing about who aborted or why (the detail is
+        kept in this node's log only). timed_out is False -- an abort is a
+        deliberate refusal, not a coverage timeout.
+        """
+        response.proceed = False
+        response.timed_out = False
+        response.waited_sec = waited_sec
+        response.reason = "aborted"
+        self._log(
+            "gate_aborted",
+            step_id=step_id,
+            phase=phase,
+            waited_sec=waited_sec,
+            abort_detail=self._abort_detail,
+        )
+        return response
+
     def _find_near_miss_phases(
         self, step_id: str, phase: str, t0: float, t1: float
     ) -> list[str]:
@@ -261,7 +297,29 @@ class OrchestratorNode(Node):
             )
             self._log("latch_cleared", scope=scope, step_id=request.step_id)
 
-        if scope == "run":
+        if scope == "abort":
+            # Run-scoped and irreversible: latch the flag, then release every
+            # currently pending gate (and run-readiness) so a RequestGo that is
+            # already blocked wakes and refuses with reason="aborted" rather
+            # than sitting out its full timeout. The abort check inside
+            # _handle_request_go turns the wakeup into an "aborted" outcome.
+            detail = getattr(request, "detail", "") or ""
+            with self._state_lock:
+                self._abort_detail = detail
+                pending = list(self._gates.values())
+            self._aborted.set()
+            self._run_ready_event.set()
+            for event in pending:
+                event.set()
+            self.get_logger().warning(
+                f"cell_orchestrator: run aborted by monitor signal "
+                f"(detail={detail!r}). Every subsequent gate will refuse with "
+                f"reason='aborted'."
+            )
+            self._log("abort", detail=detail)
+            response.ok = True
+            response.message = "abort recorded"
+        elif scope == "run":
             self._run_ready_event.set()
             self._log("run_ready")
             response.ok = True
@@ -285,7 +343,9 @@ class OrchestratorNode(Node):
             )
         else:
             response.ok = False
-            response.message = f"unknown scope {scope!r}; must be run, step, or phase"
+            response.message = (
+                f"unknown scope {scope!r}; must be run, step, phase, or abort"
+            )
         return response
 
     # ------------------------------------------------------------------
@@ -300,6 +360,13 @@ class OrchestratorNode(Node):
         step_id = request.step_id
         phase = request.phase
         guard_mode = self._get_guard_mode()
+
+        # aborted: the monitor declared this run should not continue. Takes
+        # precedence over everything below and never waits -- once set, every
+        # gate refuses immediately. Checked first so an abort stops execution
+        # regardless of guard_mode or latch state.
+        if self._aborted.is_set():
+            return self._abort_response(response, step_id, phase)
 
         # unguarded_by_config: the operator declared this run unmonitored.
         # Expected, not a defect -- never waits, ever.
@@ -358,6 +425,13 @@ class OrchestratorNode(Node):
         if not self._run_ready_event.is_set():
             remaining = max(0.0, deadline - time.monotonic())
             run_ready = self._run_ready_event.wait(remaining)
+            # An abort sets _run_ready_event to wake this wait; a call blocked
+            # here when the abort fired must refuse, not fall through to the
+            # gate wait.
+            if self._aborted.is_set():
+                return self._abort_response(
+                    response, step_id, phase, time.monotonic() - t0
+                )
             if not run_ready:
                 waited_sec = time.monotonic() - t0
                 response.proceed = True  # the gate never refuses
@@ -411,6 +485,12 @@ class OrchestratorNode(Node):
         remaining = max(0.0, deadline - time.monotonic())
         released = gate_event.wait(remaining)
         waited_sec = time.monotonic() - t0
+
+        # An abort released this gate to wake it: a call blocked in the gate
+        # wait when the abort fired sees released=True but must refuse with
+        # reason="aborted", not "released".
+        if self._aborted.is_set():
+            return self._abort_response(response, step_id, phase, waited_sec)
 
         response.proceed = True  # the gate never refuses -- see module docstring
         response.waited_sec = waited_sec

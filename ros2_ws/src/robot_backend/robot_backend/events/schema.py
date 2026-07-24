@@ -177,6 +177,12 @@ class WatchDogReadyPayload(BaseModel):
     the service call is what actually releases a blocked request_go; this
     event exists only so the signal appears in the same timeline as
     everything else.
+
+    scope is one of "run", "step", "phase", or "abort". The "abort" scope is
+    not a readiness signal at all but its inverse -- it declares the run
+    should not continue, and travels the same service so the cell has a single
+    channel from the monitor. It appears here so an abort is on the timeline
+    alongside the readiness signals.
     """
 
     model_config = ConfigDict(frozen=True)

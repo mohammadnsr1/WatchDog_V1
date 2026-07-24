@@ -1,6 +1,7 @@
-string scope          # run | step | phase
+string scope          # run | step | phase | abort
 string step_id
 string phase
+string detail         # free text; only meaningful for scope=abort
 ---
 bool ok
 string message

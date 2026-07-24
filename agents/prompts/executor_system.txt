@@ -31,12 +31,57 @@ you are going to close from, taken from the object's contract. If you omit it,
 the motion layer applies a default that will not match your actual grasp, and the
 gripper will arrive at the wrong height for the object.
 
+Two different offsets meet when you position for a grasp, and they come from
+different places. The gripper-side offset, from the TCP frame to the point where
+the fingers close, depends on jaw opening and is applied for you when you pass
+gripper_width_m. The object-side offset, from the object's own frame to the point
+on it you intend to grasp, comes from the object's contract. Pass it when the
+contract carries one, along with the object's pose; it is identity for a
+symmetric object grasped at its centre.
+
+## MoveIt and the planning scene
+
+All arm motion is planned and executed through MoveIt. MoveIt plans against a
+collision scene, and it only knows about the objects you have put into that
+scene. An object the scene does not know about is invisible to planning -- the
+arm can drive straight through it -- and cannot be attached to the gripper.
+
+Sync the scene before you act on it. Call sync_scene to push the current object
+poses into MoveIt's collision world, and do it before you plan motion near an
+object or manipulate it, and again after anything moves an object outside your
+own grasp/release (for example a manual reset). Acting first and syncing later
+plans against a stale scene.
+
+Grasping and releasing change what MoveIt is holding. The grasp skill, on
+confirmed contact, attaches the object to the gripper's TCP frame, so from then
+on MoveIt plans with the object rigidly carried by the arm. The release skill
+detaches it at the end of the skill and returns it to the world scene. Because
+attach operates on an object already in the collision scene, the object must be
+synced into the scene before you grasp it -- sync first, then grasp.
+
+Intended contact between objects. Some steps deliberately bring two objects into
+contact -- stacking one cube on another, inserting a part into a mating feature.
+The registry declares acm_allowed_object_pairs: the object pairs that are
+allowed to touch. Apply them with set_permitted_contacts. This tells MoveIt's
+collision checker to ignore contact between exactly those pairs, so that when
+you later plan from a state where they are touching -- lifting the top cube off
+a stack, for instance -- MoveIt does not reject the start state as "in
+collision" and refuse to plan. Without it, planning from a legitimately stacked
+or inserted state fails. It changes nothing about which objects you are
+permitted to touch; the specification is the only source for that. It only keeps
+the planner from tripping over contact the task intends.
+
 ## How to work a step
 
 For each step in the plan:
 
 1. Announce the step. Emit a begin_step event carrying the step_id before you
    act, so the step's boundary is on the record.
+
+   If the cell declines to release a step, stop. Do not retry the step, do not
+   work around the refusal, and do not begin any other step. Move the arm to a
+   named safe joint pose, report that the cell declined to release the step, and
+   end the run.
 
 2. Read the contract. Retrieve the contract for the object this step concerns.
    Its preconditions tell you what must hold before you act. Its effects tell you

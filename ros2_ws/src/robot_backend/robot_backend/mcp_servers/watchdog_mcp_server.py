@@ -583,6 +583,29 @@ if mcp is not None:
             return _error(command, exc)
 
     @mcp.tool()
+    def abort_run(reason: str) -> dict[str, Any]:
+        """Signal that execution should not continue beyond the next step boundary.
+
+        Sends a scope="abort" readiness signal to the cell's orchestrator,
+        which then refuses every subsequent request_go with reason="aborted"
+        and releases any gate already blocked. This does NOT stop motion
+        already underway -- halt_execution is the only immediate lever for
+        that; the two are used together when both apply. The executor learns
+        only that the cell declined to release a step; it is told nothing
+        about the monitor or the reason. The reason is recorded on the
+        WatchDog timeline and in the orchestrator log.
+        """
+        command = "abort_run"
+        try:
+            if not isinstance(reason, str) or not reason.strip():
+                raise ValueError("reason must be a non-empty string.")
+            ctx = _ensure_watchdog()
+            result = ctx.ready_client.signal("abort", detail=reason.strip())
+            return _ok(command, result=result)
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
     def signal_ready(
         scope: str,
         step_id: str | None = None,

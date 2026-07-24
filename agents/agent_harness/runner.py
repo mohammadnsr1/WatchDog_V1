@@ -46,6 +46,15 @@ TERMINATION_REASONS = {
     "user_abort",
 }
 
+
+@dataclass
+class RunResult:
+    termination_reason: str
+    turn_count: int
+    transcript_path: str
+    verdict_count: int | None = None
+
+
 _TRACEBACK_FRAME_LIMIT = 20
 
 

@@ -17,4 +17,6 @@
 ---
 
 Begin your control loop. Monitor this run to completion. Record one verdict per
-step.
+step, including any step the executor reopens after a failure. Keep monitoring
+until the session ends; the step plan below is what is expected, not a limit on
+what you will see.

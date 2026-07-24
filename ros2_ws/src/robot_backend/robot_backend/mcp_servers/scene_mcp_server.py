@@ -409,6 +409,20 @@ if mcp is not None:
             # Order matters: the event must be published before we block, or
             # the monitor cannot yet know a step began.
             gate = request_go(_NODE, step_id)
+            # An explicit refusal (proceed=False, e.g. reason="aborted") is the
+            # cell interlock declining to release this step. Surface it as a
+            # tool-level failure so the agent reasons about it rather than
+            # acting as if the step was released. Every other outcome
+            # (released, timeout, no_orchestrator, error) still proceeds --
+            # the gate is fail-open by design.
+            if gate.get("proceed") is False:
+                return _error(
+                    command,
+                    "the cell declined to release this step",
+                    step_id=step_id,
+                    object_ids=object_ids or [],
+                    gate=gate,
+                )
             return _ok(command, step_id=step_id, object_ids=object_ids or [], gate=gate)
         except Exception as exc:
             return _error(command, exc, step_id=step_id)
@@ -506,6 +520,16 @@ if mcp is not None:
             )
             get_bus().publish(event)
             gate = request_go(_NODE, step_id, phase=phase)
+            # See begin_step: an explicit proceed=False refusal surfaces as a
+            # tool-level failure; every other outcome proceeds (fail-open).
+            if gate.get("proceed") is False:
+                return _error(
+                    command,
+                    "the cell declined to release this step",
+                    step_id=step_id,
+                    phase=phase,
+                    gate=gate,
+                )
             return _ok(command, step_id=step_id, phase=phase, gate=gate)
         except Exception as exc:
             return _error(command, exc, phase=phase)

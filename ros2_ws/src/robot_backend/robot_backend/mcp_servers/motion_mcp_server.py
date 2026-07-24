@@ -34,7 +34,7 @@ from rclpy.node import Node
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
-from robot_backend.utils.geometry import make_pose
+from robot_backend.utils.geometry import compose_poses, make_pose
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
@@ -239,6 +239,39 @@ def _resolve_approach_defaults(
     return gripper_width_m, approach_distance_m, defaults_used
 
 
+def _compose_grasp_center_from_object(
+    object_pose: dict[str, Any],
+    ox: Any,
+    oy: Any,
+    oz: Any,
+    oqx: Any,
+    oqy: Any,
+    oqz: Any,
+    oqw: Any,
+) -> dict[str, Any]:
+    """Compose T_frame_graspcentre = T_frame_object * T_object_graspcentre.
+
+    object_pose is the object's own pose in frame_id; the o* arguments are the
+    registry's spec.grasp.grasp_center_offset (T_object_grasp_center). Any
+    component left None defaults to identity (position 0, quaternion 0,0,0,1),
+    so a caller can supply only the axes that differ from identity.
+    """
+    offset_pose = make_pose(
+        position={
+            "x": _validate_float("grasp_center_offset_x", 0.0 if ox is None else ox),
+            "y": _validate_float("grasp_center_offset_y", 0.0 if oy is None else oy),
+            "z": _validate_float("grasp_center_offset_z", 0.0 if oz is None else oz),
+        },
+        orientation={
+            "x": _validate_float("grasp_center_offset_qx", 0.0 if oqx is None else oqx),
+            "y": _validate_float("grasp_center_offset_qy", 0.0 if oqy is None else oqy),
+            "z": _validate_float("grasp_center_offset_qz", 0.0 if oqz is None else oqz),
+            "w": _validate_float("grasp_center_offset_qw", 1.0 if oqw is None else oqw),
+        },
+    )
+    return compose_poses(object_pose, offset_pose)
+
+
 def _compute_approach_geometry(
     *,
     frame_id: str,
@@ -254,6 +287,13 @@ def _compute_approach_geometry(
     approach_vec_x: Any,
     approach_vec_y: Any,
     approach_vec_z: Any,
+    grasp_center_offset_x: Any = None,
+    grasp_center_offset_y: Any = None,
+    grasp_center_offset_z: Any = None,
+    grasp_center_offset_qx: Any = None,
+    grasp_center_offset_qy: Any = None,
+    grasp_center_offset_qz: Any = None,
+    grasp_center_offset_qw: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], float, float, dict[str, float], list[str]]:
     """Validate inputs and compute both TCP approach poses.
 
@@ -261,6 +301,12 @@ def _compute_approach_geometry(
              effective_width_m, effective_dist_m, approach_vector, defaults_used).
 
     approach_vector is the normalized world-frame direction used for the offset.
+
+    When any grasp_center_offset_* is supplied, x..qw are interpreted as the
+    OBJECT pose in frame_id and the grasp centre is composed from the object
+    pose and the registry offset; "grasp_center_offset" is appended to
+    defaults_used to record that interpretation. When all are None, x..qw are
+    the grasp-centre pose directly (behaviour unchanged).
     """
 
     gripper_width_m, approach_distance_m, defaults_used = _resolve_approach_defaults(
@@ -290,11 +336,39 @@ def _compute_approach_geometry(
     ux, uy, uz = raw_x / vec_norm, raw_y / vec_norm, raw_z / vec_norm
     approach_vector: dict[str, float] = {"x": ux, "y": uy, "z": uz}
 
-    grasp_center_pose = _build_pose_dict(
+    supplied_pose = _build_pose_dict(
         frame_id=frame_id,
         x=x, y=y, z=z,
         qx=qx, qy=qy, qz=qz, qw=qw,
     )
+    offset_supplied = any(
+        component is not None
+        for component in (
+            grasp_center_offset_x,
+            grasp_center_offset_y,
+            grasp_center_offset_z,
+            grasp_center_offset_qx,
+            grasp_center_offset_qy,
+            grasp_center_offset_qz,
+            grasp_center_offset_qw,
+        )
+    )
+    if offset_supplied:
+        # x..qw were the object pose; compose the grasp centre from it.
+        grasp_center_pose = _compose_grasp_center_from_object(
+            supplied_pose,
+            grasp_center_offset_x,
+            grasp_center_offset_y,
+            grasp_center_offset_z,
+            grasp_center_offset_qx,
+            grasp_center_offset_qy,
+            grasp_center_offset_qz,
+            grasp_center_offset_qw,
+        )
+        defaults_used.append("grasp_center_offset")
+    else:
+        # x..qw were the grasp centre directly (behaviour unchanged).
+        grasp_center_pose = supplied_pose
     width = _validate_width(gripper_width_m)
     dist = _validate_float("approach_distance_m", approach_distance_m)
     if dist < 0.0:
@@ -534,6 +608,13 @@ if mcp is not None:
         approach_vec_x: float | None = None,
         approach_vec_y: float | None = None,
         approach_vec_z: float | None = None,
+        grasp_center_offset_x: float | None = None,
+        grasp_center_offset_y: float | None = None,
+        grasp_center_offset_z: float | None = None,
+        grasp_center_offset_qx: float | None = None,
+        grasp_center_offset_qy: float | None = None,
+        grasp_center_offset_qz: float | None = None,
+        grasp_center_offset_qw: float | None = None,
     ) -> dict[str, Any]:
         """Return the two TCP poses needed to approach and grasp an object,
         without commanding any motion.
@@ -578,6 +659,21 @@ if mcp is not None:
             normalized internally so its magnitude does not matter. When all
             three are omitted the [0, 0, 1] default is used and
             "approach_vector" is added to defaults_used.
+        grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
+        grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
+        grasp_center_offset_qw : float, optional
+            T_object_grasp_center from the model registry
+            (spec.grasp.grasp_center_offset): where the grasp centre sits
+            relative to the object's own frame. Identity for a symmetric object
+            grasped at its centre. Supply this and pass the OBJECT pose in
+            x..qw; omit it and pass the grasp-centre pose directly. When any
+            component is supplied, "grasp_center_offset" is added to
+            defaults_used to record that x..qw were read as the object pose.
+
+            This is a property of the object and is unrelated to the
+            gripper-side TCP-to-grasp-centre offset, which is width-dependent,
+            comes from the RG2 calibration table, and is applied automatically
+            from gripper_width_m.
 
         Returns
         -------
@@ -626,6 +722,13 @@ if mcp is not None:
                 approach_vec_x=approach_vec_x,
                 approach_vec_y=approach_vec_y,
                 approach_vec_z=approach_vec_z,
+                grasp_center_offset_x=grasp_center_offset_x,
+                grasp_center_offset_y=grasp_center_offset_y,
+                grasp_center_offset_z=grasp_center_offset_z,
+                grasp_center_offset_qx=grasp_center_offset_qx,
+                grasp_center_offset_qy=grasp_center_offset_qy,
+                grasp_center_offset_qz=grasp_center_offset_qz,
+                grasp_center_offset_qw=grasp_center_offset_qw,
             )
             return _ok(
                 command,
@@ -657,6 +760,13 @@ if mcp is not None:
         approach_vec_x: float | None = None,
         approach_vec_y: float | None = None,
         approach_vec_z: float | None = None,
+        grasp_center_offset_x: float | None = None,
+        grasp_center_offset_y: float | None = None,
+        grasp_center_offset_z: float | None = None,
+        grasp_center_offset_qx: float | None = None,
+        grasp_center_offset_qy: float | None = None,
+        grasp_center_offset_qz: float | None = None,
+        grasp_center_offset_qw: float | None = None,
         stop_at_pregrasp: bool = False,
     ) -> dict[str, Any]:
         """Move the arm to the pre-grasp staging position and optionally
@@ -692,6 +802,21 @@ if mcp is not None:
             For a side grasp approaching from world +X, supply approach_vec_x=1
             and leave the others at 0. The vector is normalized internally.
             Omit all three for the [0, 0, 1] default; recorded in defaults_used.
+        grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
+        grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
+        grasp_center_offset_qw : float, optional
+            T_object_grasp_center from the model registry
+            (spec.grasp.grasp_center_offset): where the grasp centre sits
+            relative to the object's own frame. Identity for a symmetric object
+            grasped at its centre. Supply this and pass the OBJECT pose in
+            x..qw; omit it and pass the grasp-centre pose directly. When any
+            component is supplied, "grasp_center_offset" is added to
+            defaults_used to record that x..qw were read as the object pose.
+
+            This is a property of the object and is unrelated to the
+            gripper-side TCP-to-grasp-centre offset, which is width-dependent,
+            comes from the RG2 calibration table, and is applied automatically
+            from gripper_width_m.
         stop_at_pregrasp : bool, optional
             When True the arm stops at the pre-grasp TCP pose and the tool
             returns without proceeding to the grasp position. Defaults to False.
@@ -760,6 +885,13 @@ if mcp is not None:
                 approach_vec_x=approach_vec_x,
                 approach_vec_y=approach_vec_y,
                 approach_vec_z=approach_vec_z,
+                grasp_center_offset_x=grasp_center_offset_x,
+                grasp_center_offset_y=grasp_center_offset_y,
+                grasp_center_offset_z=grasp_center_offset_z,
+                grasp_center_offset_qx=grasp_center_offset_qx,
+                grasp_center_offset_qy=grasp_center_offset_qy,
+                grasp_center_offset_qz=grasp_center_offset_qz,
+                grasp_center_offset_qw=grasp_center_offset_qw,
             )
         except Exception as exc:
             return _error(command, exc, defaults_used=defaults_used)

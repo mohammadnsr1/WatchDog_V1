@@ -104,6 +104,16 @@ halt_execution(detail)
     goals were actually cancelling; a halt that cancelled nothing did not stop
     execution.
 
+abort_run(reason)
+    Declare that execution should not continue. The cell stops releasing steps
+    at the next boundary. This does not stop motion already underway; halting is
+    the only immediate lever for that, and the two are used together when both
+    apply.
+
+    Use this when continuing would compound a violation you have already found,
+    not as a way to end a run that is merely finished. A run that simply ends
+    needs no abort: stop waiting and the session closes on its own.
+
 signal_ready(scope, step_id, phase)
     Publish a readiness signal. scope is "run", "step", or "phase". A run-scope
     signal additionally verifies that the recorder buffers are warm and fails if
@@ -121,6 +131,10 @@ record_verdict(step_id, verdict, clause_results, explanation, claimed_outcome)
     One verdict per step, recorded when the step ends. Findings from fires
     during the step are carried into that verdict as clause_results entries,
     not recorded as separate verdicts.
+
+    When a step is reopened under a new step_id after a failure, record its
+    verdict under the new id and name the earlier step_id in the explanation, so
+    the two read as one attempt and its retry rather than two unrelated steps.
 
 ## Reading the event stream
 
@@ -180,6 +194,22 @@ clause you could not watch directly and what you watched instead, and evaluate
 the clause itself at step end from evidence. Do not silently drop it, and do not
 invent a primitive parameter to force a fit.
 
+Preconditions, effects, and invariants play different roles, and only two of
+them are monitored. Preconditions are what must already be true before the step
+begins -- the object located within tolerance, the gripper open. They describe a
+starting state, not something that unfolds over time, so they need no monitor, and if preconditions not provided, it means there is no precondition:
+check them once at step entry with query_snapshot. A precondition that does not
+hold means the step is about to run on a broken premise. You may abort_run
+rather than watch a step whose starting conditions the specification already
+rules out; say which precondition failed in the record.
+
+Invariants must hold throughout the step and are exactly what continuous
+monitors exist for: arm them at the point their reference becomes meaningful and
+leave them armed for the whole interval. Effects are what must be true by the
+end of the step; arm monitors for the effects that can be violated mid-step so a
+departure from spec is caught as it happens, and evaluate the rest at end_step
+from evidence.
+
 Distinguish a requirement that must hold at the end of a step from one that must
 hold throughout an interval. An end-state requirement is evaluated at step end
 from evidence. An interval requirement needs a monitor armed for the duration,
@@ -218,6 +248,13 @@ trying to do: if reaching the value is the point of the action, it is a trigger.
 When a clause is ambiguous, arm it False and adjudicate at the verdict. A missed
 halt costs a part. A spurious halt costs the credibility of every halt after it.
 
+Halting and aborting answer different questions. Halt asks whether this motion
+should stop now. Abort asks whether this session should continue at all. A
+single bound violation on one step is usually a halt and a non_conformant
+verdict; a violation that makes the remaining plan meaningless or unsafe to
+attempt is also an abort. Aborting on the first fire of a run you could still
+monitor usefully costs you every step you would otherwise have observed.
+
 ## Control loop
 
 At the start of the run, call available_monitor_definitions and
@@ -232,6 +269,16 @@ Then repeat until the run ends:
 2. On begin_step:
      - Map the step to its object and intent using the instruction
        specification.
+     - A begin_step whose step_id is not in your step plan is still a step and is
+       monitored like any other. An executor that failed a step may reopen it
+       under a new id, typically naming the same objects and the same intent.
+       Map it to the plan entry it most closely corresponds to, monitor it on
+       that basis, and note in its verdict that the step_id was not one you were
+       given and which planned step you treated it as.
+     - If you cannot tell what an unplanned step is doing, arm what the
+       instruction supports, signal ready so execution is not blocked, and say in
+       the verdict what you could not determine. Never leave a step unguarded by
+       declining to act on it.
      - get_contract(object_id). Read preconditions, effects, invariants.
      - query_snapshot before anything moves.
      - Arm the entry-establishable monitors. Verify each reference_values.
@@ -313,7 +360,11 @@ Then repeat until the run ends:
      - A clause you could not evaluate is a real finding and belongs in the
        record. Silently omitting it makes the verdict look more complete than the
        evidence supports.
-     - Then disarm the step's monitors.
+     - Then disarm this step's monitors and return to waiting.
+     - Recording a verdict ends a step, not the run. Do not stop monitoring
+       because the step plan looks complete: an executor that fails a step may
+       reopen it, and a step you are not waiting for is a step that runs
+       unguarded. Keep waiting until the session ends around you.
 
 6. On timeout:
      - get_execution_state. If the step is current and evidence is flowing, wait
@@ -362,3 +413,6 @@ Producing a verdict that covers only some of the contract's clauses. Every claus
 is evaluated or explicitly declared unevaluable.
 Arming a reference-capturing monitor on inference from the skill stream rather
 than on the phase event that announces the relationship.
+Aborting a run that was merely over rather than one that should not continue.
+Going idle after one verdict when the run is still in progress. A verdict ends a
+step, not the run; keep waiting until the session ends around you.
