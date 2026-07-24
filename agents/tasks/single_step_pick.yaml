@@ -1,19 +1,30 @@
 name: single_step_pick
 instruction_spec: |
-  Pick up green_cube and lift it clear of the table, then hold it steady.
-  Once lifted, green_cube must remain at least 0.05 m above the table
-  surface and must not be released or dropped. red_cube must remain
-  undisturbed for the duration of this task.
+  pick up and hold the green cube 5 cm above its location without disturbing the red cube. 
+
+  Preconditions (step 1, pick_green_cube):
+    - green_cube and red_cube are both present in the scene and localized
+      within their registry position/orientation tolerances.
+    - The gripper is empty (not already holding an object).
+
+  Effects (step 1, pick_green_cube):
+    - The gripper has grasped green_cube: measured gripper width at plateau
+      matches green_cube's registry grasp_width_m within tolerance, and the
+      object has lifted at least its registry lift_height_min_m.
+    - Grasp clamp effort on green_cube never exceeds green_cube's registry
+      max_clamp_effort.
+    - red_cube is undisturbed: its pose has not moved beyond its registry
+      position/orientation tolerance from its pre-step snapshot.
+
+  Preconditions (step 2, hold green cube):
+    - green_cube is grasped and lifted.
 
 step_plan: |
   step_id: pick_green_cube
   object_id: green_cube
   intent: >
     Approach green_cube, establish a secure grasp per its contract, and
-    lift it clear of the table to a stable hold. red_cube must not be
-    touched or displaced at any point during this step. Once the grasp
-    is established, hold position; do not proceed to any placement or
-    transport action.
+    lift it clear of the table to a stable hold 5cm above its initial location. 
 
 object_ids: |
   green_cube — 40 mm cube, graspable
