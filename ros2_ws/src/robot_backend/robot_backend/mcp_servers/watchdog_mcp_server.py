@@ -17,6 +17,7 @@ from robot_backend.mcp_servers import ensure_mcp_server_environment
 ensure_mcp_server_environment("robot_backend.mcp_servers.watchdog_mcp_server")
 
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -113,8 +114,10 @@ def _ensure_watchdog() -> WatchDogContext:
         if not rclpy.ok():
             rclpy.init(args=None)
         node = Node("watchdog_node")
-        executor = MultiThreadedExecutor()
+        executor = MultiThreadedExecutor(num_threads=4)
+        node.get_logger().info("WatchDog executor starting with num_threads=4")
         executor.add_node(node)
+        client_cb_group = MutuallyExclusiveCallbackGroup()
         wake_event = threading.Event()
         registry = _load_registry()
         log_path = os.environ.get(
@@ -127,8 +130,16 @@ def _ensure_watchdog() -> WatchDogContext:
             registry=registry,
             wake_event=wake_event,
         )
-        halt_client = HaltClient(node=node, event_bus=event_bus)
-        ready_client = ReadyClient(node=node, event_bus=event_bus)
+        halt_client = HaltClient(
+            node=node,
+            event_bus=event_bus,
+            callback_group=client_cb_group,
+        )
+        ready_client = ReadyClient(
+            node=node,
+            event_bus=event_bus,
+            callback_group=client_cb_group,
+        )
         engine = MonitorEngine(
             event_bus=event_bus,
             halt_client=halt_client,

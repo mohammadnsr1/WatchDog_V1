@@ -21,6 +21,8 @@ it from ever masquerading as something it isn't.
 
 from __future__ import annotations
 
+import json
+import math
 import traceback
 from dataclasses import dataclass
 from typing import Any
@@ -29,7 +31,7 @@ from agent_harness.config import AgentConfig
 from agent_harness.mcp_client import MCPClientPool, WAIT_FOR_EVENT_TOOL
 from agent_harness.providers import ProviderResponse, get_provider
 from agent_harness.timebase import wall_ns
-from agent_harness.transcript import TranscriptWriter, hash_file
+from agent_harness.transcript import TranscriptWriter, _summarize, hash_file
 
 NUDGE_MESSAGE = (
     "You have not taken any action. If your work is complete, say so plainly. "
@@ -56,6 +58,109 @@ class RunResult:
 
 
 _TRACEBACK_FRAME_LIMIT = 20
+_CONTEXT_ELISION_NOTE = (
+    "The full payload was removed from this conversation to stay within "
+    "the context window. Call this tool again with the same arguments to "
+    "retrieve it if you still need it."
+)
+
+
+def _estimate_message_tokens(messages: list[dict]) -> int:
+    """Conservative provider-neutral estimate for punctuation-dense JSON."""
+    chars = len(json.dumps(messages, default=str, ensure_ascii=False))
+    return math.ceil(chars / 3.5)
+
+
+def _serialized_bytes(value: Any) -> int:
+    return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
+
+
+def _elide_tool_results(
+    messages: list[dict],
+    tool_result_meta: dict[int, tuple[int, dict]],
+    *,
+    current_turn: int,
+    keep_recent_turns: int,
+    context_budget_tokens: int,
+    transcript: TranscriptWriter,
+    aggressive: bool = False,
+) -> int:
+    """Elide eligible tool results oldest-first, mutating no other message."""
+    elision_count = 0
+    for index, message in enumerate(messages):
+        if not aggressive and _estimate_message_tokens(messages) <= context_budget_tokens:
+            break
+        meta = tool_result_meta.get(index)
+        if meta is None or message.get("role") != "tool_result":
+            continue
+        result_turn, arguments = meta
+        if result_turn >= current_turn - keep_recent_turns:
+            continue
+        content = message.get("content")
+        if isinstance(content, dict) and content.get("elided") is True:
+            continue
+
+        before = _estimate_message_tokens(messages)
+        stub = {
+            "elided": True,
+            "reason": "context_budget",
+            "tool": message.get("name", "unknown"),
+            "arguments": arguments,
+            "summary": _summarize(content),
+            "note": _CONTEXT_ELISION_NOTE,
+        }
+        message["content"] = stub
+        after = _estimate_message_tokens(messages)
+        transcript.context_elision(
+            turn=current_turn,
+            tool=str(message.get("name", "unknown")),
+            elided_bytes=_serialized_bytes(content),
+            estimated_tokens_before=before,
+            estimated_tokens_after=after,
+        )
+        elision_count += 1
+    return elision_count
+
+
+def _exception_nodes(error: BaseException):
+    """Yield an exception plus nested groups and cause/context chains."""
+    seen: set[int] = set()
+    pending = [error]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        pending.extend(getattr(current, "exceptions", None) or [])
+        if current.__cause__ is not None:
+            pending.append(current.__cause__)
+        elif current.__context__ is not None:
+            pending.append(current.__context__)
+
+
+def _is_context_length_error(error: BaseException) -> bool:
+    """Detect cross-provider context overflows from HTTP status and text."""
+    nodes = list(_exception_nodes(error))
+    status_codes = {
+        int(code)
+        for node in nodes
+        if (code := getattr(node, "status_code", None)) is not None
+        and str(code).isdigit()
+    }
+    text = " ".join(str(node) for node in nodes).lower()
+    context_text = any(
+        phrase in text
+        for phrase in (
+            "context window",
+            "context length",
+            "maximum context",
+            "too many tokens",
+            "input exceeds",
+            "prompt is too long",
+        )
+    )
+    return any(400 <= code < 500 for code in status_codes) and context_text
 
 
 def _exception_detail(e: BaseException) -> dict:
@@ -174,6 +279,11 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             transcript.tools_discovered(tool_dicts)
 
             messages: list[dict] = [{"role": "user", "content": task_text}]
+            # message index -> (turn produced, original tool arguments).
+            # Kept outside the provider-neutral message schema so providers
+            # never see runner bookkeeping and the arguments in an elision
+            # stub are exactly those from the original call.
+            tool_result_meta: dict[int, tuple[int, dict]] = {}
             consecutive_no_tool_calls = 0
             consecutive_timeouts = 0
             # B1: whether any wait_for_event drain has ever contained a
@@ -197,6 +307,15 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                     break
                 turn_count += 1
 
+                _elide_tool_results(
+                    messages,
+                    tool_result_meta,
+                    current_turn=turn_count,
+                    keep_recent_turns=config.context_keep_recent_turns,
+                    context_budget_tokens=config.context_budget_tokens,
+                    transcript=transcript,
+                )
+
                 transcript.llm_request(
                     turn_count, messages[logged_upto:], len(tool_dicts)
                 )
@@ -206,14 +325,40 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         system_prompt, messages, tool_dicts
                     )
                 except Exception as e:
-                    # Any provider-call failure -- rate limit exhausted after
-                    # retries, auth/schema error, an invalid model name, a
-                    # timeout, or a bug in this harness's provider code --
-                    # ends the run here, labeled for what it is. It must
-                    # never fall through and read as turn-cap exhaustion.
-                    termination_reason = "provider_error"
-                    error_detail = _exception_detail(e)
-                    break
+                    if _is_context_length_error(e):
+                        before = _estimate_message_tokens(messages)
+                        elision_count = _elide_tool_results(
+                            messages,
+                            tool_result_meta,
+                            current_turn=turn_count,
+                            keep_recent_turns=config.context_keep_recent_turns,
+                            context_budget_tokens=config.context_budget_tokens,
+                            transcript=transcript,
+                            aggressive=True,
+                        )
+                        after = _estimate_message_tokens(messages)
+                        transcript.context_overflow_recovery(
+                            turn=turn_count,
+                            estimated_tokens_before=before,
+                            estimated_tokens_after=after,
+                            elision_count=elision_count,
+                        )
+                        try:
+                            response = provider.complete(
+                                system_prompt, messages, tool_dicts
+                            )
+                        except Exception as retry_error:
+                            termination_reason = "provider_error"
+                            error_detail = _exception_detail(retry_error)
+                            break
+                    else:
+                        # Any non-context provider-call failure -- rate limit
+                        # exhausted after retries, auth/schema error, an
+                        # invalid model name, a timeout, or a provider bug --
+                        # ends the run here, labeled for what it is.
+                        termination_reason = "provider_error"
+                        error_detail = _exception_detail(e)
+                        break
 
                 # B1: record the response immediately on return, before any
                 # termination check. A response that arrived is evidence
@@ -274,6 +419,10 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                             "name": tc.name,
                             "content": result,
                         }
+                    )
+                    tool_result_meta[len(messages) - 1] = (
+                        turn_count,
+                        tc.arguments,
                     )
 
                     if tc.name == "record_verdict":

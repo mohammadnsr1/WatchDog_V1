@@ -21,6 +21,8 @@ _EXECUTOR_SERVER_NAMES = {"gripper", "motion", "scene"}
 _VALID_REASONING_EFFORTS = {"minimal", "low", "medium", "high"}
 _DEFAULT_REASONING_EFFORT = "medium"
 _DEFAULT_THINKING_BUDGET_TOKENS = 4096
+_DEFAULT_CONTEXT_BUDGET_TOKENS = 150000
+_DEFAULT_CONTEXT_KEEP_RECENT_TURNS = 5
 
 
 @dataclass
@@ -66,6 +68,8 @@ class AgentConfig:
     # anthropic: extended-thinking token budget. Ignored by the openai
     # provider.
     thinking_budget_tokens: int = _DEFAULT_THINKING_BUDGET_TOKENS
+    context_budget_tokens: int = _DEFAULT_CONTEXT_BUDGET_TOKENS
+    context_keep_recent_turns: int = _DEFAULT_CONTEXT_KEEP_RECENT_TURNS
 
     @property
     def api_key(self) -> str:
@@ -235,6 +239,24 @@ def load_config(config_path: str | Path) -> AgentConfig:
             f"would otherwise fail at request time with an opaque provider error."
         )
 
+    context_budget_tokens = int(
+        raw.get("context_budget_tokens", _DEFAULT_CONTEXT_BUDGET_TOKENS)
+    )
+    if context_budget_tokens <= 0:
+        raise ValueError(
+            f"{config_path}: context_budget_tokens must be positive, got "
+            f"{context_budget_tokens!r}."
+        )
+
+    context_keep_recent_turns = int(
+        raw.get("context_keep_recent_turns", _DEFAULT_CONTEXT_KEEP_RECENT_TURNS)
+    )
+    if context_keep_recent_turns < 1:
+        raise ValueError(
+            f"{config_path}: context_keep_recent_turns must be at least 1, got "
+            f"{context_keep_recent_turns!r}."
+        )
+
     transcript_dir = resolve_relative(raw["transcript_dir"])
     transcript_dir.mkdir(parents=True, exist_ok=True)
 
@@ -254,4 +276,6 @@ def load_config(config_path: str | Path) -> AgentConfig:
         gate_timeout_sec=gate_timeout_sec,
         reasoning_effort=reasoning_effort,
         thinking_budget_tokens=thinking_budget_tokens,
+        context_budget_tokens=context_budget_tokens,
+        context_keep_recent_turns=context_keep_recent_turns,
     )

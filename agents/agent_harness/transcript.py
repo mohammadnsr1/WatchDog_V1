@@ -295,6 +295,41 @@ class TranscriptWriter:
             fields["result"] = redacted
         self._write("tool_result", **fields)
 
+    def context_elision(
+        self,
+        turn: int,
+        tool: str,
+        elided_bytes: int,
+        estimated_tokens_before: int,
+        estimated_tokens_after: int,
+    ) -> None:
+        """Record one outbound-history tool-result elision."""
+        self._write(
+            "context_elision",
+            turn=turn,
+            tool=tool,
+            elided_bytes=elided_bytes,
+            estimated_tokens_before=estimated_tokens_before,
+            estimated_tokens_after=estimated_tokens_after,
+        )
+
+    def context_overflow_recovery(
+        self,
+        turn: int,
+        estimated_tokens_before: int,
+        estimated_tokens_after: int,
+        elision_count: int,
+    ) -> None:
+        """Record the single aggressive retry after a context-length error."""
+        self._write(
+            "context_overflow_recovery",
+            turn=turn,
+            retry=1,
+            estimated_tokens_before=estimated_tokens_before,
+            estimated_tokens_after=estimated_tokens_after,
+            elision_count=elision_count,
+        )
+
     def run_end(
         self,
         termination_reason: str,

@@ -15,7 +15,7 @@ RUNG 0 — recorder alive, no robot:
 RUNG 1 — halt path alone, no monitors:
   Start a long arm motion, halt it mid-flight, and check three things:
     1. does HaltClient.halt() return ok=True (MoveGroup cancel accepted),
-    2. does it return PROMPTLY, or does it hit its 2 s timeout — the flagged
+    2. does it return PROMPTLY, or does it hit its 1 s timeout — the flagged
        risk is that halt() blocks a MultiThreadedExecutor worker waiting on
        the cancel-service response while other callbacks occupy the pool,
     3. did the arm ACTUALLY stop — verified from the recorder's own joint
@@ -53,6 +53,7 @@ from pathlib import Path
 from typing import Any
 
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
@@ -85,7 +86,7 @@ MIN_TF_RATE_HZ = 10.0
 
 # Rung 1
 HALT_DELAY_SEC = 2.0        # how long into the motion to fire the halt
-HALT_LATENCY_BUDGET_SEC = 1.0   # halt() should return well inside its own 2 s timeout
+HALT_LATENCY_BUDGET_SEC = 1.0   # halt() should return inside its own 1 s timeout
 STOP_OBSERVE_SEC = 1.5      # how long to watch joints after halt
 STOP_SETTLE_SEC = 0.4       # ignore this much right after halt (deceleration)
 STOP_EPSILON_RAD = 0.01     # max joint travel that still counts as "stopped"
@@ -120,7 +121,7 @@ class WatchDogHarness:
 
     def __init__(self, log_dir: Path) -> None:
         self.node = Node("watchdog_smoke_test_node")
-        self.executor = MultiThreadedExecutor()
+        self.executor = MultiThreadedExecutor(num_threads=4)
         self.executor.add_node(self.node)
         self.registry = _load_registry()
         self.event_bus = EventBus(
@@ -128,7 +129,12 @@ class WatchDogHarness:
             log_path=str(log_dir / "smoke_watchdog.jsonl"),
         )
         self.recorder = EvidenceRecorder(node=self.node, registry=self.registry)
-        self.halt_client = HaltClient(node=self.node, event_bus=self.event_bus)
+        self.client_cb_group = MutuallyExclusiveCallbackGroup()
+        self.halt_client = HaltClient(
+            node=self.node,
+            event_bus=self.event_bus,
+            callback_group=self.client_cb_group,
+        )
         # engine intentionally left unset: Rung 1 halts manually, no monitors.
         self.thread = threading.Thread(target=self.executor.spin, daemon=True)
         self.thread.start()

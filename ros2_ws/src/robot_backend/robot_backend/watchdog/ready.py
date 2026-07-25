@@ -19,9 +19,16 @@ from robot_backend.events.schema import WatchDogReadyPayload, make_event
 class ReadyClient:
     """Signal readiness to the cell's orchestrator, for a run, step, or phase."""
 
-    def __init__(self, node: Any, event_bus: Any, timeout_sec: float = 5.0) -> None:
+    def __init__(
+        self,
+        node: Any,
+        event_bus: Any,
+        callback_group: Any,
+        timeout_sec: float = 5.0,
+    ) -> None:
         self.node = node
         self.event_bus = event_bus
+        self._callback_group = callback_group
         self.timeout_sec = timeout_sec
         self._client: Any | None = None
         self._SignalReady: Any | None = None
@@ -81,7 +88,11 @@ class ReadyClient:
                 return
             from cell_sync_interfaces.srv import SignalReady
 
-            self._client = self.node.create_client(SignalReady, "/cell/signal_ready")
+            self._client = self.node.create_client(
+                SignalReady,
+                "/cell/signal_ready",
+                callback_group=self._callback_group,
+            )
             self._SignalReady = SignalReady
 
     def _publish_ready(

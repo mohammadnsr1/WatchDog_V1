@@ -3,6 +3,8 @@ provider: openai
 model: gpt-5
 api_key_env: OPENAI_API_KEY
 max_tokens: 8192
+context_budget_tokens: 150000      # elide when the estimate exceeds this
+context_keep_recent_turns: 5       # never elide within this many turns
 
 # reasoning_effort: openai only (minimal | low | medium | high), ignored by
 # the anthropic provider. thinking_budget_tokens: anthropic only, ignored by

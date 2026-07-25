@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any
 
 from robot_backend.events.schema import HaltPayload, make_event
@@ -11,9 +12,16 @@ from robot_backend.events.schema import HaltPayload, make_event
 class HaltClient:
     """Cancel MoveGroup goals without issuing any replacement motion."""
 
-    def __init__(self, node: Any, event_bus: Any, timeout_sec: float = 2.0) -> None:
+    def __init__(
+        self,
+        node: Any,
+        event_bus: Any,
+        callback_group: Any,
+        timeout_sec: float = 1.0,
+    ) -> None:
         self.node = node
         self.event_bus = event_bus
+        self._callback_group = callback_group
         self.timeout_sec = timeout_sec
         self._action_client: Any | None = None
         self._cancel_client: Any | None = None
@@ -30,6 +38,8 @@ class HaltClient:
         # alone cannot tell "cancel succeeded, N goals stopped" apart from
         # "cancel succeeded, nothing was active to stop".
         goals_cancelled: int | None = None
+        elapsed_sec: float | None = None
+        call_started: float | None = None
         try:
             self._ensure_clients()
             if self._cancel_client is None or self._CancelGoal is None or self._GoalInfo is None:
@@ -41,14 +51,17 @@ class HaltClient:
             request.goal_info.goal_id.uuid = [0] * 16
             done = threading.Event()
             holder: dict[str, Any] = {}
+            call_started = time.monotonic()
             future = self._cancel_client.call_async(request)
 
             def _done(fut: Any) -> None:
                 holder["future"] = fut
+                holder["elapsed_sec"] = time.monotonic() - call_started
                 done.set()
 
             future.add_done_callback(_done)
             if done.wait(self.timeout_sec):
+                elapsed_sec = holder["elapsed_sec"]
                 result = future.result()
                 return_code = getattr(result, "return_code", None)
                 canceling = list(getattr(result, "goals_canceling", []) or [])
@@ -59,12 +72,20 @@ class HaltClient:
                     f"goals_canceling={goals_cancelled}"
                 )
             else:
+                elapsed_sec = time.monotonic() - call_started
                 cancel_detail = f"cancel-all timed out after {self.timeout_sec:.1f}s"
         except Exception as exc:
+            if call_started is not None and elapsed_sec is None:
+                elapsed_sec = time.monotonic() - call_started
             cancel_detail = str(exc)
         finally:
             self._publish_halt(step_id, monitor_id, detail)
-        return {"ok": bool(ok), "detail": cancel_detail, "goals_cancelled": goals_cancelled}
+        return {
+            "ok": bool(ok),
+            "detail": cancel_detail,
+            "goals_cancelled": goals_cancelled,
+            "elapsed_sec": elapsed_sec,
+        }
 
     def _ensure_clients(self) -> None:
         with self._lock:
@@ -79,7 +100,9 @@ class HaltClient:
             # uses the action cancel service with an all-zero GoalInfo goal_id.
             self._action_client = ActionClient(self.node, MoveGroup, "/move_action")
             self._cancel_client = self.node.create_client(
-                CancelGoal, "/move_action/_action/cancel_goal"
+                CancelGoal,
+                "/move_action/_action/cancel_goal",
+                callback_group=self._callback_group,
             )
             self._CancelGoal = CancelGoal
             self._GoalInfo = GoalInfo
