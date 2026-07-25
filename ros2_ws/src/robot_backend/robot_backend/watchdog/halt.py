@@ -87,6 +87,10 @@ class HaltClient:
             "elapsed_sec": elapsed_sec,
         }
 
+    def prewarm(self) -> None:
+        """Construct ROS clients before a monitor callback needs them."""
+        self._ensure_clients()
+
     def _ensure_clients(self) -> None:
         with self._lock:
             if self._cancel_client is not None:

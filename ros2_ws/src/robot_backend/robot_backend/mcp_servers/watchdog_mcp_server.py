@@ -149,6 +149,20 @@ def _ensure_watchdog() -> WatchDogContext:
         recorder.engine = engine
         thread = threading.Thread(target=executor.spin, daemon=True)
         thread.start()
+        # Prewarm client construction outside recorder callbacks. Left lazy,
+        # the first halt pays ROS interface imports and client construction
+        # inside /joint_states handling, creating a measured 0.17-0.26 s hole
+        # in evidence around the fire despite a millisecond-scale cancel call.
+        # Failures remain non-fatal: halt()/signal() retain their guarded lazy
+        # initialization as the fallback.
+        try:
+            halt_client.prewarm()
+        except Exception as exc:
+            node.get_logger().warning(f"halt client prewarm failed: {exc}")
+        try:
+            ready_client.prewarm()
+        except Exception as exc:
+            node.get_logger().warning(f"ready client prewarm failed: {exc}")
         _CONTEXT = WatchDogContext(
             node=node,
             executor=executor,

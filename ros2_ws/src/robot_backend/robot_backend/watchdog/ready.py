@@ -82,6 +82,10 @@ class ReadyClient:
             self._publish_ready(scope, step_id, phase)
         return {"ok": bool(ok), "message": message}
 
+    def prewarm(self) -> None:
+        """Construct the ROS service client before its first signal."""
+        self._ensure_client()
+
     def _ensure_client(self) -> None:
         with self._lock:
             if self._client is not None:

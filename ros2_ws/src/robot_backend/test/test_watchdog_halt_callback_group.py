@@ -43,11 +43,7 @@ def test_halt_response_completes_while_joint_callback_is_blocked() -> None:
         response.goals_canceling = []
         return response
 
-    cancel_service = stub_node.create_service(
-        CancelGoal,
-        "/move_action/_action/cancel_goal",
-        _cancel,
-    )
+    cancel_service = None
     publisher = stub_node.create_publisher(JointState, "/joint_states", 10)
     bus = _RecordingBus()
     client_group = MutuallyExclusiveCallbackGroup()
@@ -77,6 +73,15 @@ def test_halt_response_completes_while_joint_callback_is_blocked() -> None:
     executor.add_node(stub_node)
     spin_thread.start()
     try:
+        # Prewarming constructs the client without requiring its service to
+        # exist. Bring the stub service up afterward to verify the same client
+        # still completes a later subscription-originated halt.
+        halt_client.prewarm()
+        cancel_service = stub_node.create_service(
+            CancelGoal,
+            "/move_action/_action/cancel_goal",
+            _cancel,
+        )
         deadline = time.monotonic() + 2.0
         while publisher.get_subscription_count() < 1 and time.monotonic() < deadline:
             time.sleep(0.01)
@@ -137,6 +142,7 @@ def test_halt_response_completes_while_joint_callback_is_blocked() -> None:
         executor.shutdown(timeout_sec=2.0)
         spin_thread.join(timeout=2.0)
         watchdog_node.destroy_node()
-        stub_node.destroy_service(cancel_service)
+        if cancel_service is not None:
+            stub_node.destroy_service(cancel_service)
         stub_node.destroy_node()
         context.shutdown()
