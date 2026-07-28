@@ -86,7 +86,7 @@ def test_ensure_session_dir_env(monkeypatch, isolated_session, tmp_path):
 def test_event_log_default_routes_into_active_session(monkeypatch, isolated_session, tmp_path):
     monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path / "s"))
     assert sess.event_log_default("scene") == str(tmp_path / "s" / "events_scene.jsonl")
-    assert sess.monitor_log_default() == str(tmp_path / "s" / "monitor_events.jsonl")
+    assert sess.monitor_log_default() == str(tmp_path / "s" / "events_watchdog.jsonl")
     assert sess.orchestrator_log_dir_default() == str(tmp_path / "s" / "orchestrator")
 
 

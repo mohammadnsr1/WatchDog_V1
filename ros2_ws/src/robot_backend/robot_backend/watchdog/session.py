@@ -152,9 +152,13 @@ def event_log_default(server_name: str) -> str:
 
 
 def monitor_log_default() -> str:
-    """Default monitor_events.jsonl path for the WatchDog server."""
+    """Default events_watchdog.jsonl path for the WatchDog server.
+
+    Named to match the executor servers' events_<name>.jsonl convention, so all
+    four per-process logs sort together in the session directory.
+    """
     base = active_session_dir() or (Path.home() / ".watchdog")
-    return str(base / "monitor_events.jsonl")
+    return str(base / "events_watchdog.jsonl")
 
 
 def orchestrator_log_dir_default() -> str:

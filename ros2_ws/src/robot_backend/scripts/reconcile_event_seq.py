@@ -26,10 +26,10 @@ Reconcile one or more per-process logs against that capture afterward:
 
     python3 reconcile_event_seq.py check \\
         --topic-capture capture.jsonl \\
-        --process-log ~/.watchdog/events_scene.jsonl \\
-        --process-log ~/.watchdog/events_gripper.jsonl \\
-        --process-log ~/.watchdog/events_motion.jsonl \\
-        --process-log ~/.watchdog/monitor_events.jsonl
+        --process-log <session_dir>/events_scene.jsonl \\
+        --process-log <session_dir>/events_gripper.jsonl \\
+        --process-log <session_dir>/events_motion.jsonl \\
+        --process-log <session_dir>/events_watchdog.jsonl
 
 Exit code is 0 if every process log reconciles with no gaps, 1 otherwise --
 suitable for wiring into a CI-style post-run check.

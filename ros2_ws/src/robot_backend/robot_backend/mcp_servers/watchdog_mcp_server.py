@@ -239,7 +239,7 @@ def _ensure_watchdog() -> WatchDogContext:
         registry = _load_registry()
         session_dir = session_helper.ensure_session_dir()
         # Explicit WATCHDOG_MONITOR_LOG still wins; otherwise the log defaults
-        # into the session dir (monitor_events.jsonl) so this process's events
+        # into the session dir (events_watchdog.jsonl) so this process's events
         # sit alongside the rest of the run's record. See session.py.
         log_path = os.environ.get(
             "WATCHDOG_MONITOR_LOG",

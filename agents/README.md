@@ -420,7 +420,7 @@ Each of these is a gate — do them in order before trusting a full run:
    call, restart the echo, make a third — the gap in `seq` should make the
    missed event obvious.
    - **1b, JSONL stamping.** After any tool call, `cat` the fresh
-     `events_*.jsonl` (or `monitor_events.jsonl`) this process wrote and
+     `events_*.jsonl` (e.g. `events_watchdog.jsonl`) this process wrote and
      confirm `seq` and `subscriber_count` are present on *every* line, not
      just on what the topic delivered — the reconciliation script (see "MCP
      client timeout vs. gate timeout" above) compares these two, and the
