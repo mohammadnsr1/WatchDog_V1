@@ -50,6 +50,7 @@ from robot_backend.cell.gate import request_go
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
+from robot_backend.watchdog import session as session_helper
 from robot_backend.skills.maintenance_skills import get_scene_summary as get_scene_summary_skill
 from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
 from robot_backend.skills.maintenance_skills import reset_object_state as reset_object_state_skill
@@ -104,7 +105,7 @@ def _ensure_backend():
     # JSONL file is a per-process crash-survival artifact, not the merge point.
     log_path = os.environ.get(
         "WATCHDOG_EVENT_LOG",
-        str(Path.home() / ".watchdog" / "events_scene.jsonl"),
+        session_helper.event_log_default("scene"),
     )
     configure_bus(node=_NODE, log_path=log_path)
     if _REGISTRY is None:

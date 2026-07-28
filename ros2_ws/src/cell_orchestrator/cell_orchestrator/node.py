@@ -68,6 +68,7 @@ codes reach the executor and the log:
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -90,7 +91,23 @@ except ImportError:
     # installed `ros2 run cell_orchestrator orchestrator_node` entry point.
     from timebase import wall_ns
 
-_DEFAULT_LOG_DIR = Path.home() / ".watchdog" / "orchestrator"
+
+def _default_log_dir() -> Path:
+    """Default orchestrator log dir, honoring WATCHDOG_SESSION_DIR.
+
+    Inlined here rather than imported from robot_backend.watchdog.session: this
+    package deliberately depends only on rclpy and cell_sync_interfaces (see the
+    module docstring) and must not pull in robot_backend. When bringup launches
+    this node it passes an explicit log_dir already rooted in the session, so
+    this default matters mainly for a direct `ros2 run` of the orchestrator.
+    """
+    session = os.environ.get("WATCHDOG_SESSION_DIR")
+    if session and session.strip():
+        return Path(os.path.expanduser(session.strip())) / "orchestrator"
+    return Path.home() / ".watchdog" / "orchestrator"
+
+
+_DEFAULT_LOG_DIR = _default_log_dir()
 _DEFAULT_GATE_TIMEOUT_SEC = 90.0
 _DEFAULT_GUARD_MODE = "guarded"
 _VALID_GUARD_MODES = {"guarded", "unguarded"}

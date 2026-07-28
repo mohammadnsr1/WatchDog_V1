@@ -1,5 +1,17 @@
+import os
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    LogInfo,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -7,9 +19,83 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
+# Core topics recorded on every session. Small (a few MB for a whole run) and
+# the shared correlation axis for the whole record.
+_CORE_BAG_TOPICS = ["/joint_states", "/tf", "/tf_static", "/watchdog/events"]
+# RGB image topics, recorded only when record_images is true. No throttle layer
+# is added -- the source already publishes slowly (~4.6 Hz); recording the
+# topic directly is correct here. There is no depth *image* topic on this cell.
+_IMAGE_BAG_TOPICS = ["/camera/depth/rgb", "/camera_info"]
+# Point cloud, recorded only when record_pointcloud is true. ~4x the cost of
+# RGB for data a frame-inspecting analyst does not use, so it is off by default.
+_POINTCLOUD_BAG_TOPICS = ["/camera/depth/points"]
+
 
 def _is_truthy(value: str) -> bool:
     return value.lower() in {"true", "1", "yes", "on"}
+
+
+def _resolve_session_dir(context) -> Path:
+    """Resolve the session dir: explicit session_dir arg, else WATCHDOG_SESSION_DIR
+    already in the environment, else a fresh ~/.watchdog/sessions/<UTC> default."""
+    explicit = LaunchConfiguration("session_dir").perform(context).strip()
+    if explicit:
+        return Path(os.path.expanduser(explicit))
+    from_env = os.environ.get("WATCHDOG_SESSION_DIR", "").strip()
+    if from_env:
+        return Path(os.path.expanduser(from_env))
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return Path.home() / ".watchdog" / "sessions" / stamp
+
+
+def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded, record_pointcloud):
+    """Write manifest.json for this session (best effort; never fails bringup).
+
+    Imports robot_backend.watchdog.session so the atomic/idempotent write and
+    the registry embedding live in one place. If robot_backend is not on the
+    path, logs and skips -- the recording still happens; only the manifest is
+    absent.
+    """
+    try:
+        from robot_backend.watchdog import session as sess
+        from robot_backend.watchdog.recorder import _load_registry
+    except Exception as exc:  # pragma: no cover - depends on overlay
+        return LogInfo(msg=f"Session manifest skipped (robot_backend import failed: {exc}).")
+
+    try:
+        registry = _load_registry()
+    except Exception as exc:  # pragma: no cover
+        registry = {}
+        registry_path = None
+        registry_sha = None
+        _ = exc
+    else:
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            registry_path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+            if not registry_path.is_file():
+                registry_path = None
+        except Exception:
+            registry_path = None
+        registry_sha = sess.sha256_file(registry_path) if registry_path else None
+
+    image_hz = float(LaunchConfiguration("image_buffer_hz").perform(context) or 5.0)
+    try:
+        sess.write_manifest(
+            session_dir,
+            registry=registry,
+            registry_path=registry_path,
+            registry_sha256=registry_sha,
+            started_wall_ns=time.time_ns(),
+            recorded_topics=recorded_topics,
+            images_recorded=images_recorded,
+            image_throttle_hz=image_hz,
+            record_pointcloud=record_pointcloud,
+            git_commit_value=sess.git_commit(),
+        )
+    except Exception as exc:  # pragma: no cover
+        return LogInfo(msg=f"Session manifest write failed: {exc}")
+    return LogInfo(msg=f"Session manifest written to {session_dir / 'manifest.json'}")
 
 
 def _launch_setup(context):
@@ -39,7 +125,6 @@ def _launch_setup(context):
     start_orchestrator = LaunchConfiguration("start_orchestrator")
     guard_mode = LaunchConfiguration("guard_mode")
     gate_timeout_sec = LaunchConfiguration("gate_timeout_sec")
-    orchestrator_log_dir = LaunchConfiguration("orchestrator_log_dir")
     start_rg2_controller = LaunchConfiguration("start_rg2_controller")
     rg2_open_position = LaunchConfiguration("rg2_open_position")
     rg2_close_position = LaunchConfiguration("rg2_close_position")
@@ -56,7 +141,41 @@ def _launch_setup(context):
     direct_topic_value = pointcloud_topic.perform(context)
     target_frame_value = target_frame.perform(context).strip()
     moveit_pointcloud_topic = filtered_topic_value if filter_enabled else direct_topic_value
+
+    # -- Session recording (Part B/C) ------------------------------------
+    session_dir = _resolve_session_dir(context)
+    session_dir.mkdir(parents=True, exist_ok=True)
+    record_session = _is_truthy(LaunchConfiguration("record_session").perform(context))
+    record_images = _is_truthy(LaunchConfiguration("record_images").perform(context))
+    record_pointcloud = _is_truthy(LaunchConfiguration("record_pointcloud").perform(context))
+
+    bag_topics = list(_CORE_BAG_TOPICS)
+    if record_images:
+        bag_topics += _IMAGE_BAG_TOPICS
+    if record_pointcloud:
+        bag_topics += _POINTCLOUD_BAG_TOPICS
+
+    # The orchestrator log lives under the session dir unless the operator
+    # overrode orchestrator_log_dir explicitly (non-empty).
+    orch_log_override = LaunchConfiguration("orchestrator_log_dir").perform(context).strip()
+    orchestrator_log_dir_value = orch_log_override or str(session_dir / "orchestrator")
+
     actions = [
+        # Every child process launched here inherits WATCHDOG_SESSION_DIR, so
+        # the scene_tf_sync node, the orchestrator, and (when started from the
+        # same shell) the agents' MCP servers all root their artifacts in one
+        # session. Export the printed value into the shell that launches the
+        # agents so their MCP servers join the same session.
+        SetEnvironmentVariable("WATCHDOG_SESSION_DIR", str(session_dir)),
+        LogInfo(msg=f"WATCHDOG_SESSION_DIR={session_dir}"),
+        LogInfo(
+            msg=(
+                "Export this same WATCHDOG_SESSION_DIR in the shell that starts "
+                "the agents so their MCP server event logs join this session: "
+                f"export WATCHDOG_SESSION_DIR={session_dir}"
+            )
+        ),
+        _write_manifest(session_dir, context, bag_topics, record_images, record_pointcloud),
         LogInfo(msg="Isaac Sim must already be running and simulation must be playing."),
         LogInfo(
             msg=(
@@ -160,9 +279,28 @@ def _launch_setup(context):
             launch_arguments={
                 "guard_mode": guard_mode,
                 "gate_timeout_sec": gate_timeout_sec,
-                "log_dir": orchestrator_log_dir,
+                "log_dir": orchestrator_log_dir_value,
             }.items(),
             condition=IfCondition(start_orchestrator),
+        ),
+        # Session recording. rosbag2 stamps recv_timestamp from the SYSTEM
+        # clock even under use_sim_time -- so this recorder is deliberately NOT
+        # told use_sim_time, keeping it on system time (recv_timestamp) while
+        # the rest of the graph runs on sim time. Correlation uses
+        # recv_timestamp only; message header.stamp is sim time and resets to
+        # zero each run (see manifest clock block). Core topics are always
+        # recorded; images/pointcloud are opt-in.
+        ExecuteProcess(
+            cmd=["ros2", "bag", "record", "-o", str(session_dir / "bag"), *bag_topics],
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("record_session")),
+        ),
+        LogInfo(
+            msg=(
+                f"Session bag: recording {bag_topics} to {session_dir / 'bag'} "
+                f"(record_session={record_session}, record_images={record_images}, "
+                f"record_pointcloud={record_pointcloud})."
+            )
         ),
         LogInfo(
             msg=(
@@ -327,8 +465,58 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "orchestrator_log_dir",
-                default_value="~/.watchdog/orchestrator",
-                description="Passed through to cell_orchestrator as its JSONL transition log directory.",
+                default_value="",
+                description=(
+                    "Orchestrator JSONL transition log directory. Empty (default) "
+                    "routes it under the session directory (<session>/orchestrator); "
+                    "set it to override with an explicit path."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "session_dir",
+                default_value="",
+                description=(
+                    "Session directory for this run's recorded artifacts (bag, "
+                    "manifest, per-process event logs, orchestrator log). Empty "
+                    "(default) uses WATCHDOG_SESSION_DIR from the environment if "
+                    "set, else a fresh ~/.watchdog/sessions/<UTC> path. The chosen "
+                    "value is exported as WATCHDOG_SESSION_DIR for child processes; "
+                    "export the same value in the shell that launches the agents."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "record_session",
+                default_value="true",
+                description=(
+                    "Record the core session bag (/joint_states, /tf, /tf_static, "
+                    "/watchdog/events) to <session>/bag. A few MB for a whole run."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "record_images",
+                default_value="false",
+                description=(
+                    "Also record RGB camera topics (/camera/depth/rgb, /camera_info) "
+                    "to the session bag. ~180 MB/min. Off by default."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "record_pointcloud",
+                default_value="false",
+                description=(
+                    "Also record /camera/depth/points to the session bag. ~4x the "
+                    "cost of RGB for data a frame-inspecting analyst does not use. "
+                    "Off by default."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "image_buffer_hz",
+                default_value="5.0",
+                description=(
+                    "WatchDog image ring-buffer throttle rate, recorded in the "
+                    "manifest. Informational at the launch level; the WatchDog MCP "
+                    "server reads WATCHDOG_IMAGE_BUFFER_HZ at runtime."
+                ),
             ),
             DeclareLaunchArgument(
                 "start_rg2_controller",

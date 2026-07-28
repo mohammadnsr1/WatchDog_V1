@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import json
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,11 +32,42 @@ TF_SAMPLE_HZ = 20.0
 # WatchDog ever publishes it, and the agent already learns of the halt
 # through that same monitor_fire fire (action_taken/halt_result) -- a
 # separate wake on its own echo would burn a turn for no new information.
+# frames_captured is here for the same reason: capture_frames is WatchDog's own
+# output (see FramesCapturedPayload), and waking the agent on its own capture
+# would waste a turn on something it just did.
 _SELF_EMITTED_EVENT_TYPES = frozenset(
-    {"watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict", "halt"}
+    {
+        "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict", "halt",
+        "frames_captured",
+    }
 )
-MAX_JOINT_SAMPLES = 60 * 60 * 10  # 60 Hz * 60 sec/min * 10 min.
-MAX_TF_SAMPLES = int(TF_SAMPLE_HZ * 60 * 10)  # 20 Hz * 60 sec/min * 10 min.
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive-int override from the environment, or return default.
+
+    A missing, empty, non-integer, or non-positive value falls back to the
+    default rather than raising -- a misconfigured env var must not stop the
+    recorder from starting.
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+# In-memory buffer ceilings. Configurable via env so a run longer than the
+# default cannot lose an early window while still running (get_evidence reads
+# these deques, not the bag). Defaults sized for ~1 hour: /joint_states was
+# measured at ~51 Hz average (with gaps up to 0.333 s under load), TF at 20 Hz.
+# Memory cost is tens of MB, negligible beside Isaac Sim. The bag, not these
+# buffers, is the complete post-hoc record; these serve live monitoring only.
+MAX_JOINT_SAMPLES = _env_int("WATCHDOG_MAX_JOINT_SAMPLES", 216000)  # ~1 h @ ~51 Hz + headroom
+MAX_TF_SAMPLES = _env_int("WATCHDOG_MAX_TF_SAMPLES", 72000)  # 1 h @ 20 Hz
 
 _DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
@@ -175,12 +207,20 @@ class EvidenceRecorder:
         self.registry = registry if registry is not None else _load_registry(registry_path)
         self.object_frames = _enabled_object_frames(self.registry)
         self.cell_frames = _cell_frame_ids(self.registry)
-        self.joint_samples: collections.deque[Any] = collections.deque(maxlen=MAX_JOINT_SAMPLES)
+        # Read the env-configurable ceilings once, at construction, so a test
+        # (or a run) can raise them without re-importing the module. The module
+        # constants are the defaults.
+        self.max_joint_samples = _env_int("WATCHDOG_MAX_JOINT_SAMPLES", MAX_JOINT_SAMPLES)
+        self.max_tf_samples = _env_int("WATCHDOG_MAX_TF_SAMPLES", MAX_TF_SAMPLES)
+        self.joint_samples: collections.deque[Any] = collections.deque(
+            maxlen=self.max_joint_samples
+        )
         self.object_pose_samples: dict[str, collections.deque[Any]] = {
-            oid: collections.deque(maxlen=MAX_TF_SAMPLES) for oid in self.object_frames
+            oid: collections.deque(maxlen=self.max_tf_samples) for oid in self.object_frames
         }
         self.frame_samples: dict[str, collections.deque[Any]] = {
-            frame_id: collections.deque(maxlen=MAX_TF_SAMPLES) for frame_id in self.cell_frames
+            frame_id: collections.deque(maxlen=self.max_tf_samples)
+            for frame_id in self.cell_frames
         }
         self.events: collections.deque[dict[str, Any]] = collections.deque(maxlen=5000)
         self._wait_events: collections.deque[dict[str, Any]] = collections.deque(maxlen=1000)
@@ -264,7 +304,7 @@ class EvidenceRecorder:
                     pose = self._transform_to_pose_tuple(tick_wall_ns, object_id, transform)
                     with self.lock:
                         self.object_pose_samples.setdefault(
-                            object_id, collections.deque(maxlen=MAX_TF_SAMPLES)
+                            object_id, collections.deque(maxlen=self.max_tf_samples)
                         ).append(pose)
                 except Exception:
                     with self.lock:
@@ -278,7 +318,7 @@ class EvidenceRecorder:
                     pose = self._transform_to_pose_tuple(tick_wall_ns, frame_id, transform)
                     with self.lock:
                         self.frame_samples.setdefault(
-                            frame_id, collections.deque(maxlen=MAX_TF_SAMPLES)
+                            frame_id, collections.deque(maxlen=self.max_tf_samples)
                         ).append(pose)
                 except Exception:
                     with self.lock:

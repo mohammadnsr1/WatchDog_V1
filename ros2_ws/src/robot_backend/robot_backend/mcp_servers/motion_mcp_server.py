@@ -34,6 +34,7 @@ from rclpy.node import Node
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
+from robot_backend.watchdog import session as session_helper
 from robot_backend.utils.geometry import compose_poses, make_pose
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
@@ -82,7 +83,7 @@ def _ensure_backend():
     # JSONL file is a per-process crash-survival artifact, not the merge point.
     log_path = os.environ.get(
         "WATCHDOG_EVENT_LOG",
-        str(Path.home() / ".watchdog" / "events_motion.jsonl"),
+        session_helper.event_log_default("motion"),
     )
     configure_bus(node=_NODE, log_path=log_path)
     _BACKEND = create_ros_moveit_backend(node=_NODE)

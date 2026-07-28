@@ -192,6 +192,28 @@ class WatchDogReadyPayload(BaseModel):
     phase: str | None = None
 
 
+class FramesCapturedPayload(BaseModel):
+    """WatchDog preserved buffered camera frames to the session record.
+
+    Emitted by capture_frames so a visual-evidence capture appears on the
+    shared timeline alongside every other event. WatchDog's own output: it is
+    in _SELF_EMITTED_EVENT_TYPES and must not wake the agent. The frames
+    themselves live on disk under output_dir; this payload only records that a
+    capture happened, for which window, and how much it covered.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    output_dir: str
+    frame_count: int
+    requested_start_wall_ns: int
+    requested_end_wall_ns: int
+    covered_start_wall_ns: int | None = None
+    covered_end_wall_ns: int | None = None
+    label: str | None = None
+    step_id: str | None = None
+
+
 class EventEnvelope(BaseModel):
     """Top-level wrapper shared by all event types.
 
@@ -226,6 +248,7 @@ class EventEnvelope(BaseModel):
         "verdict",
         "phase",
         "watchdog_ready",
+        "frames_captured",
     ]
     timestamp_ns: int
     wall_time_iso: str
@@ -243,7 +266,10 @@ _EXECUTOR_EVENT_TYPES = frozenset(
     {"begin_step", "end_step", "skill_start", "skill_end", "phase"}
 )
 _WATCHDOG_EVENT_TYPES = frozenset(
-    {"monitor_fire", "monitor_armed", "monitor_disarmed", "halt", "verdict", "watchdog_ready"}
+    {
+        "monitor_fire", "monitor_armed", "monitor_disarmed", "halt", "verdict",
+        "watchdog_ready", "frames_captured",
+    }
 )
 
 # event_type -> its payload model. The single source _available_event_types()
@@ -261,6 +287,7 @@ EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
     "verdict": VerdictPayload,
     "phase": PhasePayload,
     "watchdog_ready": WatchDogReadyPayload,
+    "frames_captured": FramesCapturedPayload,
 }
 
 # The event_type vocabulary itself, read off EventEnvelope's own Literal

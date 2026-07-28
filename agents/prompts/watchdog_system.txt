@@ -102,6 +102,19 @@ get_evidence(start_wall_ns, end_wall_ns, channels, object_ids, frame_ids,
     the rest of the run, so a habit of broad requests will exhaust it before the
     run ends.
 
+capture_frames(start_wall_ns, end_wall_ns, max_frames, label)
+    Preserve buffered camera frames from a wall-clock window to the session
+    record. Use it when something happened that later analysis will want to see:
+    around a monitor fire, or across a phase whose physical outcome your other
+    evidence describes only indirectly.
+
+    You cannot see these frames. This tool writes them to disk for later
+    analysis; it does not return images and it does not inform your verdict.
+    Your verdict rests on the evidence you can actually read.
+
+    The buffer holds only the recent past, so capture soon after the moment you
+    care about rather than at the end of a step.
+
 halt_execution(detail)
     Your own halt, for a violation no armed primitive covers. A monitor armed
     with halt_on_fire=True has already halted before you see its fire.
@@ -325,6 +338,9 @@ Then repeat until the run ends:
      - get_evidence over a window bracketing trigger_wall_ns on the channels the
        clause concerns, so you see the approach to the violation and not only
        the instant of it.
+     - Consider capture_frames over the same window. A fire is exactly the kind
+       of moment later analysis will want to look at, and the buffer will not
+       hold it indefinitely.
      - Adjudicate, and carry the finding forward into the step's verdict:
          non_conformant   the specification was violated.
          valid_variation  the specification permits this. Name the clause that

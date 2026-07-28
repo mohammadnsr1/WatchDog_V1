@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import re
 import sys
@@ -17,13 +18,14 @@ from robot_backend.mcp_servers import ensure_mcp_server_environment
 ensure_mcp_server_environment("robot_backend.mcp_servers.watchdog_mcp_server")
 
 import rclpy
-from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 
 from robot_backend.contracts.loader import load_pick_contract
 from robot_backend.events.bus import EventBus
 from robot_backend.events.schema import (
+    FramesCapturedPayload,
     KNOWN_EVENT_TYPES,
     VerdictPayload,
     available_event_type_definitions,
@@ -31,10 +33,122 @@ from robot_backend.events.schema import (
 )
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
+from robot_backend.watchdog.image_buffer import ImageBufferManager, ImageRingBuffer
 from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
 from robot_backend.watchdog.ready import ReadyClient
-from robot_backend.watchdog.recorder import EvidenceRecorder, _load_registry, event_wrapper
+from robot_backend.watchdog.recorder import (
+    EvidenceRecorder,
+    _load_registry,
+    _uniform_downsample,
+    event_wrapper,
+)
+from robot_backend.watchdog import session as session_helper
 from robot_backend.watchdog.timebase import wall_ns
+
+# Image ring buffer bounds, env-configurable. A byte bound is required because
+# frame size varies with encoding and a count-only bound cannot protect memory.
+_DEFAULT_IMAGE_BUFFER_BYTES = 512 * 1024 * 1024  # 512 MB
+_DEFAULT_IMAGE_BUFFER_HZ = 5.0
+_DEFAULT_IMAGE_BUFFER_MAX_FRAMES = 2000  # count bound; byte bound is the real cap
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _frame_extension(encoding: str) -> str:
+    """Best-effort file extension for a captured frame's encoding.
+
+    Compressed frames name their codec in the encoding/format string
+    ("rgb8; jpeg compressed", "png"); raw frames carry a pixel encoding
+    ("rgb8", "bgr8") and are written as .raw since they are not a container
+    format. The bytes are always the message payload verbatim -- the extension
+    is a hint for an analyst, not a re-encode.
+    """
+    enc = (encoding or "").lower()
+    if "jpeg" in enc or "jpg" in enc:
+        return ".jpg"
+    if "png" in enc:
+        return ".png"
+    return ".raw"
+
+
+def _write_capture_frames(
+    session_dir: Path,
+    selected: list[Any],
+    *,
+    start_ns: int,
+    end_ns: int,
+    max_frames: int,
+    label: str | None,
+    step_id: str | None,
+    buffered_range: list[int] | None,
+) -> dict[str, Any]:
+    """Downsample and write selected frames + capture.json to the session dir.
+
+    Module-level and ROS-free so the write path is unit-testable. Returns a
+    dict with output_dir, frame_count, covered_start_wall_ns, covered_end_wall_ns.
+    Callers guarantee `selected` is non-empty.
+    """
+    frames = _uniform_downsample(selected, max(1, int(max_frames)))
+    name = label or step_id or "capture"
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "capture"
+    out_dir = session_dir / "frames" / f"{safe_name}_{start_ns}_{end_ns}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[dict[str, Any]] = []
+    for idx, frame in enumerate(frames):
+        ext = _frame_extension(frame.encoding)
+        filename = f"{idx:04d}_{frame.wall_ns}{ext}"
+        (out_dir / filename).write_bytes(frame.data)
+        written.append({
+            "file": filename,
+            "wall_ns": frame.wall_ns,
+            "topic": frame.topic,
+            "encoding": frame.encoding,
+            "width": frame.width,
+            "height": frame.height,
+            "nbytes": frame.nbytes,
+        })
+
+    covered_start = written[0]["wall_ns"]
+    covered_end = written[-1]["wall_ns"]
+    capture_meta = {
+        "requested_window": {"start_wall_ns": start_ns, "end_wall_ns": end_ns},
+        "covered_window": {"start_wall_ns": covered_start, "end_wall_ns": covered_end},
+        "buffered_range": buffered_range,
+        "label": label,
+        "step_id": step_id,
+        "frame_count": len(written),
+        "frames": written,
+    }
+    (out_dir / "capture.json").write_text(
+        json.dumps(capture_meta, indent=2), encoding="utf-8"
+    )
+    return {
+        "output_dir": str(out_dir),
+        "frame_count": len(written),
+        "covered_start_wall_ns": covered_start,
+        "covered_end_wall_ns": covered_end,
+    }
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -60,6 +174,9 @@ class WatchDogContext:
     halt_client: HaltClient
     ready_client: ReadyClient
     wake_event: threading.Event
+    session_dir: Path
+    image_buffer: ImageRingBuffer
+    image_manager: ImageBufferManager
 
 
 _CONTEXT: WatchDogContext | None = None
@@ -120,9 +237,13 @@ def _ensure_watchdog() -> WatchDogContext:
         client_cb_group = MutuallyExclusiveCallbackGroup()
         wake_event = threading.Event()
         registry = _load_registry()
+        session_dir = session_helper.ensure_session_dir()
+        # Explicit WATCHDOG_MONITOR_LOG still wins; otherwise the log defaults
+        # into the session dir (monitor_events.jsonl) so this process's events
+        # sit alongside the rest of the run's record. See session.py.
         log_path = os.environ.get(
             "WATCHDOG_MONITOR_LOG",
-            str(Path.home() / ".watchdog" / "monitor_events.jsonl"),
+            session_helper.monitor_log_default(),
         )
         event_bus = EventBus(node=node, log_path=log_path)
         recorder = EvidenceRecorder(
@@ -130,6 +251,21 @@ def _ensure_watchdog() -> WatchDogContext:
             registry=registry,
             wake_event=wake_event,
         )
+        # Image ring buffer for retrospective visual-evidence capture. Its
+        # subscriptions go in a SEPARATE callback group from the recorder's
+        # /joint_states and TF callbacks (D2): image callbacks are slow and
+        # must never delay monitor evaluation or halt latency.
+        image_buffer = ImageRingBuffer(
+            max_frames=_env_int("WATCHDOG_IMAGE_BUFFER_MAX_FRAMES", _DEFAULT_IMAGE_BUFFER_MAX_FRAMES),
+            max_bytes=_env_int("WATCHDOG_IMAGE_BUFFER_BYTES", _DEFAULT_IMAGE_BUFFER_BYTES),
+        )
+        image_hz = _env_float("WATCHDOG_IMAGE_BUFFER_HZ", _DEFAULT_IMAGE_BUFFER_HZ)
+        image_manager = ImageBufferManager(image_buffer, hz=image_hz, logger=node.get_logger())
+        image_cb_group = ReentrantCallbackGroup()
+        try:
+            image_manager.attach(node, image_cb_group)
+        except Exception as exc:
+            node.get_logger().warning(f"image buffer attach failed (non-fatal): {exc}")
         halt_client = HaltClient(
             node=node,
             event_bus=event_bus,
@@ -174,6 +310,9 @@ def _ensure_watchdog() -> WatchDogContext:
             halt_client=halt_client,
             ready_client=ready_client,
             wake_event=wake_event,
+            session_dir=session_dir,
+            image_buffer=image_buffer,
+            image_manager=image_manager,
         )
         return _CONTEXT
 
@@ -592,6 +731,81 @@ if mcp is not None:
                     now_wall_ns=wall_ns(),
                 )
             return _ok(command, evidence=evidence)
+        except Exception as exc:
+            return _error(command, exc)
+
+    @mcp.tool()
+    def capture_frames(
+        start_wall_ns: int,
+        end_wall_ns: int,
+        max_frames: int = 20,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        """Write buffered camera frames from a wall-clock window to the session directory.
+
+        This tool PRESERVES visual evidence; it does not perceive. The agent
+        harness sends text only -- WatchDog cannot see the frames it captures.
+        The tool exists so that visual evidence for a moment the monitor
+        identified as significant survives for later analysis. It does not
+        return image data and it does not inform any verdict, which rests on
+        the proprioceptive and TF evidence WatchDog can actually read,
+        independent of any vision pipeline.
+
+        Selects buffered frames whose wall_ns falls in the window, downsamples
+        uniformly to max_frames, and writes them under
+        <session_dir>/frames/<label or step_id>_<start>_<end>/ with a
+        capture.json listing each file, its wall_ns, source topic, and
+        encoding, plus the requested window and the actual buffered range.
+        Returns the output directory, frame count, and covered time span --
+        never the images themselves.
+
+        If the window overlaps no buffered frames, returns an error carrying
+        the buffered range and now_wall_ns, matching get_evidence -- an empty
+        result is never silently indistinguishable from "nothing happened".
+        """
+        command = "capture_frames"
+        try:
+            ctx = _ensure_watchdog()
+            start_ns, end_ns = int(start_wall_ns), int(end_wall_ns)
+            limit = max(1, int(max_frames))
+            selected = ctx.image_buffer.select_window(start_ns, end_ns)
+            if not selected:
+                return _error(
+                    command,
+                    "requested window does not overlap any buffered frames",
+                    requested={"start_wall_ns": start_ns, "end_wall_ns": end_ns},
+                    buffered_range=ctx.image_buffer.buffered_range(),
+                    subscribed_topics=list(ctx.image_manager.subscribed_topics),
+                    now_wall_ns=wall_ns(),
+                )
+            step_id = ctx.recorder.current_step()
+            result = _write_capture_frames(
+                ctx.session_dir,
+                selected,
+                start_ns=start_ns,
+                end_ns=end_ns,
+                max_frames=limit,
+                label=label,
+                step_id=step_id,
+                buffered_range=ctx.image_buffer.buffered_range(),
+            )
+            # Publish frames_captured so the capture is on the shared timeline.
+            # Self-emitted (see _SELF_EMITTED_EVENT_TYPES) -- must not wake the
+            # agent on its own capture.
+            ctx.event_bus.publish(make_event(
+                "frames_captured",
+                FramesCapturedPayload(
+                    output_dir=result["output_dir"],
+                    frame_count=result["frame_count"],
+                    requested_start_wall_ns=start_ns,
+                    requested_end_wall_ns=end_ns,
+                    covered_start_wall_ns=result["covered_start_wall_ns"],
+                    covered_end_wall_ns=result["covered_end_wall_ns"],
+                    label=label,
+                    step_id=step_id,
+                ),
+            ))
+            return _ok(command, **result)
         except Exception as exc:
             return _error(command, exc)
 
