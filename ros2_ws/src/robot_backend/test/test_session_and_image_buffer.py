@@ -19,20 +19,62 @@ from robot_backend.watchdog.image_buffer import (
 
 
 # --------------------------------------------------------------------------
-# session.py
+# session.py -- resolution order and pointer file
 # --------------------------------------------------------------------------
 
-def test_session_dir_from_env_unset(monkeypatch):
+@pytest.fixture
+def isolated_session(monkeypatch, tmp_path):
+    """Isolate every session knob from the real machine: no env, a tmp pointer
+    file that does not exist yet, and a tmp session root."""
     monkeypatch.delenv("WATCHDOG_SESSION_DIR", raising=False)
-    assert sess.session_dir_from_env() is None
+    monkeypatch.setenv("WATCHDOG_SESSION_ROOT", str(tmp_path / "root"))
+    monkeypatch.setattr(sess, "_POINTER_FILE", tmp_path / "current_session")
+    return tmp_path
 
 
-def test_session_dir_from_env_set(monkeypatch, tmp_path):
-    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path / "sess"))
-    assert sess.session_dir_from_env() == tmp_path / "sess"
+def test_resolve_rule_env_wins(monkeypatch, isolated_session, tmp_path):
+    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path / "explicit"))
+    # even with a pointer present, env wins
+    (tmp_path / "ptr_target").mkdir()
+    sess.write_pointer(tmp_path / "ptr_target")
+    path, rule = sess.resolve_session_dir()
+    assert rule == "env"
+    assert path == tmp_path / "explicit"
 
 
-def test_ensure_session_dir_tolerates_concurrent_creation(monkeypatch, tmp_path):
+def test_resolve_rule_pointer_when_no_env(isolated_session, tmp_path):
+    target = tmp_path / "ptr_target"
+    target.mkdir()
+    sess.write_pointer(target)
+    path, rule = sess.resolve_session_dir()
+    assert rule == "pointer"
+    assert path == target
+
+
+def test_resolve_pointer_ignored_when_dir_missing(isolated_session, tmp_path):
+    # pointer names a directory that does not exist -> fall through to fresh
+    sess.write_pointer(tmp_path / "gone")
+    path, rule = sess.resolve_session_dir()
+    assert rule == "fresh"
+    assert str(path).startswith(str(tmp_path / "root"))
+
+
+def test_resolve_rule_fresh_under_root(isolated_session, tmp_path):
+    path, rule = sess.resolve_session_dir()
+    assert rule == "fresh"
+    assert path.parent == tmp_path / "root"
+
+
+def test_write_pointer_is_atomic_and_readable(isolated_session, tmp_path):
+    target = tmp_path / "sess1"
+    target.mkdir()
+    sess.write_pointer(target)
+    assert sess.read_pointer() == target
+    # no stray temp file left behind
+    assert not list((tmp_path).glob(".current_session.*.tmp"))
+
+
+def test_ensure_session_dir_env(monkeypatch, isolated_session, tmp_path):
     target = tmp_path / "shared"
     monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(target))
     d1 = sess.ensure_session_dir()
@@ -41,21 +83,43 @@ def test_ensure_session_dir_tolerates_concurrent_creation(monkeypatch, tmp_path)
     assert target.is_dir()
 
 
-def test_event_log_default_routes_into_session_dir(monkeypatch, tmp_path):
-    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path))
-    assert sess.event_log_default("scene") == str(tmp_path / "events_scene.jsonl")
-    assert sess.monitor_log_default() == str(tmp_path / "monitor_events.jsonl")
-    assert sess.orchestrator_log_dir_default() == str(tmp_path / "orchestrator")
+def test_event_log_default_routes_into_active_session(monkeypatch, isolated_session, tmp_path):
+    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path / "s"))
+    assert sess.event_log_default("scene") == str(tmp_path / "s" / "events_scene.jsonl")
+    assert sess.monitor_log_default() == str(tmp_path / "s" / "monitor_events.jsonl")
+    assert sess.orchestrator_log_dir_default() == str(tmp_path / "s" / "orchestrator")
 
 
-def test_event_log_default_legacy_when_unset(monkeypatch):
-    monkeypatch.delenv("WATCHDOG_SESSION_DIR", raising=False)
+def test_event_log_default_follows_pointer(isolated_session, tmp_path):
+    target = tmp_path / "ptr"
+    target.mkdir()
+    sess.write_pointer(target)
+    assert sess.event_log_default("motion") == str(target / "events_motion.jsonl")
+
+
+def test_event_log_default_legacy_when_no_env_no_pointer(isolated_session):
+    # active_session_dir() is None here -> legacy ~/.watchdog location
     got = sess.event_log_default("motion")
     assert got.endswith("/.watchdog/events_motion.jsonl")
 
 
-def test_per_server_filenames_do_not_collide(monkeypatch, tmp_path):
-    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path))
+def test_session_root_prefers_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("WATCHDOG_SESSION_ROOT", str(tmp_path / "custom_root"))
+    assert sess.session_root() == tmp_path / "custom_root"
+
+
+def test_session_root_default_under_agents_transcripts(monkeypatch):
+    monkeypatch.delenv("WATCHDOG_SESSION_ROOT", raising=False)
+    root = sess.session_root()
+    # In this repo checkout the root is located; assert the expected tail.
+    if sess.repo_root() is not None:
+        assert root.parts[-3:] == ("agents", "transcripts", "sessions")
+    else:  # install-only fallback
+        assert str(root).endswith("/.watchdog/sessions")
+
+
+def test_per_server_filenames_do_not_collide(monkeypatch, isolated_session, tmp_path):
+    monkeypatch.setenv("WATCHDOG_SESSION_DIR", str(tmp_path / "s"))
     paths = {sess.event_log_default(n) for n in ("scene", "motion", "gripper")}
     assert len(paths) == 3  # each server gets a distinct file in one session
 
@@ -90,6 +154,43 @@ def test_write_manifest_atomic_and_embeds_registry(tmp_path):
     assert data["git_commit"] == "deadbeef"
     # No stray temp file left behind.
     assert not list(tmp_path.glob(".manifest.json.*.tmp"))
+
+
+def test_manifest_install_matches_source_true(tmp_path):
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path="/install/reg.yaml",
+        registry_sha256="abc", started_wall_ns=1, recorded_topics=[],
+        images_recorded=False, image_throttle_hz=5.0,
+        registry_source_path="/src/reg.yaml", registry_source_sha256="abc",
+    )
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["registry_source_path"] == "/src/reg.yaml"
+    assert data["registry_source_sha256"] == "abc"
+    assert data["registry_install_matches_source"] is True
+
+
+def test_manifest_install_matches_source_false_on_mismatch(tmp_path):
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path="/install/reg.yaml",
+        registry_sha256="install_hash", started_wall_ns=1, recorded_topics=[],
+        images_recorded=False, image_throttle_hz=5.0,
+        registry_source_path="/src/reg.yaml", registry_source_sha256="source_hash",
+    )
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["registry_install_matches_source"] is False
+
+
+def test_manifest_omits_comparison_when_no_source(tmp_path):
+    # install-only deployment: source path/hash absent -> comparison is null
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path="/install/reg.yaml",
+        registry_sha256="abc", started_wall_ns=1, recorded_topics=[],
+        images_recorded=False, image_throttle_hz=5.0,
+    )
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["registry_source_path"] is None
+    assert data["registry_source_sha256"] is None
+    assert data["registry_install_matches_source"] is None
 
 
 def test_write_manifest_first_writer_wins(tmp_path):

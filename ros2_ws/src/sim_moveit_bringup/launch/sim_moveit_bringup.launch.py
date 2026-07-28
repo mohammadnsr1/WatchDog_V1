@@ -35,17 +35,37 @@ def _is_truthy(value: str) -> bool:
     return value.lower() in {"true", "1", "yes", "on"}
 
 
-def _resolve_session_dir(context) -> Path:
-    """Resolve the session dir: explicit session_dir arg, else WATCHDOG_SESSION_DIR
-    already in the environment, else a fresh ~/.watchdog/sessions/<UTC> default."""
+def _shared_session_root() -> Path:
+    """The shared session root (agents/transcripts/sessions), via the one helper.
+
+    Falls back to ~/.watchdog/sessions only if robot_backend cannot be imported.
+    Using the same helper the harness uses is what keeps both sides' fresh
+    default under one root.
+    """
+    try:
+        from robot_backend.watchdog import session as sess
+        return sess.session_root()
+    except Exception:
+        return Path.home() / ".watchdog" / "sessions"
+
+
+def _resolve_session_dir(context):
+    """Resolve THIS bringup's session dir. Returns (Path, rule).
+
+    The launch is the pointer's writer, not a reader: a new bringup is a new
+    run, so it never reuses ~/.watchdog/current_session (that would merge two
+    runs). Order: explicit session_dir arg, else WATCHDOG_SESSION_DIR already in
+    the environment, else a fresh session under the shared root. run_agent.py
+    reads the pointer this bringup writes.
+    """
     explicit = LaunchConfiguration("session_dir").perform(context).strip()
     if explicit:
-        return Path(os.path.expanduser(explicit))
+        return Path(os.path.expanduser(explicit)), "arg"
     from_env = os.environ.get("WATCHDOG_SESSION_DIR", "").strip()
     if from_env:
-        return Path(os.path.expanduser(from_env))
+        return Path(os.path.expanduser(from_env)), "env"
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return Path.home() / ".watchdog" / "sessions" / stamp
+    return _shared_session_root() / stamp, "fresh"
 
 
 def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded, record_pointcloud):
@@ -79,6 +99,15 @@ def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded
             registry_path = None
         registry_sha = sess.sha256_file(registry_path) if registry_path else None
 
+    # SOURCE registry (the file an operator edits to inject a fault), located
+    # via the shared helper. When its hash differs from the install-space hash
+    # above, the cell is running a DIFFERENT registry than the one on disk in
+    # src/ -- the "edited the source, forgot to rebuild" trap. Recorded in the
+    # manifest and warned about below; never fatal (a divergent install space
+    # can be legitimate).
+    src_registry_path = sess.source_registry_path()
+    src_registry_sha = sess.sha256_file(src_registry_path) if src_registry_path else None
+
     image_hz = float(LaunchConfiguration("image_buffer_hz").perform(context) or 5.0)
     try:
         sess.write_manifest(
@@ -92,9 +121,26 @@ def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded
             image_throttle_hz=image_hz,
             record_pointcloud=record_pointcloud,
             git_commit_value=sess.git_commit(),
+            registry_source_path=src_registry_path,
+            registry_source_sha256=src_registry_sha,
         )
     except Exception as exc:  # pragma: no cover
         return LogInfo(msg=f"Session manifest write failed: {exc}")
+
+    if (
+        src_registry_sha is not None
+        and registry_sha is not None
+        and src_registry_sha != registry_sha
+    ):
+        return LogInfo(msg=(
+            "WARNING: the installed model_registry.yaml differs from the source "
+            f"copy. Cell loaded install={registry_path} (sha256 {registry_sha[:12]}), "
+            f"but source={src_registry_path} (sha256 {src_registry_sha[:12]}). "
+            "The workspace needs rebuilding: the cell is running the OLD registry. "
+            "If a fault was injected into the source, this run executed the CLEAN "
+            "registry. `colcon build` and re-launch. (manifest: "
+            "registry_install_matches_source=false)"
+        ))
     return LogInfo(msg=f"Session manifest written to {session_dir / 'manifest.json'}")
 
 
@@ -143,8 +189,17 @@ def _launch_setup(context):
     moveit_pointcloud_topic = filtered_topic_value if filter_enabled else direct_topic_value
 
     # -- Session recording (Part B/C) ------------------------------------
-    session_dir = _resolve_session_dir(context)
+    session_dir, session_rule = _resolve_session_dir(context)
     session_dir.mkdir(parents=True, exist_ok=True)
+    # Publish the session path so the separately-launched agents find it with no
+    # manual export. Atomic write; best effort (never fails bringup).
+    pointer_note = "current_session pointer not written (robot_backend unavailable)"
+    try:
+        from robot_backend.watchdog import session as _sess
+        pointer_path = _sess.write_pointer(session_dir)
+        pointer_note = f"wrote {pointer_path} -> {session_dir}"
+    except Exception as exc:  # pragma: no cover - depends on overlay
+        pointer_note = f"current_session pointer skipped ({exc})"
     record_session = _is_truthy(LaunchConfiguration("record_session").perform(context))
     record_images = _is_truthy(LaunchConfiguration("record_images").perform(context))
     record_pointcloud = _is_truthy(LaunchConfiguration("record_pointcloud").perform(context))
@@ -167,12 +222,13 @@ def _launch_setup(context):
         # session. Export the printed value into the shell that launches the
         # agents so their MCP servers join the same session.
         SetEnvironmentVariable("WATCHDOG_SESSION_DIR", str(session_dir)),
-        LogInfo(msg=f"WATCHDOG_SESSION_DIR={session_dir}"),
+        LogInfo(msg=f"Session dir: {session_dir} (resolved by rule={session_rule!r})"),
+        LogInfo(msg=f"Session pointer: {pointer_note}"),
         LogInfo(
             msg=(
-                "Export this same WATCHDOG_SESSION_DIR in the shell that starts "
-                "the agents so their MCP server event logs join this session: "
-                f"export WATCHDOG_SESSION_DIR={session_dir}"
+                "Agents launched from any shell will find this session via "
+                "~/.watchdog/current_session -- no export needed. To force a "
+                "different session, export WATCHDOG_SESSION_DIR before run_agent.py."
             )
         ),
         _write_manifest(session_dir, context, bag_topics, record_images, record_pointcloud),

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,22 @@ from typing import Any
 from agent_harness.timebase import wall_ns
 
 _REDACT_KEY_RE = re.compile(r"key|token|secret|password", re.IGNORECASE)
+
+
+def _resolved_transcript_dir(fallback: Path) -> Path:
+    """The session dir when one has been resolved, else the configured fallback.
+
+    run_agent.py resolves the session and exports WATCHDOG_SESSION_DIR before
+    the runner constructs any TranscriptWriter, so this run's transcripts land
+    in the same directory as the cell's bag, events, and manifest. With no
+    session resolvable (an agent run with no cell up), falls back to
+    config.transcript_dir exactly as before -- that path must keep working.
+    """
+    session = os.environ.get("WATCHDOG_SESSION_DIR")
+    if session and session.strip():
+        return Path(os.path.expanduser(session.strip()))
+    return fallback
+
 
 # Opaque provider blobs that must still be sent to the provider on every turn
 # (reasoning continuity across tool-call turns depends on them -- see
@@ -110,6 +127,7 @@ class TranscriptWriter:
         task_name: str,
         sidecar_threshold_bytes: int = _DEFAULT_SIDECAR_THRESHOLD_BYTES,
     ):
+        transcript_dir = _resolved_transcript_dir(transcript_dir)
         transcript_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         stem = f"{agent}_{task_name}_{ts}"

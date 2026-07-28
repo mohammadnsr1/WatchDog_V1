@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import re
 import sys
 from pathlib import Path
@@ -29,6 +30,41 @@ from agent_harness.config import load_config
 from agent_harness.mcp_client import MCPClientPool
 
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+
+
+def _resolve_and_export_session(agents_dir: Path):
+    """Resolve the session directory and export WATCHDOG_SESSION_DIR for the
+    MCP servers this process is about to spawn.
+
+    Uses the same resolver as the ROS side (robot_backend.watchdog.session), so
+    both process trees agree on one directory: WATCHDOG_SESSION_DIR wins, else
+    the ~/.watchdog/current_session pointer the launch wrote, else a fresh
+    session under agents/transcripts/sessions. The resolved path is written
+    back into os.environ as a concrete path -- essential for the "fresh" case,
+    where each child re-resolving on its own would otherwise pick a different
+    timestamp. mcp_client passes {**os.environ, **server.env} to each server,
+    so all four inherit it.
+
+    Returns the session Path, or None if the shared helper cannot be imported
+    (install-only / no source tree) -- in which case transcripts fall back to
+    config.transcript_dir and the servers keep their legacy log locations.
+    """
+    src_path = agents_dir.parent / "ros2_ws" / "src" / "robot_backend"
+    if src_path.is_dir() and str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+    try:
+        from robot_backend.watchdog import session as sess
+    except Exception as exc:
+        print(f"session: shared helper unavailable ({exc}); "
+              f"transcripts fall back to config.transcript_dir")
+        return None
+
+    session_dir, rule = sess.resolve_session_dir()
+    session_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["WATCHDOG_SESSION_DIR"] = str(session_dir)
+    print(f"session: {session_dir} (resolved by rule={rule!r}; "
+          f"exported WATCHDOG_SESSION_DIR for MCP servers)")
+    return session_dir
 
 
 def render_task(template_text: str, task: dict) -> str:
@@ -78,6 +114,11 @@ def main() -> int:
 
     agents_dir = Path(__file__).resolve().parent
     load_dotenv(agents_dir / ".env")
+
+    # Resolve and export the session directory BEFORE load_config /
+    # MCPClientPool, so the four MCP servers this process spawns inherit
+    # WATCHDOG_SESSION_DIR and this run's transcripts land in the session.
+    _resolve_and_export_session(agents_dir)
 
     config = load_config(args.config)
     if args.provider is not None:
