@@ -1,0 +1,26 @@
+{
+  "collision_object_sha256": {
+    "green_cube": "5c8d03f5aa61a9afec9e704f0b967a574895b3fe44a28d00b836919f17841188",
+    "red_cube": "166d361e948fbdf8241b7fe372f4487fc35130b39da1e792855cdb8952af1a85"
+  },
+  "fixed_stamp": {
+    "nanosec": 456789,
+    "sec": 123
+  },
+  "fixed_world_pose": {
+    "frame_id": "world",
+    "orientation": {
+      "w": 0.9233805168766387,
+      "x": 0.10259783520851541,
+      "y": -0.20519567041703082,
+      "z": 0.3077935056255462
+    },
+    "position": {
+      "x": 0.31,
+      "y": -0.27,
+      "z": 0.42
+    }
+  },
+  "registry_file_sha256": "a20cf89619f48607177d252aae369aa74296d8b93efe1fbb9e24478ff6ff39a5",
+  "serialization": "rclpy CDR with non-semantic alignment padding zeroed"
+}
