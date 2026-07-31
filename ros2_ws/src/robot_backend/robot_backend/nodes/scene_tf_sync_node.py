@@ -27,8 +27,8 @@ from typing import Any
 
 import rclpy
 import rclpy.executors
-import yaml
 from ament_index_python.packages import get_package_share_directory
+from geometry_msgs.msg import Point
 from geometry_msgs.msg import Pose
 from moveit_msgs.msg import CollisionObject
 from moveit_msgs.msg import PlanningScene
@@ -38,12 +38,15 @@ from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.time import Time
 from robot_backend_interfaces.srv import GetObjectPose, GetObjectPoses, SyncSceneObjects
+from shape_msgs.msg import Mesh
+from shape_msgs.msg import MeshTriangle
 from shape_msgs.msg import SolidPrimitive
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer
 from tf2_ros import TransformException
 from tf2_ros import TransformListener
 
+from robot_backend.registry import MeshCollisionSpec, RegisteredObject, Registry, load_registry
 from robot_backend.skills.pose_query_skills import get_object_pose, get_object_poses
 from robot_backend.utils.geometry import compose_poses
 from robot_backend.utils.geometry import make_pose
@@ -57,6 +60,70 @@ _DEFAULT_GET_OBJECT_POSE_SERVICE = '/get_object_pose'
 _DEFAULT_GET_OBJECT_POSES_SERVICE = '/get_object_poses'
 _DEFAULT_RESET_TF_SERVICE = '/reset_tf'
 _DEFAULT_APPLY_TIMEOUT_SEC = 10.0
+
+
+def build_collision_object(
+    resolved_object: RegisteredObject,
+    world_object_pose: dict[str, Any],
+) -> CollisionObject:
+    """Build one CollisionObject from validated geometry and a world pose."""
+    collision_pose = compose_poses(world_object_pose, resolved_object.pose_offset)
+    collision = resolved_object.collision
+    shape_type = str(collision.type).strip().lower()
+
+    obj = CollisionObject()
+    obj.header.frame_id = resolved_object.lookup_frame
+    fixed_stamp = world_object_pose.get('_header_stamp')
+    if fixed_stamp is not None:
+        obj.header.stamp = fixed_stamp
+    obj.id = resolved_object.object_id
+    obj.operation = CollisionObject.ADD
+
+    if shape_type == 'box':
+        primitive = SolidPrimitive()
+        dims = list(collision.dimensions)
+        if not isinstance(dims, list) or len(dims) != 3:
+            raise ValueError('Box collision requires dimensions [x, y, z].')
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = [float(v) for v in dims]
+        obj.primitives = [primitive]
+        obj.primitive_poses = [_pose_to_msg(collision_pose)]
+    elif shape_type == 'mesh' and isinstance(collision, MeshCollisionSpec):
+        geometry = resolved_object.resolve_mesh_geometry()
+        mesh = Mesh()
+        mesh.vertices = [_point_to_msg(vertex) for vertex in geometry.vertices]
+        mesh.triangles = [_triangle_to_msg(face) for face in geometry.faces]
+        obj.meshes = [mesh]
+        obj.mesh_poses = [_pose_to_msg(collision_pose)]
+    else:
+        raise ValueError(
+            f"Unsupported collision type {shape_type!r}. Supported: box, mesh."
+        )
+    return obj
+
+
+def _pose_to_msg(pose_dict: dict[str, Any]) -> Pose:
+    pose = Pose()
+    pose.position.x = float(pose_dict['position']['x'])
+    pose.position.y = float(pose_dict['position']['y'])
+    pose.position.z = float(pose_dict['position']['z'])
+    pose.orientation.x = float(pose_dict['orientation']['x'])
+    pose.orientation.y = float(pose_dict['orientation']['y'])
+    pose.orientation.z = float(pose_dict['orientation']['z'])
+    pose.orientation.w = float(pose_dict['orientation']['w'])
+    return pose
+
+
+def _point_to_msg(vertex: tuple[float, float, float]) -> Point:
+    point = Point()
+    point.x, point.y, point.z = vertex
+    return point
+
+
+def _triangle_to_msg(face: tuple[int, int, int]) -> MeshTriangle:
+    triangle = MeshTriangle()
+    triangle.vertex_indices = list(face)
+    return triangle
 
 
 class SceneTFSyncNode(Node):
@@ -148,7 +215,7 @@ class SceneTFSyncNode(Node):
             callback_group=cb_group,
         )
 
-        configured = list(self._registry.get('objects', {}).keys())
+        configured = list(self._registry.objects.keys())
         self.get_logger().info(f'Registry objects: {configured}')
         self.get_logger().info(
             f'Serving {self._sync_scene_objects_service}, '
@@ -246,7 +313,7 @@ class SceneTFSyncNode(Node):
             buf = self._tf_buffer
         result = get_object_pose(
             buf,
-            self._registry,
+            self._registry.raw_dict,
             request.object_id,
             tf_timeout_sec=self._tf_lookup_timeout_sec,
             clock=self.get_clock(),
@@ -281,7 +348,7 @@ class SceneTFSyncNode(Node):
             buf = self._tf_buffer
         result = get_object_poses(
             buf,
-            self._registry,
+            self._registry.raw_dict,
             enabled_only=bool(request.enabled_only),
             graspable_only=bool(request.graspable_only),
             tf_timeout_sec=self._tf_lookup_timeout_sec,
@@ -329,10 +396,7 @@ class SceneTFSyncNode(Node):
         failed_ids contains IDs that could not be built (TF not available, bad config, etc.).
         skipped_ids contains IDs that are disabled in the registry.
         """
-        objects_section = self._registry.get('objects', {})
-        if not isinstance(objects_section, dict):
-            self.get_logger().error('model_registry.yaml objects section must be a mapping.')
-            return [], [], [], []
+        objects_section = self._registry.objects
 
         collision_objects: list[CollisionObject] = []
         synced_ids: list[str] = []
@@ -340,96 +404,32 @@ class SceneTFSyncNode(Node):
         skipped_ids: list[str] = []
 
         for registry_key, entry in objects_section.items():
-            if not isinstance(entry, dict):
-                failed_ids.append(registry_key)
-                self.get_logger().warning(f'Registry entry {registry_key!r} is not a mapping.')
-                continue
-
-            object_id = str(entry.get('object_id', registry_key)).strip() or registry_key
+            object_id = entry.object_id
 
             if object_ids is not None:
                 if object_id not in object_ids and registry_key not in object_ids:
                     continue
 
-            enabled = bool(entry.get('enabled', True))
-            if self._add_only_enabled and not enabled:
+            if self._add_only_enabled and not entry.enabled:
                 skipped_ids.append(object_id)
                 continue
 
-            collision_object, error = self._build_one(registry_key, object_id, entry)
-            if collision_object is not None:
+            try:
+                world_object_pose = self._lookup_tf_pose(
+                    lookup_frame=entry.lookup_frame,
+                    tf_frame=entry.tf_frame,
+                )
+                collision_object = build_collision_object(entry, world_object_pose)
+                collision_object.header.stamp = self.get_clock().now().to_msg()
                 collision_objects.append(collision_object)
                 synced_ids.append(object_id)
-            else:
+            except Exception as exc:
                 failed_ids.append(object_id)
                 self.get_logger().warning(
-                    f'Failed to build collision object for {object_id!r}: {error}'
+                    f'Failed to build collision object for {object_id!r}: {exc}'
                 )
 
         return collision_objects, synced_ids, failed_ids, skipped_ids
-
-    def _build_one(
-        self,
-        registry_key: str,
-        object_id: str,
-        entry: dict[str, Any],
-    ) -> tuple[CollisionObject | None, str | None]:
-        """Build a single CollisionObject from a registry entry.
-
-        Returns (collision_object, None) on success, (None, error_message) on failure.
-        """
-        tf_frame = str(entry.get('tf_frame', '')).strip()
-        if not tf_frame:
-            return None, f'Entry {registry_key!r} missing tf_frame.'
-
-        lookup_frame = str(entry.get('lookup_frame', 'world')).strip() or 'world'
-
-        collision = entry.get('collision')
-        if not isinstance(collision, dict):
-            return None, f'Entry {registry_key!r} missing collision section.'
-
-        try:
-            tf_pose = self._lookup_tf_pose(lookup_frame=lookup_frame, tf_frame=tf_frame)
-            pose_offset = self._normalize_pose_offset(collision.get('pose_offset'), lookup_frame)
-            collision_pose = compose_poses(tf_pose, pose_offset)
-            primitive = self._build_primitive(collision)
-        except Exception as exc:
-            return None, str(exc)
-
-        obj = CollisionObject()
-        obj.header.frame_id = lookup_frame
-        obj.header.stamp = self.get_clock().now().to_msg()
-        obj.id = object_id
-        obj.operation = CollisionObject.ADD
-        obj.primitives = [primitive]
-        obj.primitive_poses = [self._pose_to_msg(collision_pose)]
-        return obj, None
-
-    def _build_primitive(self, collision: dict[str, Any]) -> SolidPrimitive:
-        shape_type = str(collision.get('type', '')).strip().lower()
-        primitive = SolidPrimitive()
-
-        if shape_type == 'box':
-            dims = collision.get('dimensions')
-            if not isinstance(dims, list) or len(dims) != 3:
-                raise ValueError('Box collision requires dimensions [x, y, z].')
-            primitive.type = SolidPrimitive.BOX
-            primitive.dimensions = [float(v) for v in dims]
-            return primitive
-
-        if shape_type == 'sphere':
-            primitive.type = SolidPrimitive.SPHERE
-            primitive.dimensions = [float(collision['radius'])]
-            return primitive
-
-        if shape_type == 'cylinder':
-            primitive.type = SolidPrimitive.CYLINDER
-            primitive.dimensions = [float(collision['height']), float(collision['radius'])]
-            return primitive
-
-        raise ValueError(
-            f"Unsupported collision type {shape_type!r}. Supported: box, sphere, cylinder."
-        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -471,46 +471,7 @@ class SceneTFSyncNode(Node):
             frame_id=lookup_frame,
         )
 
-    def _normalize_pose_offset(
-        self, pose_offset: Any, lookup_frame: str
-    ) -> dict[str, Any]:
-        if pose_offset is None:
-            return make_pose(
-                {'x': 0.0, 'y': 0.0, 'z': 0.0},
-                {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
-                frame_id=lookup_frame,
-            )
-        if not isinstance(pose_offset, dict):
-            raise ValueError('collision.pose_offset must be a mapping.')
-        pos = pose_offset.get('position', {})
-        ori = pose_offset.get('orientation', {})
-        return make_pose(
-            {
-                'x': float(pos.get('x', 0.0)),
-                'y': float(pos.get('y', 0.0)),
-                'z': float(pos.get('z', 0.0)),
-            },
-            {
-                'x': float(ori.get('x', 0.0)),
-                'y': float(ori.get('y', 0.0)),
-                'z': float(ori.get('z', 0.0)),
-                'w': float(ori.get('w', 1.0)),
-            },
-            frame_id=lookup_frame,
-        )
-
-    def _pose_to_msg(self, pose_dict: dict[str, Any]) -> Pose:
-        pose = Pose()
-        pose.position.x = float(pose_dict['position']['x'])
-        pose.position.y = float(pose_dict['position']['y'])
-        pose.position.z = float(pose_dict['position']['z'])
-        pose.orientation.x = float(pose_dict['orientation']['x'])
-        pose.orientation.y = float(pose_dict['orientation']['y'])
-        pose.orientation.z = float(pose_dict['orientation']['z'])
-        pose.orientation.w = float(pose_dict['orientation']['w'])
-        return pose
-
-    def _load_registry(self) -> dict[str, Any]:
+    def _load_registry(self) -> Registry:
         configured = str(self.get_parameter('model_registry_path').value or '').strip()
         if configured:
             path = Path(configured)
@@ -521,14 +482,9 @@ class SceneTFSyncNode(Node):
         if not path.is_file():
             raise FileNotFoundError(f'Model registry not found: {path}')
 
-        with path.open('r', encoding='utf-8') as fh:
-            data = yaml.safe_load(fh) or {}
-
-        if not isinstance(data, dict):
-            raise ValueError('model_registry.yaml must be a top-level mapping.')
-
+        registry = load_registry(path)
         self.get_logger().info(f'Loaded model registry: {path}')
-        return data
+        return registry
 
 
 def main(args: list[str] | None = None) -> None:

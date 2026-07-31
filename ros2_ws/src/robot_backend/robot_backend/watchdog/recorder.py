@@ -10,9 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from robot_backend.events.schema import EventEnvelope
+from robot_backend.registry import load_registry
 
 from .timebase import wall_ns
 
@@ -83,11 +82,7 @@ def _load_registry(path: Path | None = None) -> dict[str, Any]:
             resolved = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
         except Exception:
             resolved = _DEFAULT_REGISTRY_PATH
-    with resolved.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    if not isinstance(data, dict):
-        raise ValueError("model_registry.yaml must be a top-level mapping.")
-    return data
+    return load_registry(resolved).raw_dict
 
 
 def _enabled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]]:

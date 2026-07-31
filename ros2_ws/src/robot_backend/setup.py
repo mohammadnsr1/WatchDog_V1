@@ -21,10 +21,17 @@ setup(
         ),
         (
             "share/robot_backend/config",
-            ["config/model_registry.yaml"],
+            [
+                "config/model_registry.yaml",
+                "config/model_registry_mesh_example.yaml",
+            ],
+        ),
+        (
+            "share/robot_backend/config/assets",
+            ["config/assets/fmb_u_green.obj"],
         ),
     ],
-    install_requires=["setuptools", "mcp", "PyYAML"],
+    install_requires=["setuptools", "mcp", "PyYAML", "trimesh"],
     zip_safe=True,
     maintainer="mnasr3@asu.edu",
     maintainer_email="todo@example.com",

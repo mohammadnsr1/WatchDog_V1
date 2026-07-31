@@ -15,6 +15,7 @@
   <exec_depend>shape_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>python3-trimesh-pip</exec_depend>
   <exec_depend>isaac_trajectory_bridge_interfaces</exec_depend>
   <exec_depend>robot_backend_interfaces</exec_depend>
 

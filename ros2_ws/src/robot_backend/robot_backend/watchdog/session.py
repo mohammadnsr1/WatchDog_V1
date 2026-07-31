@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from robot_backend.registry import Registry
+
 _SESSION_ENV = "WATCHDOG_SESSION_DIR"
 _SESSION_ROOT_ENV = "WATCHDOG_SESSION_ROOT"
 _MANIFEST_NAME = "manifest.json"
@@ -198,7 +200,7 @@ def git_commit(cwd: Path | None = None) -> str | None:
 def write_manifest(
     session_dir: Path,
     *,
-    registry: dict[str, Any],
+    registry: Registry | dict[str, Any],
     registry_path: Path | str | None,
     registry_sha256: str | None,
     started_wall_ns: int,
@@ -234,6 +236,14 @@ def write_manifest(
     if manifest_path.exists():
         return manifest_path
 
+    mesh_provenance: dict[str, dict[str, Any]] = {}
+    if isinstance(registry, Registry):
+        registry_payload = registry.raw_dict
+        registry_sha256 = registry.raw_sha256
+        mesh_provenance = registry.mesh_provenance()
+    else:
+        registry_payload = registry
+
     if registry_source_sha256 is not None and registry_sha256 is not None:
         install_matches_source: bool | None = registry_source_sha256 == registry_sha256
     else:
@@ -243,7 +253,7 @@ def write_manifest(
     manifest = {
         "session_id": session_id,
         "started_wall_ns": int(started_wall_ns),
-        "registry": registry,
+        "registry": registry_payload,
         "registry_sha256": registry_sha256,
         "registry_path": str(registry_path) if registry_path is not None else None,
         "registry_source_path": (
@@ -267,6 +277,8 @@ def write_manifest(
         "record_pointcloud": bool(record_pointcloud),
         "git_commit": git_commit_value,
     }
+    if mesh_provenance:
+        manifest["mesh_provenance"] = mesh_provenance
 
     session_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = session_dir / f".{_MANIFEST_NAME}.{os.getpid()}.tmp"

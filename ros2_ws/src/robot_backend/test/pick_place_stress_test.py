@@ -43,13 +43,16 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 import tf2_ros
 
+from robot_backend.registry import Registry, load_registry
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import grasp_skill, release_skill
 from robot_backend.skills.motion_skills import (
     move_to_named_safe_joint_pose_skill,
     move_grasp_center_to_pose_skill,
 )
-from robot_backend.skills.maintenance_skills import set_permitted_contacts as set_permitted_contacts_skill
+from robot_backend.skills.maintenance_skills import (
+    set_permitted_contacts as set_permitted_contacts_skill,
+)
 from robot_backend.utils.geometry import make_pose
 
 # ------------------------- CONFIG -------------------------
@@ -69,19 +72,17 @@ TOP_DOWN_QUAT = {"x": 1.0, "y": 0.0, "z": 0.0, "w": 0.0}
 # ----------------------------------------------------------
 
 
-def _load_registry() -> dict:
+def _load_registry() -> Registry | None:
     from pathlib import Path
-    import yaml
     try:
         from ament_index_python.packages import get_package_share_directory
         path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
     except Exception:
-        return {}
+        return None
     try:
-        with path.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except OSError:
-        return {}
+        return load_registry(path)
+    except (OSError, ValueError):
+        return None
 
 
 def _pose(x, y, z):
@@ -130,13 +131,15 @@ class TFReader:
 
 
 class Cycle:
-    def __init__(self, backend, tf, registry):
+    def __init__(self, backend, tf, registry: dict, resolved_registry: Registry):
         self.b = backend
         self.tf = tf
         self.registry = registry
+        self.resolved_registry = resolved_registry
 
     def _object_height_m(self, object_id: str) -> float:
-        return float(self.registry["objects"][object_id]["collision"]["dimensions"][2])
+        _, half_extents = self.resolved_registry.objects[object_id].resolve_aabb()
+        return 2.0 * half_extents["z"]
 
     def _wait_settled(self, object_id: str) -> dict:
         """Return the object pose once it stops moving.
@@ -281,9 +284,12 @@ def main():
         return 1
 
     backend = create_ros_moveit_backend(node=None)  # backend owns its own node(s)
-    registry = _load_registry()
-    if not registry:
+    resolved_registry = _load_registry()
+    if resolved_registry is None:
         print("WARN: registry empty; grasp width falls back to 0 and will fail.")
+        registry = {}
+    else:
+        registry = resolved_registry.raw_dict
 
     set_permitted_contacts_skill(backend, registry=registry)
 
@@ -291,7 +297,10 @@ def main():
     fails = []
     for i in range(1, args.cycles + 1):
         print(f"\n===== CYCLE {i}/{args.cycles} =====")
-        ok, msg = Cycle(backend, tf, registry).run()
+        if resolved_registry is None:
+            ok, msg = False, "[init] validated registry unavailable"
+        else:
+            ok, msg = Cycle(backend, tf, registry, resolved_registry).run()
         print(f"CYCLE {i}: {'PASS' if ok else 'FAIL'} — {msg}")
         passes += int(ok)
         if not ok:

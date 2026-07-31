@@ -77,27 +77,26 @@ def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded
     absent.
     """
     try:
+        from robot_backend.registry import load_registry
         from robot_backend.watchdog import session as sess
-        from robot_backend.watchdog.recorder import _load_registry
     except Exception as exc:  # pragma: no cover - depends on overlay
         return LogInfo(msg=f"Session manifest skipped (robot_backend import failed: {exc}).")
 
     try:
-        registry = _load_registry()
+        from ament_index_python.packages import get_package_share_directory
+        registry_path = (
+            Path(get_package_share_directory("robot_backend"))
+            / "config"
+            / "model_registry.yaml"
+        )
+        registry = load_registry(registry_path)
     except Exception as exc:  # pragma: no cover
         registry = {}
         registry_path = None
         registry_sha = None
         _ = exc
     else:
-        try:
-            from ament_index_python.packages import get_package_share_directory
-            registry_path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
-            if not registry_path.is_file():
-                registry_path = None
-        except Exception:
-            registry_path = None
-        registry_sha = sess.sha256_file(registry_path) if registry_path else None
+        registry_sha = registry.raw_sha256
 
     # SOURCE registry (the file an operator edits to inject a fault), located
     # via the shared helper. When its hash differs from the install-space hash

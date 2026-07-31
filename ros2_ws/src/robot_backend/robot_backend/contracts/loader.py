@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
+from robot_backend.registry import load_registry
 
 from .schema import Clause, Comparison, PickContract
 
@@ -49,13 +49,7 @@ def _load_registry(path: Path | None) -> dict[str, Any]:
             resolved = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
         except Exception:
             resolved = _DEFAULT_REGISTRY_PATH
-    if not resolved.is_file():
-        raise FileNotFoundError(f"Model registry not found: {resolved}")
-    with resolved.open("r", encoding="utf-8") as fh:
-        data = yaml.safe_load(fh) or {}
-    if not isinstance(data, dict):
-        raise ValueError("model_registry.yaml must be a top-level mapping.")
-    return data
+    return load_registry(resolved).raw_dict
 
 
 def load_pick_contract(

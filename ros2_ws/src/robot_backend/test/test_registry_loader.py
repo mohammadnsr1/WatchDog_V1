@@ -6,19 +6,21 @@ import copy
 import hashlib
 import importlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
 from robot_backend.contracts.loader import _load_registry as load_contract_registry
-from robot_backend.registry import load_registry
+from robot_backend.registry import MeshCollisionSpec, load_registry
 from robot_backend.watchdog import session as sess
 from registry_golden_utils import canonical_collision_bytes
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = PACKAGE_ROOT / "config" / "model_registry.yaml"
+MESH_REGISTRY_PATH = PACKAGE_ROOT / "config" / "model_registry_mesh_example.yaml"
 GOLDEN_PATH = Path(__file__).parent / "fixtures" / "registry_box_golden.json"
 
 
@@ -160,6 +162,177 @@ def test_explicit_relative_asset_root(tmp_path: Path) -> None:
     )
     model = load_registry(_write_registry(tmp_path, content))
     assert model.asset_root == (tmp_path / "assets").resolve()
+
+
+def test_m0_loads_fmb_mesh_lazily_and_resolves_known_aabb() -> None:
+    model = load_registry(MESH_REGISTRY_PATH)
+    obj = model.objects["u_green"]
+    assert isinstance(obj.collision, MeshCollisionSpec)
+    assert obj.collision.scale == (1.0, 1.0, 1.0)
+    assert obj.collision.resolved_mesh_path == (
+        MESH_REGISTRY_PATH.parent / "assets" / "fmb_u_green.obj"
+    ).resolve()
+    assert obj._mesh_geometry is None
+
+    center, half_extents = obj.resolve_aabb()
+    assert center == pytest.approx({"x": 0.0, "y": -0.0005, "z": 0.0})
+    assert half_extents == pytest.approx(
+        {"x": 0.035, "y": 0.035, "z": 0.0105}, abs=0.001
+    )
+    geometry = obj.resolve_mesh_geometry()
+    assert len(geometry.vertices) == 16
+    assert len(geometry.faces) == 28
+    assert obj.resolve_mesh_geometry() is geometry
+
+
+def test_mesh_scale_defaults_to_identity(tmp_path: Path) -> None:
+    mesh_path = tmp_path / "part.obj"
+    mesh_path.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\n"
+        "f 1 2 3\nf 1 2 4\nf 1 3 4\nf 2 3 4\n",
+        encoding="utf-8",
+    )
+    collision = {
+        "type": "mesh",
+        "mesh_path": "part.obj",
+        "pose_offset": {
+            "position": {"x": 0, "y": 0, "z": 0},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+        },
+    }
+    obj = load_registry(
+        _write_registry(tmp_path, _valid_registry_yaml(collision=collision))
+    ).objects["test_object"]
+    assert isinstance(obj.collision, MeshCollisionSpec)
+    assert obj.collision.scale == (1.0, 1.0, 1.0)
+
+    collision["scale"] = [2.0, 3.0, 4.0]
+    scaled = load_registry(
+        _write_registry(tmp_path, _valid_registry_yaml(collision=collision))
+    ).objects["test_object"]
+    center, half_extents = scaled.resolve_aabb()
+    assert center == pytest.approx({"x": 1.0, "y": 1.5, "z": 2.0})
+    assert half_extents == pytest.approx({"x": 1.0, "y": 1.5, "z": 2.0})
+
+
+def test_mesh_validation_ladder_fails_loud_with_object_id(tmp_path: Path) -> None:
+    mesh_path = tmp_path / "part.obj"
+    mesh_path.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+        encoding="utf-8",
+    )
+    identity_offset = {
+        "position": {"x": 0, "y": 0, "z": 0},
+        "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+    }
+    invalid = [
+        (
+            {
+                "type": "mesh",
+                "mesh_path": "part.obj",
+                "dimensions": [1, 1, 1],
+                "pose_offset": identity_offset,
+            },
+            "test_object.*mesh.*forbids.*dimensions",
+        ),
+        (
+            {"type": "mesh", "mesh_path": "part.obj"},
+            "test_object.*requires.*pose_offset",
+        ),
+        (
+            {
+                "type": "mesh",
+                "mesh_path": "missing.obj",
+                "pose_offset": identity_offset,
+            },
+            "test_object.*does not exist",
+        ),
+        (
+            {
+                "type": "mesh",
+                "mesh_path": "../outside.obj",
+                "pose_offset": identity_offset,
+            },
+            "test_object.*escapes asset_root",
+        ),
+    ]
+    for index, (collision, message) in enumerate(invalid):
+        case_dir = tmp_path / str(index)
+        case_dir.mkdir()
+        if collision.get("mesh_path") == "part.obj":
+            (case_dir / "part.obj").write_bytes(mesh_path.read_bytes())
+        path = _write_registry(case_dir, _valid_registry_yaml(collision=collision))
+        with pytest.raises(ValueError, match=message):
+            load_registry(path)
+
+
+def test_m1_builds_shape_mesh_at_composed_pose() -> None:
+    from moveit_msgs.msg import CollisionObject
+    from robot_backend.nodes.scene_tf_sync_node import build_collision_object
+
+    obj = load_registry(MESH_REGISTRY_PATH).objects["u_green"]
+    obj = replace(
+        obj,
+        pose_offset={
+            "frame_id": "world",
+            "position": {"x": 0.01, "y": 0.02, "z": 0.03},
+            "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        },
+    )
+    world_pose = {
+        "frame_id": "world",
+        "position": {"x": 0.4, "y": -0.2, "z": 0.15},
+        "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+    }
+    message = build_collision_object(obj, world_pose)
+    assert message.operation == CollisionObject.ADD
+    assert message.id == "u_green"
+    assert message.header.frame_id == "world"
+    assert not message.primitives
+    assert len(message.meshes) == 1
+    assert len(message.meshes[0].vertices) == 16
+    assert len(message.meshes[0].triangles) == 28
+    assert len(message.mesh_poses) == 1
+    assert message.mesh_poses[0].position.x == pytest.approx(0.41)
+    assert message.mesh_poses[0].position.y == pytest.approx(-0.18)
+    assert message.mesh_poses[0].position.z == pytest.approx(0.18)
+
+
+def test_m4_manifest_adds_mesh_provenance_without_changing_yaml_hash(
+    tmp_path: Path,
+) -> None:
+    model = load_registry(MESH_REGISTRY_PATH)
+    manifest_path = sess.write_manifest(
+        tmp_path,
+        registry=model,
+        registry_path=MESH_REGISTRY_PATH,
+        registry_sha256=None,
+        started_wall_ns=1,
+        recorded_topics=[],
+        images_recorded=False,
+        image_throttle_hz=5.0,
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["registry"] == model.raw_dict
+    assert manifest["registry_sha256"] == hashlib.sha256(
+        MESH_REGISTRY_PATH.read_bytes()
+    ).hexdigest()
+    # The load-bearing guarantee for fault-injection: passing the typed Registry
+    # (not registry.raw_dict) makes write_manifest take the Registry branch and
+    # emit mesh_provenance. A dict argument silently skips it.
+    assert "mesh_provenance" in manifest
+    provenance = manifest["mesh_provenance"]["u_green"]
+    mesh_path = model.objects["u_green"].collision.resolved_mesh_path
+    assert provenance["mesh_path"] == str(mesh_path)
+    assert provenance["scale"] == [1.0, 1.0, 1.0]
+    assert provenance["sha256"] == hashlib.sha256(mesh_path.read_bytes()).hexdigest()
+    assert provenance["aabb"]["frame"] == "object"
+    assert provenance["aabb"]["center"] == pytest.approx(
+        {"x": 0.0, "y": -0.0005, "z": 0.0}
+    )
+    assert provenance["aabb"]["half_extents"] == pytest.approx(
+        {"x": 0.035, "y": 0.035, "z": 0.0105}
+    )
 
 
 def test_pre_refactor_collision_bytes_and_manifest_hash_are_identical(tmp_path: Path) -> None:

@@ -25,13 +25,12 @@ from robot_backend.mcp_servers import ensure_mcp_server_environment
 
 ensure_mcp_server_environment("robot_backend.mcp_servers.gripper_mcp_server")
 
-import yaml
-
 import rclpy
 from rclpy.node import Node
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
+from robot_backend.registry import load_registry
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.watchdog import session as session_helper
 from robot_backend.skills.gripper_skills import close_gripper_skill
@@ -67,8 +66,7 @@ def _load_registry() -> dict[str, Any]:
         path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
     except Exception:
         path = _DEFAULT_REGISTRY_PATH
-    with path.open("r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh) or {}
+    return load_registry(path).raw_dict
 
 
 def _ensure_backend():

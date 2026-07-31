@@ -94,9 +94,9 @@ class ROSMoveItSceneBackend(SceneBackend):
         geometry = self._coerce_collision_geometry(shape)
         if geometry["kind"] == "mesh_placeholder":
             raise NotImplementedError(
-                "Mesh collision objects are not implemented in this Python backend yet. "
-                "TODO: load mesh resources into shape_msgs/Mesh messages and cache the "
-                "result for add/attach planning-scene diffs. "
+                "Direct add_collision_object(mesh_resource=...) is not supported. "
+                "Registry-authored meshes are loaded by scene_tf_sync_node and enter "
+                "this backend through sync_collision_objects(). "
                 f"Requested mesh_resource={geometry['summary']['mesh_resource']!r}."
             )
 
@@ -700,10 +700,11 @@ class ROSMoveItSceneBackend(SceneBackend):
                 entry["pose"] = self._summarize_pose(collision_object.primitive_poses[i])
             geometry.append(entry)
         if collision_object.meshes:
-            for i, _ in enumerate(collision_object.meshes):
+            for i, mesh in enumerate(collision_object.meshes):
                 entry: dict[str, Any] = {
                     "type": "mesh",
-                    "todo": "Mesh summary is limited because this backend does not load mesh resources yet.",
+                    "vertex_count": len(mesh.vertices),
+                    "triangle_count": len(mesh.triangles),
                 }
                 if i < len(collision_object.mesh_poses):
                     entry["pose"] = self._summarize_pose(collision_object.mesh_poses[i])

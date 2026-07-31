@@ -48,6 +48,8 @@ def minimal_registry(tmp_path: Path) -> Path:
             object_id: test_cube
             tf_frame: test_cube
             lookup_frame: world
+            class_name: cube
+            source: test
             graspable: true
             collision:
               type: box
@@ -192,6 +194,8 @@ class TestLoadFromRegistry:
                 object_id: test_cube
                 tf_frame: test_cube
                 lookup_frame: world
+                class_name: cube
+                source: test
                 graspable: true
                 collision:
                   type: box
@@ -231,6 +235,8 @@ class TestLoadFromRegistry:
                 object_id: test_cube
                 tf_frame: test_cube
                 lookup_frame: world
+                class_name: cube
+                source: test
                 graspable: true
                 collision:
                   type: box
@@ -266,6 +272,8 @@ class TestLoadFromRegistry:
                 object_id: test_cube
                 tf_frame: test_cube
                 lookup_frame: world
+                class_name: cube
+                source: test
                 graspable: true
                 collision:
                   type: box
@@ -331,6 +339,8 @@ class TestLoadFromRegistry:
                 object_id: bare_cube
                 tf_frame: bare_cube
                 lookup_frame: world
+                class_name: cube
+                source: test
                 graspable: true
                 collision:
                   type: box

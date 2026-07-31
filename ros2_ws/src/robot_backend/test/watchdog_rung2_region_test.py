@@ -10,7 +10,7 @@ Contract sourcing is different in kind here: there is no existing Clause
 for "keepout region" in PickContract (region/keepout has no representation
 in the current schema — confirmed absent in the earlier status report). The
 region's geometry is instead derived directly from registry data that IS
-authoritative: each cube's own collision.dimensions. half_extents are built
+authoritative: each object's resolved collision AABB. half_extents are built
 from red_cube's and green_cube's half-widths plus a small margin, so the box
 just barely encloses the real contact geometry — a genuine registry-sourced
 parameter, just not routed through a Clause object. The `clause` argument
@@ -39,6 +39,7 @@ import rclpy
 from rclpy.node import Node
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.registry import Registry, load_registry
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.skills.gripper_skills import grasp_skill, release_skill
 from robot_backend.skills.maintenance_skills import (
@@ -73,9 +74,11 @@ def _pose(x, y, z):
                       orientation=dict(TOP_DOWN_QUAT), frame_id=WORLD_FRAME)
 
 
-def _half_dim(registry: dict, object_id: str, axis_index: int) -> float:
-    dims = registry["objects"][object_id]["collision"]["dimensions"]
-    return float(dims[axis_index]) / 2.0
+def _resolved_registry() -> Registry:
+    from ament_index_python.packages import get_package_share_directory
+
+    path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+    return load_registry(path)
 
 
 def main() -> int:
@@ -104,6 +107,7 @@ def main() -> int:
         print("waiting for recorder buffers to fill...")
         time.sleep(2.0)
         registry = harness.recorder.registry
+        resolved_registry = _resolved_registry()
 
         # Scene setup. sync is required before attach; set_permitted_contacts
         # is required because Phase B deliberately stacks green on red, which
@@ -119,15 +123,16 @@ def main() -> int:
         rp = red_pose["pose"]["position"]
         gp0 = green_pose["pose"]["position"]
 
-        half_red = _half_dim(registry, RED, 0)      # assumes cube: x==y==z half-dim
-        half_green = _half_dim(registry, GREEN, 0)
-        half_xy = half_red + half_green + KEEPOUT_MARGIN_M
-        half_z = half_red + half_green + KEEPOUT_MARGIN_M
+        _, red_half = resolved_registry.objects[RED].resolve_aabb()
+        _, green_half = resolved_registry.objects[GREEN].resolve_aabb()
         center = {"x": rp["x"], "y": rp["y"], "z": rp["z"]}
-        half_extents = {"x": half_xy, "y": half_xy, "z": half_z}
+        half_extents = {
+            axis: red_half[axis] + green_half[axis] + KEEPOUT_MARGIN_M
+            for axis in ("x", "y", "z")
+        }
         print(f"keepout box around {RED}: center={center} "
               f"half_extents={half_extents} "
-              f"(derived from {RED}/{GREEN} collision.dimensions + "
+              f"(derived from {RED}/{GREEN} resolved AABBs + "
               f"{KEEPOUT_MARGIN_M} m margin)")
 
         clause = {
@@ -137,7 +142,7 @@ def main() -> int:
             "description": (
                 f"{GREEN} must stay outside a keepout box around {RED}'s "
                 f"resting pose; box half-extents derived from both cubes' "
-                f"registry collision.dimensions plus a fixed margin, not "
+                f"registry resolved AABBs plus a fixed margin, not "
                 f"from a PickContract Clause (region/keepout has no clause "
                 f"representation in the current schema)."
             ),
@@ -195,7 +200,7 @@ def main() -> int:
             return 1
         grasped = True
 
-        stack_z = rp["z"] + half_red + half_green
+        stack_z = rp["z"] + red_half["z"] + green_half["z"]
         move_grasp_center_to_pose_skill(
             backend, _pose(gp0["x"], gp0["y"], gp0["z"] + APPROACH_HEIGHT_M),
             gripper_width_m=GRASP_WIDTH_M)
