@@ -72,7 +72,8 @@ RED = "red_cube"
 SAFE_POSE_NAME = "ready"
 GRASP_WIDTH_M = 0.04
 # grasp_width_m is instruction-sourced, not registry-sourced (see
-# agents/tasks/single_step_pick.yaml's steps: block). Only load_pick_contract
+# agents/tasks/single_step_pick.{executor,watchdog}.yaml's steps: block).
+# Only load_pick_contract
 # for RED needs a stand-in value here (this manual test has no task YAML).
 RED_GRASP_WIDTH_M = 0.06
 TOP_DOWN_QUAT = {"x": 1.0, "y": 0.0, "z": 0.0, "w": 0.0}

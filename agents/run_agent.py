@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Entry point for launching one agent (executor XOR watchdog) against a task.
 
-    python3 run_agent.py --config config/watchdog_agent.yaml --task tasks/two_cube_stack.yaml
-    python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_stack.yaml
+Each scenario has TWO task files, one per role, so the two agents can diverge
+(an executor file may carry extra or faulty steps; the watchdog file states
+only what conformant execution looks like) while sharing object-level truth,
+which lives in model_registry.yaml, not in either task file:
+
+    python3 run_agent.py --config config/watchdog_agent.yaml --task tasks/two_cube_stack.watchdog.yaml
+    python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_stack.executor.yaml
                          [--provider ...] [--model ...] [--dry-run]
 
-The two agents are launched as two separate processes against the same task
-file. This script never launches both -- coupling their lifecycles here would
-blur the independence the study rests on. See README.md for the launch
-protocol.
+Launch watchdog FIRST, then executor: the watchdog process writes the shared
+session pointer (see _resolve_and_export_session), and the executor joins it
+via that pointer. The two agents are launched as two separate processes. This
+script never launches both -- coupling their lifecycles here would blur the
+independence the study rests on. See README.md for the launch protocol.
 """
 
 from __future__ import annotations
@@ -33,8 +39,10 @@ _PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
 
 
 def _resolve_and_export_session(agents_dir: Path):
-    """Resolve the session directory and export WATCHDOG_SESSION_DIR for the
-    MCP servers this process is about to spawn.
+    """Resolve the session directory, export WATCHDOG_SESSION_DIR for the MCP
+    servers this process is about to spawn, and publish the pointer so the
+    OTHER agent (launched as a separate process, moments later) joins the
+    same session instead of resolving a fresh one of its own.
 
     Uses the same resolver as the ROS side (robot_backend.watchdog.session), so
     both process trees agree on one directory: WATCHDOG_SESSION_DIR wins, else
@@ -44,6 +52,26 @@ def _resolve_and_export_session(agents_dir: Path):
     where each child re-resolving on its own would otherwise pick a different
     timestamp. mcp_client passes {**os.environ, **server.env} to each server,
     so all four inherit it.
+
+    Publishing the pointer is what lets the second agent join: without it,
+    resolve_session_dir() in the second process sees no WATCHDOG_SESSION_DIR
+    (each agent is its own process, launched separately -- see module
+    docstring) and no valid pointer, so it falls back to rule='fresh' and
+    creates a SECOND, different session directory. That breaks
+    watchdog/executor correlation silently -- both agents run, both look
+    healthy, and their events land in two different directories with no
+    error. The two agents launch sequentially (watchdog then executor per the
+    documented protocol), so first-writer-wins is sufficient and no locking
+    is added here:
+      - rule == 'fresh' or 'env': this process is the one establishing the
+        session (nothing else has claimed it yet, or an explicit override was
+        given) -- write the pointer so the next agent finds it.
+      - rule == 'pointer': a pointer already names this exact session (either
+        this agent is the second one joining, or a prior run's pointer is
+        being reused) -- leave it untouched rather than rewrite it to the
+        same value for no reason.
+    This governs only the harness-side pointer used by these two Python
+    processes; it does not touch the ROS-side cell-bringup pointer logic.
 
     Returns the session Path, or None if the shared helper cannot be imported
     (install-only / no source tree) -- in which case transcripts fall back to
@@ -62,24 +90,79 @@ def _resolve_and_export_session(agents_dir: Path):
     session_dir, rule = sess.resolve_session_dir()
     session_dir.mkdir(parents=True, exist_ok=True)
     os.environ["WATCHDOG_SESSION_DIR"] = str(session_dir)
+    if rule in ("fresh", "env"):
+        sess.write_pointer(session_dir)
     print(f"session: {session_dir} (resolved by rule={rule!r}; "
           f"exported WATCHDOG_SESSION_DIR for MCP servers)")
     return session_dir
 
 
-def _export_task_path(task_path: str) -> None:
-    """Export WATCHDOG_TASK_PATH so the MCP servers this process spawns can
-    read the active task YAML's structured steps: block directly.
+def _export_task_path(agent_role: str, task_path: str) -> None:
+    """Export the role-matching task-path env var so the MCP servers this
+    process spawns can read this agent's own task YAML directly.
 
+    Each agent now runs against its OWN file (tasks/<scenario>.executor.yaml
+    or tasks/<scenario>.watchdog.yaml -- see agents/tasks/README or the
+    per-file step_id-convention header) so the two roles can diverge: an
+    executor file may carry extra or faulty steps (class 2/3), while the
+    watchdog file states only what conformant execution looks like.
+    Object-level truth (geometry, tolerances, max_clamp_effort) stays out of
+    both, in model_registry.yaml, shared by construction.
+
+    Exports ONLY the env var matching agent_role -- never both -- so the
+    watchdog process can never read the executor's (possibly faulty) file,
+    even on a launch mistake (wrong --config paired with the wrong --task).
     grasp_width_m and grasp_center_offset are instruction-sourced per-step
     conformance/geometry data (see agents/tasks/*.yaml's steps: block); the
-    contract loader (get_contract) must read them from the task file itself,
-    not have the agent pass them as tool arguments. mcp_client passes
-    {**os.environ, **server.env} to each server, so all four inherit this.
+    contract loader (get_contract) reads them from WATCHDOG_TASK_PATH, never
+    from an agent-supplied tool argument. mcp_client passes
+    {**os.environ, **server.env} to each server, so all four inherit
+    whichever var this process exports.
     """
     resolved = str(Path(task_path).resolve())
-    os.environ["WATCHDOG_TASK_PATH"] = resolved
-    print(f"task: {resolved} (exported WATCHDOG_TASK_PATH for MCP servers)")
+    if agent_role == "watchdog":
+        env_name = "WATCHDOG_TASK_PATH"
+    elif agent_role == "executor":
+        env_name = "EXECUTOR_TASK_PATH"
+    else:
+        raise ValueError(
+            f"unknown agent role {agent_role!r}; expected 'executor' or 'watchdog'"
+        )
+    os.environ[env_name] = resolved
+    print(f"task: {resolved} (exported {env_name} for MCP servers)")
+
+
+def _format_steps(steps: list) -> str:
+    """Render the task's steps: block as readable text for the EXECUTOR
+    prompt only (see render_task/watchdog_task.txt: the watchdog template has
+    no {{STEPS}} placeholder, so this text never reaches it).
+
+    The executor is instructed (executor_system.txt) to pass each step's
+    grasp_width_m / grasp_center_offset to the motion and gripper tools
+    itself; it can only do that if the numbers are actually in its rendered
+    prompt, not just present as structured YAML the harness parses. Before
+    this, the agent could see the steps: block only as raw prose text buried
+    in step_plan (if at all) -- this is why width was passed only
+    intermittently on real runs.
+    """
+    if not steps:
+        return "(no structured steps in this task file)"
+    lines: list[str] = []
+    for entry in steps:
+        if not isinstance(entry, dict):
+            continue
+        lines.append(f"- step_id: {entry.get('step_id', '?')}")
+        lines.append(f"  object_id: {entry.get('object_id', '?')}")
+        if "grasp_width_m" in entry:
+            lines.append(f"  grasp_width_m: {entry['grasp_width_m']}")
+        offset = entry.get("grasp_center_offset")
+        if isinstance(offset, dict):
+            pos = offset.get("position", {})
+            ori = offset.get("orientation", {})
+            lines.append(
+                f"  grasp_center_offset: position={pos} orientation={ori}"
+            )
+    return "\n".join(lines)
 
 
 def render_task(template_text: str, task: dict) -> str:
@@ -93,6 +176,10 @@ def render_task(template_text: str, task: dict) -> str:
         "STEP_PLAN": task.get("step_plan", ""),
         "OBJECT_IDS": task.get("object_ids", ""),
         "RUN_NOTES": task.get("run_notes", ""),
+        # Only the executor template contains {{STEPS}} -- see
+        # _format_steps' docstring. Building it here unconditionally is
+        # harmless for the watchdog template, which never references the key.
+        "STEPS": _format_steps(task.get("steps", [])),
     }
 
     def replace(m: re.Match) -> str:
@@ -130,19 +217,23 @@ def main() -> int:
     agents_dir = Path(__file__).resolve().parent
     load_dotenv(agents_dir / ".env")
 
-    # Resolve and export the session directory BEFORE load_config /
-    # MCPClientPool, so the four MCP servers this process spawns inherit
-    # WATCHDOG_SESSION_DIR and this run's transcripts land in the session.
-    _resolve_and_export_session(agents_dir)
-    # Same reasoning for the task path -- export it before the MCP servers
-    # spawn so get_contract can read the steps: block from this run's task.
-    _export_task_path(args.task)
-
+    # Loaded first (before the session/task exports and MCPClientPool) purely
+    # because _export_task_path needs config.agent to pick the role-matching
+    # env var.
     config = load_config(args.config)
     if args.provider is not None:
         config.provider = args.provider
     if args.model is not None:
         config.model = args.model
+
+    # Resolve and export the session directory BEFORE MCPClientPool, so the
+    # four MCP servers this process spawns inherit WATCHDOG_SESSION_DIR and
+    # this run's transcripts land in the session.
+    _resolve_and_export_session(agents_dir)
+    # Same reasoning for the task path -- export it before the MCP servers
+    # spawn so get_contract (watchdog role only) can read the steps: block
+    # from this run's own task file.
+    _export_task_path(config.agent, args.task)
 
     with open(config.system_prompt) as f:
         system_prompt = f.read()

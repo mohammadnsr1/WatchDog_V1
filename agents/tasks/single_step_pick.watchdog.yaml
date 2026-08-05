@@ -1,6 +1,22 @@
+# WATCHDOG instruction for single_step_pick.
+#
+# step_id convention: a step_id in this file MUST match the corresponding
+# step_id in single_step_pick.executor.yaml exactly -- that identity is what
+# lets this watchdog match the executor's begin_step events on the shared
+# timeline. A step_id the executor emits that is NOT listed here is an
+# unrecognized step (an executor-only extra/alternate step, class 3, or a
+# deliberately faulty step, class 2); see watchdog_system.txt for how such
+# steps are handled -- it is not an error in this file.
+#
+# Object-level truth (geometry, tolerances, max_clamp_effort) is not
+# authored here -- it lives in model_registry.yaml, shared by both files.
+# This file's steps: block carries only grasp_width_m/grasp_center_offset,
+# the per-run conformance/command data get_contract needs (class-4
+# discipline: width never appears in this file's rendered prose).
+
 name: single_step_pick
 instruction_spec: |
-  pick up and hold the green cube 5 cm above its location without disturbing the red cube. 
+  pick up and hold the green cube 5 cm above its location without disturbing the red cube.
 
   Preconditions (step 1, pick_green_cube):
     - green_cube and red_cube are both present in the scene and localized
@@ -26,10 +42,11 @@ step_plan: |
     Approach green_cube, establish a secure grasp per its contract, and
     lift it clear of the table to a stable hold 5cm above its initial location.
 
-# Structured, machine-readable per-step data. The contract loader and the
-# executor's motion/gripper tools read grasp_width_m and grasp_center_offset
-# from here -- NOT from the model registry. Prose above is for agent
-# reasoning only and is never parsed for these values.
+# Structured, machine-readable per-step data. The contract loader reads
+# grasp_width_m from here -- NOT from the model registry, and NOT rendered
+# into the watchdog's prompt (see watchdog_task.txt: no {{STEPS}}
+# placeholder). Prose above is for agent reasoning only and is never parsed
+# for these values.
 steps:
   - step_id: pick_green_cube
     object_id: green_cube

@@ -30,6 +30,17 @@ RG2_TOUCH_LINKS: list[str] = [
 # Distinct from the GripperGuardedMove goal's own position tolerance, which we
 # don't override — see NO_WIDTH_TOLERANCE_OVERRIDE below.
 GRASP_WIDTH_TOLERANCE_M: float = 0.005   # ±5 mm post-grasp width check
+# Physical impossibility floor, independent of expected_width_m: below this,
+# the fingers are effectively closed on nothing (jam or air close), not
+# holding an object, regardless of what any caller expected or whether they
+# passed a width at all. RG2Calibration.width_closed_m is exactly 0.0 m
+# (utils/rg2_geometry.py), so a jam/air close that drives to the mechanical
+# stop reads at or near 0.0 m; 3 mm gives headroom over that stop plus sensor/
+# backlash noise while sitting far below the smallest known graspable object
+# (u_green, 21 mm) minus its width tolerance (5 mm) -- 16 mm of margin, no
+# real grasp can be mistaken for a jam. A true grasp of ANY registered object
+# plateaus at its real width, well above this floor.
+GRASP_MIN_PLAUSIBLE_WIDTH_M: float = 0.003   # 3 mm; see rationale above
 # Clearance applied to the safety-floor target so the floor sits inside the
 # object, guaranteeing mechanical contact before the floor clamp stops progress.
 GRASP_CLEARANCE_M: float = 0.003
@@ -171,10 +182,15 @@ def grasp_skill(
 
     expected_width_m is the caller-supplied expected RG2 opening at contact,
     sourced from the task instruction's step (agents/tasks/*.yaml's steps:
-    block), never from the registry. When provided, the final width is
+    block), never from the registry. When provided, the final width is also
     checked against it (±grasp_width_tolerance_m) as a sanity bound, not a
-    stop condition. When omitted, the width check is skipped entirely and the
-    grasp relies solely on the effort-plateau/force-threshold stop criterion.
+    stop condition. When omitted, only the plausibility band is skipped.
+
+    Independent of expected_width_m, a fully-closed or air-closed gripper
+    (observed final_width_m at or below GRASP_MIN_PLAUSIBLE_WIDTH_M) is never
+    reported as a success: that is a physical impossibility check against the
+    observed width alone, so a forgotten or absent expected width degrades to
+    an honest failure instead of a false success on a jam.
     """
     steps_log: list[dict[str, Any]] = []
 
@@ -242,16 +258,23 @@ def grasp_skill(
     stop_reason = action_result.stop_reason
 
     # --- Success criteria ---
-    # torque mode: contact is confirmed by either effort-based stop reason;
-    # width is a sanity bound only, and only checked when the caller supplied
-    # expected_width_m. Without it, the grasp relies solely on the effort
-    # plateau.
+    # torque mode: contact is confirmed by either effort-based stop reason.
+    # Width has two independent checks:
+    #   - criterion_min_width_floor: a PHYSICAL impossibility check against
+    #     the observed final_width_m only (never a contract/registry/
+    #     instruction value). A gripper at or below this floor is closed on
+    #     nothing -- jammed or air-closed -- regardless of what any caller
+    #     expected or whether a width was passed at all. Applies always.
+    #   - criterion_width_band: a plausibility band against the caller-
+    #     supplied expected_width_m, only checked when it was provided.
     criterion_contact = stop_reason in CONTACT_STOP_REASONS
-    criterion_width_plausible = (
+    criterion_min_width_floor = final_width > GRASP_MIN_PLAUSIBLE_WIDTH_M
+    criterion_width_band = (
         True
         if expected_width_m is None
         else abs(final_width - expected_width_m) <= grasp_width_tolerance_m
     )
+    criterion_width_plausible = criterion_min_width_floor and criterion_width_band
 
     provenance: dict[str, Any] = {
         "force_mode": "guarded_move_action",
@@ -260,9 +283,12 @@ def grasp_skill(
         "final_width_m": final_width,
         "final_effort": final_effort,
         "expected_width_m": expected_width_m,
+        "grasp_min_plausible_width_m": GRASP_MIN_PLAUSIBLE_WIDTH_M,
         "force_threshold": force_threshold,
         "asymmetry_detected": action_result.asymmetry_detected,
         "criterion_contact": criterion_contact,
+        "criterion_min_width_floor": criterion_min_width_floor,
+        "criterion_width_band": criterion_width_band,
         "criterion_width_plausible": criterion_width_plausible,
     }
 
@@ -275,7 +301,13 @@ def grasp_skill(
                 f"stop_reason '{stop_reason}' indicates no confirmed contact "
                 f"(expected one of {sorted(CONTACT_STOP_REASONS)})"
             )
-        if not criterion_width_plausible:
+        if not criterion_min_width_floor:
+            reason_parts.append(
+                f"observed width below plausible floor: object not held "
+                f"(jam/air close) -- final width {final_width:.4f}m <= "
+                f"{GRASP_MIN_PLAUSIBLE_WIDTH_M:.4f}m floor"
+            )
+        if criterion_min_width_floor and not criterion_width_band:
             reason_parts.append(
                 f"final width {final_width:.4f}m deviates from expected "
                 f"{expected_width_m:.4f}m by more than {grasp_width_tolerance_m:.4f}m tolerance"

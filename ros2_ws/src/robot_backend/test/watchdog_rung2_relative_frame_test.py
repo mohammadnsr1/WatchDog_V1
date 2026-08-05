@@ -113,7 +113,8 @@ def main() -> int:
         child_frame = harness.recorder.registry["objects"][GREEN]["tf_frame"]
 
         # grasp_width_m is instruction-sourced, not registry-sourced (see
-        # agents/tasks/single_step_pick.yaml's steps: block); this manual test
+        # agents/tasks/single_step_pick.{executor,watchdog}.yaml's steps:
+        # block); this manual test
         # script has no task YAML of its own, so it stands in with GRASP_WIDTH_M.
         step_spec = {
             "step_id": "rung2_relative_frame_test",

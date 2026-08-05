@@ -215,18 +215,23 @@ def _resolve_approach_defaults(
     gripper_width_m: Any,
     approach_distance_m: Any,
 ) -> tuple[Any, Any, list[str]]:
-    """Apply fallback defaults when parameters are None and track which were substituted."""
+    """Require gripper_width_m; apply fallback defaults for the rest.
+
+    gripper_width_m has no fallback: the TCP target is computed FROM it
+    (jaw-opening-dependent TCP<->grasp-center offset), so a silently
+    defaulted width computes the offset for the wrong opening and places the
+    TCP at the wrong height -- exactly the failure mode that drove a top-down
+    descent into the table on a real run. Fail loud at the tool boundary,
+    before any motion, instead.
+    """
 
     defaults_used: list[str] = []
 
     if gripper_width_m is None:
-        gripper_width_m = DEFAULT_RG2_CALIBRATION.width_open_m
-        defaults_used.append("gripper_width_m")
-        if _NODE is not None:
-            _NODE.get_logger().warning(
-                "gripper_width_m not supplied; "
-                f"using fallback {DEFAULT_RG2_CALIBRATION.width_open_m} m"
-            )
+        raise ValueError(
+            "gripper_width_m is required; the TCP target is computed from "
+            "it. Source it from the step's grasp_width_m."
+        )
 
     if approach_distance_m is None:
         approach_distance_m = _DEFAULT_APPROACH_DISTANCE_M
@@ -606,7 +611,7 @@ if mcp is not None:
         qy: float,
         qz: float,
         qw: float,
-        gripper_width_m: float | None = None,
+        gripper_width_m: float,
         approach_distance_m: float | None = None,
         approach_vec_x: float | None = None,
         approach_vec_y: float | None = None,
@@ -642,13 +647,14 @@ if mcp is not None:
             top-down grasp use (qx=1, qy=0, qz=0, qw=0), which points the
             gripper straight down. Identity orientation (qx=0, qy=0, qz=0,
             qw=1) points the gripper upward and is not a valid top-down grasp.
-        gripper_width_m : float, optional
-            Expected physical finger gap in meters at the moment of contact.
-            This determines where the grasp center sits relative to the fixed
-            TCP frame. Obtain this value from the target step's
-            grasp_width_m in the task instruction's steps: block. When
-            omitted, defaults to fully open (0.104 m) and "gripper_width_m"
-            is added to defaults_used in the response.
+        gripper_width_m : float
+            Required. Expected physical finger gap in meters at the moment of
+            contact. This determines where the grasp center sits relative to
+            the fixed TCP frame -- the TCP target is computed FROM this
+            value, so there is no fallback: an omitted or wrong width places
+            the TCP at the wrong height for the intended grasp. Obtain this
+            value from the target step's grasp_width_m in the task
+            instruction's steps: block.
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
             pre-grasp staging position, measured along the approach vector.
@@ -759,7 +765,7 @@ if mcp is not None:
         qy: float,
         qz: float,
         qw: float,
-        gripper_width_m: float | None = None,
+        gripper_width_m: float,
         approach_distance_m: float | None = None,
         approach_vec_x: float | None = None,
         approach_vec_y: float | None = None,
@@ -792,11 +798,13 @@ if mcp is not None:
         qx, qy, qz, qw : float
             Orientation of the grasp center frame in frame_id. For a standard
             top-down grasp use (qx=1, qy=0, qz=0, qw=0).
-        gripper_width_m : float, optional
-            Expected physical finger gap in meters at the moment of contact.
+        gripper_width_m : float
+            Required. Expected physical finger gap in meters at the moment of
+            contact -- the TCP target is computed FROM this value, so there
+            is no fallback: an omitted or wrong width places the TCP at the
+            wrong height and drives the approach into whatever is there.
             Obtain from the target step's grasp_width_m in the task
-            instruction's steps: block. Defaults to fully open (0.104 m)
-            when omitted; recorded in defaults_used.
+            instruction's steps: block.
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
             pre-grasp staging position. Defaults to 0.05 m when omitted.

@@ -6,6 +6,14 @@
 
 {{STEP_PLAN}}
 
+## Steps (structured)
+
+Per-step grasp_width_m and grasp_center_offset, read from this task's own
+steps: block. Pass these values to the motion and gripper tools yourself, per
+executor_system.txt -- they are not applied for you.
+
+{{STEPS}}
+
 ## Objects in scene
 
 {{OBJECT_IDS}}

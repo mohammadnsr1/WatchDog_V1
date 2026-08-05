@@ -1,3 +1,16 @@
+# EXECUTOR instruction for u_green_pick.
+#
+# step_id convention: a step_id in this file that corresponds to a step in
+# u_green_pick.watchdog.yaml MUST use the exact same step_id string -- that
+# identity is what lets the watchdog match this executor's begin_step events
+# on the shared timeline. A step_id in THIS file that the watchdog file does
+# NOT contain is an executor-only extra/alternate step (class 3) or a
+# deliberately faulty step (class 2); the watchdog treats it as an
+# unrecognized step per its own prompt, not an error in this file.
+#
+# Object-level truth (geometry, tolerances, max_clamp_effort) is not
+# authored here -- it lives in model_registry.yaml, shared by both files.
+
 name: u_green_pick
 instruction_spec: |
   pick up and hold the u_green part 5 cm above its location.
@@ -45,8 +58,8 @@ steps:
     #   centre axes are the tcp axes. (Live jaw sense confirmed in M3.)
     grasp_width_m: 0.021    # measured right-arm thickness (jaw-closing dimension)
     grasp_center_offset:
-      position: {x: 0.0245, y: -0.020, z: 0.0}
-      orientation: {x: 0.7071067811865476, y: 0.7071067811865476, z: 0.0, w: 0.0}
+      position: {x: 0.0245, y: -0.020, z: 0.011}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 object_ids: |
   u_green — FMB assembly part, graspable

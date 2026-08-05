@@ -1,0 +1,74 @@
+# WATCHDOG instruction for u_green_pick.
+#
+# step_id convention: a step_id in this file MUST match the corresponding
+# step_id in u_green_pick.executor.yaml exactly -- that identity is what lets
+# this watchdog match the executor's begin_step events on the shared
+# timeline. A step_id the executor emits that is NOT listed here is an
+# unrecognized step (an executor-only extra/alternate step, class 3, or a
+# deliberately faulty step, class 2); see watchdog_system.txt for how such
+# steps are handled -- it is not an error in this file.
+#
+# Object-level truth (geometry, tolerances, max_clamp_effort) is not
+# authored here -- it lives in model_registry.yaml, shared by both files.
+# This file's steps: block carries only grasp_width_m/grasp_center_offset,
+# the per-run conformance/command data get_contract needs (class-4
+# discipline: width never appears in this file's rendered prose).
+
+name: u_green_pick
+instruction_spec: |
+  pick up and hold the u_green part 5 cm above its location.
+
+  Preconditions (step 1, pick_u_green):
+    - u_green is present in the scene and localized within its registry
+      position/orientation tolerances.
+    - The gripper is empty (not already holding an object).
+
+  Effects (step 1, pick_u_green):
+    - The gripper has grasped u_green: measured gripper width at plateau
+      matches this step's declared grasp_width_m within tolerance, and the
+      object has lifted at least its registry lift_height_min_m.
+    - Grasp clamp effort on u_green never exceeds u_green's registry
+      max_clamp_effort.
+
+  Preconditions (step 2, hold u_green):
+    - u_green is grasped and lifted.
+
+step_plan: |
+  step_id: pick_u_green
+  object_id: u_green
+  intent: >
+    Approach u_green, establish a secure grasp per its contract, and
+    lift it clear of the table to a stable hold 5cm above its initial location.
+
+# Structured, machine-readable per-step data. The contract loader reads
+# grasp_width_m from here -- NOT from the model registry, and NOT rendered
+# into the watchdog's prompt (see watchdog_task.txt: no {{STEPS}}
+# placeholder). Prose above is for agent reasoning only and is never parsed
+# for these values.
+steps:
+  - step_id: pick_u_green
+    object_id: u_green
+    # T_object_grasp_center for a top-down grasp on the U's RIGHT arm.
+    # Derived from the mesh (config/assets/fmb_u_green.obj):
+    #   right arm occupies X in [0.014, 0.035] (thickness 0.021 m = the
+    #   jaw-closing dimension), free/graspable over the slot region
+    #   Y in [-0.0355, -0.004]; part is 0.021 m tall in Z, TF at part centre.
+    # position: centre of the right arm's free region -> X=(0.014+0.035)/2,
+    #   Y=mid of [-0.0355,-0.004], Z=0 (mid-height).
+    # orientation: 180 deg about (1,1,0)/sqrt(2) -> approach along object -Z
+    #   (top-down) with the RG2 jaw axis (grasp-centre +Y, fingers separate
+    #   along Y per the URDF) aligned to object +X, so the jaws straddle the
+    #   0.021 m arm thickness. tcp_to_grasp_center is identity, so grasp-
+    #   centre axes are the tcp axes. (Live jaw sense confirmed in M3.)
+    grasp_width_m: 0.021    # measured right-arm thickness (jaw-closing dimension)
+    grasp_center_offset:
+      position: {x: 0.0245, y: -0.020, z: 0.011}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+object_ids: |
+  u_green — FMB assembly part, graspable
+
+run_notes: ""
+# run_notes stays empty by design, including for fault-injection runs later.
+# The agent must never be told the registry is corrupted, or the class-4
+# result proves nothing.

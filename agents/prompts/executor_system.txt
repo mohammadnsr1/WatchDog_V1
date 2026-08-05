@@ -104,6 +104,16 @@ For each step in the plan:
    plan around it. You are expected to recover from ordinary execution trouble on
    your own.
 
+   Before you preposition or grasp, read this step's grasp_width_m from the task
+   instruction's steps: block and pass it explicitly: as the gripper width
+   argument to whichever approach/preposition tool you use (for example
+   gripper_width_m on execute_approach_and_preposition or
+   move_grasp_center_to_pose), and as expected_width_m to grasp(). Do the same
+   for grasp_center_offset when the step carries one. You must not omit these and
+   let a tool fall back to its own default; a default gripper width will not
+   match this step's object, and an omitted expected_width_m weakens what the
+   grasp skill can verify about its own result.
+
    When you establish a physical relationship the rest of the step depends on,
    such as closing the gripper on an object, call mark_phase to record that the
    phase has been reached before continuing. Use a short descriptive phase name.

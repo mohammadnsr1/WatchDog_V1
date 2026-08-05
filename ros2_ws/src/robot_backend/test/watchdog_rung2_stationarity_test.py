@@ -59,7 +59,8 @@ from watchdog_smoke_test import WatchDogHarness
 STEP_ID = "rung2_stationarity_test"
 TARGET_OBJECT = "red_cube"
 # grasp_width_m is instruction-sourced, not registry-sourced (see
-# agents/tasks/single_step_pick.yaml's steps: block); this manual test script
+# agents/tasks/single_step_pick.{executor,watchdog}.yaml's steps: block);
+# this manual test script
 # has no task YAML of its own, so it stands in with the same value directly.
 TARGET_OBJECT_GRASP_WIDTH_M = 0.06
 DEFAULT_QUIET_SEC = 6.0

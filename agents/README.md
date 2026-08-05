@@ -120,9 +120,17 @@ and prints the fully rendered system prompt and task — without calling the
 provider at all.
 
 ```bash
-python3 run_agent.py --config config/watchdog_agent.yaml  --task tasks/two_cube_stack.yaml --dry-run
-python3 run_agent.py --config config/executor_agent.yaml  --task tasks/two_cube_stack.yaml --dry-run
+python3 run_agent.py --config config/watchdog_agent.yaml  --task tasks/two_cube_stack.watchdog.yaml --dry-run
+python3 run_agent.py --config config/executor_agent.yaml  --task tasks/two_cube_stack.executor.yaml --dry-run
 ```
+
+Each scenario has two task files, one per role (`<scenario>.executor.yaml`,
+`<scenario>.watchdog.yaml`) — always pair the watchdog config with the
+`.watchdog.yaml` file and the executor config with the `.executor.yaml` file.
+`run_agent.py` exports the role-matching `WATCHDOG_TASK_PATH` /
+`EXECUTOR_TASK_PATH` env var (never both) from whichever `--task` path is
+given, so a mismatched pairing is a real misconfiguration, not just a naming
+slip: get_contract's steps: block would come from the wrong file.
 
 Use this to confirm, every time you change a config or prompt:
 
@@ -184,12 +192,16 @@ ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py guard_mode:=unguarde
 ros2 launch sim_moveit_bringup sim_moveit_bringup.launch.py
 
 # 2. WatchDog — warms its recorder buffers and signals run-scope readiness.
+# Also the FIRST of the two agent processes to launch: it writes the shared
+# session pointer (~/.watchdog/current_session) that the executor process
+# joins in step 3, so both agents' events land in one session directory.
 # Skip this step entirely for an executor-only run.
-python3 run_agent.py --config config/watchdog_agent.yaml --task tasks/two_cube_stack.yaml
+python3 run_agent.py --config config/watchdog_agent.yaml --task tasks/two_cube_stack.watchdog.yaml
 
 # 3. Executor — its first begin_step blocks until WatchDog releases it
-# (guarded mode) or returns immediately (unguarded mode)
-python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_stack.yaml
+# (guarded mode) or returns immediately (unguarded mode). Launched second so
+# it joins the session WatchDog already established.
+python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_stack.executor.yaml
 ```
 
 To run the orchestrator standalone instead of through cell bringup (e.g. for
