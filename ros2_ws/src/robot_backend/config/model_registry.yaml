@@ -200,3 +200,50 @@ objects:
         grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
                                    # air-close floor in Isaac Sim, above the ~0.03 idle
                                    # noise floor.
+
+  # FMB mesh object for the Phase 1 (M1-M4) validation ladder. Folded in from
+  # model_registry_mesh_example.yaml so the whole ladder sees one registry.
+  # mesh collision requires an explicitly authored pose_offset (identity here).
+  u_green:
+    enabled: true
+    object_id: u_green
+    tf_frame: u_green
+    lookup_frame: world
+    class_name: fmb_u
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/fmb_u_green.obj   # relative to asset_root (defaults to config/)
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        # T_object_grasp_center for a top-down grasp on the U's RIGHT arm.
+        # Derived from the mesh (config/assets/fmb_u_green.obj):
+        #   right arm occupies X in [0.014, 0.035] (thickness 0.021 m = the
+        #   jaw-closing dimension), free/graspable over the slot region
+        #   Y in [-0.0355, -0.004]; part is 0.021 m tall in Z, TF at part centre.
+        # position: centre of the right arm's free region -> X=(0.014+0.035)/2,
+        #   Y=mid of [-0.0355,-0.004], Z=0 (mid-height).
+        # orientation: 180 deg about (1,1,0)/sqrt(2) -> approach along object -Z
+        #   (top-down) with the RG2 jaw axis (grasp-centre +Y, fingers separate
+        #   along Y per the URDF) aligned to object +X, so the jaws straddle the
+        #   0.021 m arm thickness. tcp_to_grasp_center is identity, so grasp-
+        #   centre axes are the tcp axes. (Live jaw sense confirmed in M3.)
+        grasp_center_offset:
+          position: {x: 0.0245, y: -0.020, z: 0.0}
+          orientation: {x: 0.7071067811865476, y: 0.7071067811865476, z: 0.0, w: 0.0}
+        grasp_width_m: 0.021    # measured right-arm thickness (jaw-closing dimension)
+        force_threshold_n: 2.0
+      tolerances:
+        position_m: 0.005
+        orientation_deg: 5.0
+        lift_height_min_m: 0.02
+        disturbance_tolerance_m: 0.005
+        grasp_width_tolerance_m: 0.005
+      limits:
+        max_clamp_effort: 4.0
+        grasp_effort_floor: 0.05
