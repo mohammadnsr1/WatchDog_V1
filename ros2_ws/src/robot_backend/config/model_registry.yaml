@@ -12,12 +12,10 @@
 #   Thresholds here are the SOLE source of truth for contract clauses; never
 #   duplicate them as inline constants elsewhere in the code.
 #
-#   grasp.grasp_center_offset  — T_object_grasp_center (zero for symmetric primitives)
-#   grasp.grasp_width_m        — EXPECTED RG2 opening width at contact [m].
-#                                This is a verification input for the grasp primitive,
-#                                NOT a commanded position. Force control closes until a
-#                                plateau; this value is compared against the measured
-#                                width at plateau to detect air grasps.
+#   grasp_center_offset and grasp_width_m are NOT registry fields. They are
+#   pure command geometry / per-run conformance data and live in the task
+#   instruction's steps: block (see agents/tasks/*.yaml), read by the
+#   contract loader and executor tools from there, never from this file.
 #   grasp.force_threshold_n    — per-object STOP TRIGGER for the guarded close [sim
 #                                effort units]. The guarded close stops once measured
 #                                finger_joint effort FIRST CROSSES this value — it is
@@ -131,10 +129,6 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        grasp_center_offset:
-          position: {x: 0.0, y: 0.0, z: 0.0}
-          orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-        grasp_width_m: 0.06      # expected contact width [m]; verification input, not a command
         force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
@@ -174,10 +168,6 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        grasp_center_offset:
-          position: {x: 0.0, y: 0.0, z: 0.0}
-          orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-        grasp_width_m: 0.04      # expected contact width [m]; verification input, not a command
         force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
@@ -221,22 +211,6 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        # T_object_grasp_center for a top-down grasp on the U's RIGHT arm.
-        # Derived from the mesh (config/assets/fmb_u_green.obj):
-        #   right arm occupies X in [0.014, 0.035] (thickness 0.021 m = the
-        #   jaw-closing dimension), free/graspable over the slot region
-        #   Y in [-0.0355, -0.004]; part is 0.021 m tall in Z, TF at part centre.
-        # position: centre of the right arm's free region -> X=(0.014+0.035)/2,
-        #   Y=mid of [-0.0355,-0.004], Z=0 (mid-height).
-        # orientation: 180 deg about (1,1,0)/sqrt(2) -> approach along object -Z
-        #   (top-down) with the RG2 jaw axis (grasp-centre +Y, fingers separate
-        #   along Y per the URDF) aligned to object +X, so the jaws straddle the
-        #   0.021 m arm thickness. tcp_to_grasp_center is identity, so grasp-
-        #   centre axes are the tcp axes. (Live jaw sense confirmed in M3.)
-        grasp_center_offset:
-          position: {x: 0.0245, y: -0.020, z: 0.0}
-          orientation: {x: 0.7071067811865476, y: 0.7071067811865476, z: 0.0, w: 0.0}
-        grasp_width_m: 0.021    # measured right-arm thickness (jaw-closing dimension)
         force_threshold_n: 2.0
       tolerances:
         position_m: 0.005

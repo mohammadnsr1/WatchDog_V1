@@ -27,17 +27,19 @@ the closer the grasp centre sits from the TCP.
 
 The motion layer computes this offset for you, but only if you tell it the jaw
 opening you intend. Whenever you preposition for a grasp, pass the gripper width
-you are going to close from, taken from the object's contract. If you omit it,
-the motion layer applies a default that will not match your actual grasp, and the
-gripper will arrive at the wrong height for the object.
+you are going to close from, taken from the task instruction's step
+(grasp_width_m in the steps: block). If you omit it, the motion layer applies a
+default that will not match your actual grasp, and the gripper will arrive at
+the wrong height for the object.
 
 Two different offsets meet when you position for a grasp, and they come from
 different places. The gripper-side offset, from the TCP frame to the point where
 the fingers close, depends on jaw opening and is applied for you when you pass
 gripper_width_m. The object-side offset, from the object's own frame to the point
-on it you intend to grasp, comes from the object's contract. Pass it when the
-contract carries one, along with the object's pose; it is identity for a
-symmetric object grasped at its centre.
+on it you intend to grasp, comes from the task instruction's step
+(grasp_center_offset in the steps: block). Pass it when the step carries one,
+along with the object's pose; it is identity for a symmetric object grasped at
+its centre.
 
 ## MoveIt and the planning scene
 
@@ -85,9 +87,12 @@ For each step in the plan:
 
 2. Read the contract. Retrieve the contract for the object this step concerns.
    Its preconditions tell you what must hold before you act. Its effects tell you
-   what must hold after. Its parameters, grasp widths, force thresholds,
-   tolerances, poses, are the values you plan against. These come from the cell's
-   registry through the contract tools. Treat them as authoritative.
+   what must hold after. Its parameters -- force thresholds, tolerances, poses --
+   are the values you plan against, sourced from the cell's registry through the
+   contract tools. Treat them as authoritative. Grasp width and grasp centre
+   offset are the exception: they are not registry fields, they come from this
+   step's entry in the task instruction's steps: block, and you pass them to the
+   motion and gripper tools yourself.
 
 3. Check preconditions. Query the cell and confirm the step's preconditions hold.
    If they do not, do not force the step; report the step as a failure with the

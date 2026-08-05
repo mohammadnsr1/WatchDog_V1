@@ -67,6 +67,21 @@ def _resolve_and_export_session(agents_dir: Path):
     return session_dir
 
 
+def _export_task_path(task_path: str) -> None:
+    """Export WATCHDOG_TASK_PATH so the MCP servers this process spawns can
+    read the active task YAML's structured steps: block directly.
+
+    grasp_width_m and grasp_center_offset are instruction-sourced per-step
+    conformance/geometry data (see agents/tasks/*.yaml's steps: block); the
+    contract loader (get_contract) must read them from the task file itself,
+    not have the agent pass them as tool arguments. mcp_client passes
+    {**os.environ, **server.env} to each server, so all four inherit this.
+    """
+    resolved = str(Path(task_path).resolve())
+    os.environ["WATCHDOG_TASK_PATH"] = resolved
+    print(f"task: {resolved} (exported WATCHDOG_TASK_PATH for MCP servers)")
+
+
 def render_task(template_text: str, task: dict) -> str:
     """Substitute {{PLACEHOLDER}} tokens. Raise if any survive rendering.
 
@@ -119,6 +134,9 @@ def main() -> int:
     # MCPClientPool, so the four MCP servers this process spawns inherit
     # WATCHDOG_SESSION_DIR and this run's transcripts land in the session.
     _resolve_and_export_session(agents_dir)
+    # Same reasoning for the task path -- export it before the MCP servers
+    # spawn so get_contract can read the steps: block from this run's task.
+    _export_task_path(args.task)
 
     config = load_config(args.config)
     if args.provider is not None:

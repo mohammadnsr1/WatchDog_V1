@@ -10,7 +10,7 @@ instruction_spec: |
 
   Effects (step 1, pick_green_cube):
     - The gripper has grasped green_cube: measured gripper width at plateau
-      matches green_cube's registry grasp_width_m within tolerance, and the
+      matches this step's declared grasp_width_m within tolerance, and the
       object has lifted at least its registry lift_height_min_m.
     - Grasp clamp effort on green_cube never exceeds green_cube's registry
       max_clamp_effort.
@@ -53,6 +53,20 @@ step_plan: |
     object_id: green_cube
     action: Transport green_cube to a pose centered on top of red_cube,
       lower it into contact, and release the gripper.
+
+# Structured, machine-readable per-step data. The contract loader and the
+# executor's motion/gripper tools read grasp_width_m and grasp_center_offset
+# from here -- NOT from the model registry. Prose above is for agent
+# reasoning only and is never parsed for these values. Only pick_green_cube
+# performs a grasp, so it is the only step with grasp geometry.
+steps:
+  - step_id: pick_green_cube
+    object_id: green_cube
+    grasp_width_m: 0.040
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.0, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+
 object_ids: |
   green_cube — 40 mm cube, graspable, to be picked and placed.
   red_cube   — 60 mm cube, graspable, stays in place as the stack base.

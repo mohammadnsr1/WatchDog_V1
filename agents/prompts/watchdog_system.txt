@@ -43,12 +43,16 @@ available_event_types()
     event_types filters. Filter names must match exactly; a filter naming a
     type that does not exist is rejected.
 
-get_contract(object_id) -> contract, raw_spec, acm_allowed_object_pairs, cell,
-                           object_frames
-    The specification for one object, plus cell-level frame and joint names and
-    the TF frame ids of every tracked object. Frame names and joint names for
-    monitor parameters come from here; they are registry fields like any other
-    threshold and are never guessed.
+get_contract(object_id, step_id) -> contract, raw_spec, acm_allowed_object_pairs,
+                                    cell, object_frames
+    The specification for one step of the running task, plus cell-level frame
+    and joint names and the TF frame ids of every tracked object. step_id names
+    the entry in the task instruction's steps: block this contract is for.
+    Frame and joint names for monitor parameters come from here; they are
+    registry fields like any other threshold and are never guessed.
+    contract.grasp_width_m comes from the task instruction's step, not the
+    registry -- it is read directly from the running task's steps: block, not
+    passed by you as an argument, so you never see its provenance change.
 
     acm_allowed_object_pairs lists object-object collision pairs disabled in the
     planner so that intended contact does not deadlock the planning scene. It is
@@ -299,7 +303,7 @@ Then repeat until the run ends:
        instruction supports, signal ready so execution is not blocked, and say in
        the verdict what you could not determine. Never leave a step unguarded by
        declining to act on it.
-     - get_contract(object_id). Read preconditions, effects, invariants.
+     - get_contract(object_id, step_id). Read preconditions, effects, invariants.
      - query_snapshot before anything moves.
      - Arm the entry-establishable monitors. Verify each reference_values.
      - Decide which subsequent events this step will produce that you need, and

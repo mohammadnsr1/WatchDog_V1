@@ -1,7 +1,8 @@
 """Grasp-centre offset plumbing for the motion server -- pure geometry.
 
-The object-side offset (spec.grasp.grasp_center_offset, T_object_grasp_center)
-is composed with the object pose to yield the grasp centre, exactly as
+The object-side offset (grasp_center_offset, T_object_grasp_center, sourced
+from the task instruction's steps: block -- not the model registry) is
+composed with the object pose to yield the grasp centre, exactly as
 motion_mcp_server._compute_approach_geometry does when any offset component is
 supplied. These tests exercise that composition through the ROS-free geometry
 helpers the server delegates to, so they run with no cell and no MoveGroup.

@@ -18,6 +18,7 @@ from robot_backend.mcp_servers import ensure_mcp_server_environment
 ensure_mcp_server_environment("robot_backend.mcp_servers.watchdog_mcp_server")
 
 import rclpy
+import yaml
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -72,6 +73,45 @@ def _env_float(name: str, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
+
+
+def _load_task_steps() -> dict[str, dict[str, Any]]:
+    """Load the active run's task YAML steps: block, keyed by step_id.
+
+    grasp_width_m and grasp_center_offset are pure per-run conformance/command
+    data and live in the task instruction, not the registry (see
+    agents/tasks/*.yaml). WATCHDOG_TASK_PATH is exported by run_agent.py
+    before this process's MCP servers are spawned, so get_contract can read
+    the step data directly from the instruction file rather than have the
+    agent pass it as a tool argument. Fails loud: no fallback to defaults or
+    to a registry value, since there is no registry value anymore.
+    """
+    task_path = os.environ.get("WATCHDOG_TASK_PATH")
+    if not task_path:
+        raise RuntimeError(
+            "WATCHDOG_TASK_PATH is not set. get_contract needs it to read the "
+            "task instruction's steps: block (grasp_width_m and "
+            "grasp_center_offset are instruction-sourced, not registry-sourced). "
+            "run_agent.py exports this before launching the MCP servers -- "
+            "check that this process was started via run_agent.py --task ..."
+        )
+    with open(task_path) as f:
+        task = yaml.safe_load(f)
+    steps = task.get("steps") if isinstance(task, dict) else None
+    if not isinstance(steps, list):
+        raise ValueError(
+            f"task file {task_path!r} has no steps: list. Add a structured "
+            "steps: block (step_id, object_id, grasp_width_m, "
+            "grasp_center_offset) -- prose fields are not parsed for this data."
+        )
+    by_step_id: dict[str, dict[str, Any]] = {}
+    for entry in steps:
+        if not isinstance(entry, dict) or "step_id" not in entry:
+            raise ValueError(
+                f"task file {task_path!r} has a steps: entry missing step_id: {entry!r}"
+            )
+        by_step_id[entry["step_id"]] = entry
+    return by_step_id
 
 
 def _frame_extension(encoding: str) -> str:
@@ -177,6 +217,9 @@ class WatchDogContext:
     session_dir: Path
     image_buffer: ImageRingBuffer
     image_manager: ImageBufferManager
+    # Lazily populated on first get_contract call from WATCHDOG_TASK_PATH's
+    # steps: block, keyed by step_id -- see _load_task_steps.
+    task_steps: dict[str, dict[str, Any]] | None = None
 
 
 _CONTEXT: WatchDogContext | None = None
@@ -414,8 +457,17 @@ def _drain_wait(
 if mcp is not None:
 
     @mcp.tool()
-    def get_contract(object_id: str) -> dict[str, Any]:
-        """Return a pick contract and declared registry provenance for one object.
+    def get_contract(object_id: str, step_id: str) -> dict[str, Any]:
+        """Return a pick contract and declared registry provenance for one
+        step of the running task.
+
+        step_id identifies the entry in the task instruction's steps: block
+        (see agents/tasks/*.yaml) this contract is for. grasp_width_m is read
+        from that step, not from the registry or from any argument you pass
+        here -- it is loaded from the task file itself (WATCHDOG_TASK_PATH),
+        so the conformance bound never passes through your reasoning. Fails
+        if step_id is not in the running task's steps: block, or if its
+        object_id does not match the object_id argument.
 
         cell carries cell-level (not per-object) joint and frame names --
         cell.gripper.effort_joint_name for effort_event's joint_name
@@ -443,11 +495,25 @@ if mcp is not None:
         command = "get_contract"
         try:
             ctx = _ensure_watchdog()
-            contract = load_pick_contract(object_id)
+            if ctx.task_steps is None:
+                ctx.task_steps = _load_task_steps()
+            step_spec = ctx.task_steps.get(step_id)
+            if step_spec is None:
+                raise ValueError(
+                    f"step_id {step_id!r} not found in the running task's steps: "
+                    f"block. Known step_ids: {list(ctx.task_steps.keys())}"
+                )
+            if step_spec.get("object_id") != object_id:
+                raise ValueError(
+                    f"step_id {step_id!r} is for object_id "
+                    f"{step_spec.get('object_id')!r}, not {object_id!r}."
+                )
+            contract = load_pick_contract(object_id, step_spec)
             acm_pairs = ctx.registry.get("acm_allowed_object_pairs", [])
             return _ok(
                 command,
                 object_id=object_id,
+                step_id=step_id,
                 contract=contract.model_dump(mode="json"),
                 raw_spec=_object_spec(ctx, object_id),
                 acm_allowed_object_pairs=acm_pairs if isinstance(acm_pairs, list) else [],
@@ -455,7 +521,7 @@ if mcp is not None:
                 object_frames=ctx.recorder.object_frames,
             )
         except Exception as exc:
-            return _error(command, exc, object_id=object_id)
+            return _error(command, exc, object_id=object_id, step_id=step_id)
 
     @mcp.tool()
     def get_execution_state() -> dict[str, Any]:

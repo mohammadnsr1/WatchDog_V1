@@ -71,6 +71,10 @@ GREEN = "green_cube"
 RED = "red_cube"
 SAFE_POSE_NAME = "ready"
 GRASP_WIDTH_M = 0.04
+# grasp_width_m is instruction-sourced, not registry-sourced (see
+# agents/tasks/single_step_pick.yaml's steps: block). Only load_pick_contract
+# for RED needs a stand-in value here (this manual test has no task YAML).
+RED_GRASP_WIDTH_M = 0.06
 TOP_DOWN_QUAT = {"x": 1.0, "y": 0.0, "z": 0.0, "w": 0.0}
 STEP_ID = "rung3_halt_on_fire_test"
 
@@ -152,7 +156,12 @@ def main() -> int:
         rp = red["pose"]["position"]
         print(f"{RED} baseline: x={rp['x']:.4f} y={rp['y']:.4f} z={rp['z']:.4f}")
 
-        contract = load_pick_contract(RED)
+        step_spec = {
+            "step_id": STEP_ID,
+            "object_id": RED,
+            "grasp_width_m": RED_GRASP_WIDTH_M,
+        }
+        contract = load_pick_contract(RED, step_spec)
         clause = _find_clause(contract, "object_position_error_m")
         if clause is None:
             print(f"FAIL: {RED}'s contract has no object_position_error_m clause.")

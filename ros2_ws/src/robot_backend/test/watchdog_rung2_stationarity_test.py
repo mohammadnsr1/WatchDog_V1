@@ -58,6 +58,10 @@ from watchdog_smoke_test import WatchDogHarness
 
 STEP_ID = "rung2_stationarity_test"
 TARGET_OBJECT = "red_cube"
+# grasp_width_m is instruction-sourced, not registry-sourced (see
+# agents/tasks/single_step_pick.yaml's steps: block); this manual test script
+# has no task YAML of its own, so it stands in with the same value directly.
+TARGET_OBJECT_GRASP_WIDTH_M = 0.06
 DEFAULT_QUIET_SEC = 6.0
 DEFAULT_PROMPT_SEC = 25.0
 POLL_SEC = 0.2
@@ -106,7 +110,12 @@ def main() -> int:
               f"x={bp['x']:.4f} y={bp['y']:.4f} z={bp['z']:.4f}")
 
         # --- contract-derived parameter, per the docstring above ---
-        contract = load_pick_contract(TARGET_OBJECT)
+        step_spec = {
+            "step_id": STEP_ID,
+            "object_id": TARGET_OBJECT,
+            "grasp_width_m": TARGET_OBJECT_GRASP_WIDTH_M,
+        }
+        contract = load_pick_contract(TARGET_OBJECT, step_spec)
         clause = _find_position_clause(contract, "object_position_error_m")
         if clause is None:
             print(f"FAIL: {TARGET_OBJECT}'s contract has no "

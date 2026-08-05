@@ -25,9 +25,10 @@ RG2_TOUCH_LINKS: list[str] = [
 ]
 
 # Post-grasp width sanity check: how far final_width_m may deviate from the
-# registry's expected grasp_width_m before a "successful" contact is rejected
-# as implausible. Distinct from the GripperGuardedMove goal's own position
-# tolerance, which we don't override — see NO_WIDTH_TOLERANCE_OVERRIDE below.
+# caller-supplied expected width (sourced from the task instruction's step,
+# not the registry) before a "successful" contact is rejected as implausible.
+# Distinct from the GripperGuardedMove goal's own position tolerance, which we
+# don't override — see NO_WIDTH_TOLERANCE_OVERRIDE below.
 GRASP_WIDTH_TOLERANCE_M: float = 0.005   # ±5 mm post-grasp width check
 # Clearance applied to the safety-floor target so the floor sits inside the
 # object, guaranteeing mechanical contact before the floor clamp stops progress.
@@ -160,21 +161,31 @@ def grasp_skill(
     registry: dict[str, Any],
     attach_link_name: str = "tcp",
     touch_links: Sequence[str] | None = None,
+    expected_width_m: float | None = None,
     grasp_width_tolerance_m: float = GRASP_WIDTH_TOLERANCE_M,
 ) -> dict[str, Any]:
     """Torque-probed grasp via the GripperGuardedMove action server (mode='torque').
 
     A successful grasp stops on 'force_threshold' or 'effort_plateau'
     (both are effort-based confirmed contact — see CONTACT_STOP_REASONS).
-    The final width is checked against the spec's expected grasp_width_m
-    (±grasp_width_tolerance_m) as a sanity bound, not a stop condition.
+
+    expected_width_m is the caller-supplied expected RG2 opening at contact,
+    sourced from the task instruction's step (agents/tasks/*.yaml's steps:
+    block), never from the registry. When provided, the final width is
+    checked against it (±grasp_width_tolerance_m) as a sanity bound, not a
+    stop condition. When omitted, the width check is skipped entirely and the
+    grasp relies solely on the effort-plateau/force-threshold stop criterion.
     """
     steps_log: list[dict[str, Any]] = []
 
     spec = _get_grasp_spec(registry, object_id)
     grasp_spec = spec.get("grasp", {}) if spec else {}
-    expected_width_m: float = float(grasp_spec.get("grasp_width_m", 0.0))
     force_threshold: float = float(grasp_spec.get("force_threshold_n", DEFAULT_FORCE_THRESHOLD))
+    target_width_m = (
+        max(0.0, expected_width_m - GRASP_CLEARANCE_M)
+        if expected_width_m is not None
+        else 0.0
+    )
 
     # --- Open gripper before approaching ---
     open_result = backend.gripper.open()
@@ -199,7 +210,7 @@ def grasp_skill(
         action_result = _call_guarded_move(
             node,
             action_name=action_name,
-            target_width_m=max(0.0, expected_width_m - GRASP_CLEARANCE_M),
+            target_width_m=target_width_m,
             force_threshold=force_threshold,
             mode="torque",
             width_tolerance_m=NO_WIDTH_TOLERANCE_OVERRIDE,
@@ -232,9 +243,15 @@ def grasp_skill(
 
     # --- Success criteria ---
     # torque mode: contact is confirmed by either effort-based stop reason;
-    # width is a sanity bound only.
+    # width is a sanity bound only, and only checked when the caller supplied
+    # expected_width_m. Without it, the grasp relies solely on the effort
+    # plateau.
     criterion_contact = stop_reason in CONTACT_STOP_REASONS
-    criterion_width_plausible = abs(final_width - expected_width_m) <= grasp_width_tolerance_m
+    criterion_width_plausible = (
+        True
+        if expected_width_m is None
+        else abs(final_width - expected_width_m) <= grasp_width_tolerance_m
+    )
 
     provenance: dict[str, Any] = {
         "force_mode": "guarded_move_action",

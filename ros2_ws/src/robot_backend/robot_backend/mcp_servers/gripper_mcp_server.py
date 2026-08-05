@@ -242,14 +242,14 @@ if mcp is not None:
 
 
     @mcp.tool()
-    def grasp(object_id: str) -> dict[str, Any]:
+    def grasp(object_id: str, expected_width_m: float | None = None) -> dict[str, Any]:
         """Run the RG2 guarded-move action and attach object_id on confirmed contact.
 
         The backend opens the gripper, then sends a torque-mode
         `GripperGuardedMove` goal that closes the fingers until measured
         effort crosses the contact threshold; only the `force_threshold` stop
         reason counts as confirmed contact. The resulting width is then
-        checked against the registry spec as a sanity bound before the object
+        checked against expected_width_m as a sanity bound before the object
         is attached. Returns structured provenance on both success and
         failure paths and does not verify that the object remains grasped
         through later motion.
@@ -258,12 +258,24 @@ if mcp is not None:
         ----------
         object_id:
             Registry object ID to grasp (e.g. "red_cube").
+        expected_width_m:
+            Expected RG2 opening at contact, sourced from the task
+            instruction's step (grasp_width_m in agents/tasks/*.yaml's
+            steps: block), never from the model registry. When provided, the
+            final width is checked against it as a plausibility bound. When
+            omitted, the width check is skipped and the grasp relies solely
+            on the effort-plateau/force-threshold stop criterion.
         """
         command = "grasp"
         try:
             oid = _validate_object_id(object_id)
             backend = _ensure_backend()
-            result = grasp_skill(backend, object_id=oid, registry=_REGISTRY or {})
+            result = grasp_skill(
+                backend,
+                object_id=oid,
+                registry=_REGISTRY or {},
+                expected_width_m=expected_width_m,
+            )
             return result
         except Exception as exc:
             return _error(command, exc, object_id=object_id)

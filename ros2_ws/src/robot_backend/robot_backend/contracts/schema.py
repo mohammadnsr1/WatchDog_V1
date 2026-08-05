@@ -71,6 +71,8 @@ class PickContract(BaseModel):
 
     grasp_width_m is carried here so the WatchDog can compare it against
     what the executor actually reported in the event log (provenance check).
+    Its value is sourced from the task instruction's steps: block (via
+    load_pick_contract's step_spec parameter), not from the registry.
 
     force_threshold_n and max_clamp_effort are different quantities carried
     for different reasons. force_threshold_n is the stop TRIGGER the executor

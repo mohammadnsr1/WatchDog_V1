@@ -23,7 +23,7 @@ original envelope for provenance.
 
 ## Provenance Example
 
-1. `get_contract("green_cube")` returns a clause such as
+1. `get_contract("green_cube", "pick_green_cube")` returns a clause such as
    `grasp_effort_instantaneous <= spec.limits.max_clamp_effort`.
 2. The agent arms an `effort_event` monitor with params copied from that
    clause unchanged, for example `joint_name="finger_joint"`,

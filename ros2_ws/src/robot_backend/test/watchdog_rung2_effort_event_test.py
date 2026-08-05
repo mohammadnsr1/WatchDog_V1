@@ -189,7 +189,15 @@ def main() -> int:
         backend.scene.sync_collision_objects([GREEN])
         set_permitted_contacts_skill(backend, registry=registry)
 
-        contract = load_pick_contract(GREEN)
+        # grasp_width_m is instruction-sourced, not registry-sourced (see
+        # agents/tasks/single_step_pick.yaml's steps: block); this manual test
+        # script has no task YAML of its own, so it stands in with GRASP_WIDTH_M.
+        step_spec = {
+            "step_id": "rung2_effort_event_test",
+            "object_id": GREEN,
+            "grasp_width_m": GRASP_WIDTH_M,
+        }
+        contract = load_pick_contract(GREEN, step_spec)
         clause = _find_clause(contract, "grasp_effort_instantaneous")
         if clause is None:
             print("FAIL: green_cube's contract has no grasp_effort_instantaneous clause.")

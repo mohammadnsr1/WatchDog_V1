@@ -28,14 +28,21 @@ from robot_backend.contracts.schema import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
+# grasp_width_m is instruction-sourced (task YAML steps: block), not
+# registry-sourced -- these step_spec dicts stand in for that per-object,
+# matching what used to be the registry's spec.grasp.grasp_width_m values.
+RED_CUBE_STEP_SPEC = {"step_id": "pick_red_cube", "object_id": "red_cube", "grasp_width_m": 0.06}
+GREEN_CUBE_STEP_SPEC = {"step_id": "pick_green_cube", "object_id": "green_cube", "grasp_width_m": 0.04}
+
+
 @pytest.fixture(scope="module")
 def red_cube_contract() -> PickContract:
-    return load_pick_contract("red_cube")
+    return load_pick_contract("red_cube", RED_CUBE_STEP_SPEC)
 
 
 @pytest.fixture(scope="module")
 def green_cube_contract() -> PickContract:
-    return load_pick_contract("green_cube")
+    return load_pick_contract("green_cube", GREEN_CUBE_STEP_SPEC)
 
 
 @pytest.fixture()
@@ -59,10 +66,6 @@ def minimal_registry(tmp_path: Path) -> Path:
                 orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
             spec:
               grasp:
-                grasp_center_offset:
-                  position: {x: 0.0, y: 0.0, z: 0.0}
-                  orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-                grasp_width_m: 0.055
                 force_threshold_n: 0.42
               tolerances:
                 position_m: 0.004
@@ -78,6 +81,9 @@ def minimal_registry(tmp_path: Path) -> Path:
     return registry
 
 
+TEST_CUBE_STEP_SPEC = {"step_id": "pick_test_cube", "object_id": "test_cube", "grasp_width_m": 0.055}
+
+
 # ---------------------------------------------------------------------------
 # Load-from-registry tests
 # ---------------------------------------------------------------------------
@@ -90,11 +96,11 @@ class TestLoadFromRegistry:
         assert red_cube_contract.version == "1.0"
 
     def test_red_cube_grasp_width(self, red_cube_contract: PickContract) -> None:
-        # From registry spec: grasp_width_m: 0.06
+        # From RED_CUBE_STEP_SPEC (task instruction step), not the registry
         assert red_cube_contract.grasp_width_m == pytest.approx(0.06)
 
     def test_green_cube_grasp_width(self, green_cube_contract: PickContract) -> None:
-        # From registry spec: grasp_width_m: 0.04
+        # From GREEN_CUBE_STEP_SPEC (task instruction step), not the registry
         assert green_cube_contract.grasp_width_m == pytest.approx(0.04)
 
     def test_precondition_count(self, red_cube_contract: PickContract) -> None:
@@ -205,10 +211,6 @@ class TestLoadFromRegistry:
                     orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
                 spec:
                   grasp:
-                    grasp_center_offset:
-                      position: {x: 0.0, y: 0.0, z: 0.0}
-                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-                    grasp_width_m: 0.055
                     force_threshold_n: 0.42
                   tolerances:
                     position_m: 0.004
@@ -221,7 +223,7 @@ class TestLoadFromRegistry:
         """)
         registry = minimal_registry.parent / "custom_thresholds.yaml"
         registry.write_text(content, encoding="utf-8")
-        contract = load_pick_contract("test_cube", registry_path=registry)
+        contract = load_pick_contract("test_cube", TEST_CUBE_STEP_SPEC, registry_path=registry)
         plateau = next(c for c in contract.effects if c.field == "grasp_effort_plateau")
         width_err = next(c for c in contract.effects if c.field == "grasp_width_error_m")
         assert plateau.threshold == pytest.approx(0.09)
@@ -246,10 +248,6 @@ class TestLoadFromRegistry:
                     orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
                 spec:
                   grasp:
-                    grasp_center_offset:
-                      position: {x: 0.0, y: 0.0, z: 0.0}
-                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-                    grasp_width_m: 0.055
                     force_threshold_n: 0.42
                   tolerances:
                     position_m: 0.004
@@ -262,7 +260,7 @@ class TestLoadFromRegistry:
         registry = tmp_path / "no_effort_floor.yaml"
         registry.write_text(content, encoding="utf-8")
         with pytest.raises(KeyError):
-            load_pick_contract("test_cube", registry_path=registry)
+            load_pick_contract("test_cube", TEST_CUBE_STEP_SPEC, registry_path=registry)
 
     def test_missing_grasp_width_tolerance_raises(self, tmp_path: Path) -> None:
         content = textwrap.dedent("""\
@@ -283,10 +281,6 @@ class TestLoadFromRegistry:
                     orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
                 spec:
                   grasp:
-                    grasp_center_offset:
-                      position: {x: 0.0, y: 0.0, z: 0.0}
-                      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-                    grasp_width_m: 0.055
                     force_threshold_n: 0.42
                   tolerances:
                     position_m: 0.004
@@ -299,7 +293,7 @@ class TestLoadFromRegistry:
         registry = tmp_path / "no_width_tol.yaml"
         registry.write_text(content, encoding="utf-8")
         with pytest.raises(KeyError):
-            load_pick_contract("test_cube", registry_path=registry)
+            load_pick_contract("test_cube", TEST_CUBE_STEP_SPEC, registry_path=registry)
 
     def test_grasp_effort_instantaneous_invariant(self, red_cube_contract: PickContract) -> None:
         clause = next(
@@ -327,8 +321,13 @@ class TestLoadFromRegistry:
         assert green_cap == red_cap == pytest.approx(0.18)
 
     def test_missing_object_raises(self) -> None:
+        step_spec = {"step_id": "x", "object_id": "no_such_object", "grasp_width_m": 0.05}
         with pytest.raises(KeyError, match="not found in registry"):
-            load_pick_contract("no_such_object")
+            load_pick_contract("no_such_object", step_spec)
+
+    def test_missing_step_spec_grasp_width_raises(self) -> None:
+        with pytest.raises(ValueError, match="grasp_width_m"):
+            load_pick_contract("red_cube", {"step_id": "x", "object_id": "red_cube"})
 
     def test_no_spec_block_raises(self, minimal_registry: Path) -> None:
         # Temporarily write a registry without a spec block
@@ -351,11 +350,12 @@ class TestLoadFromRegistry:
         """)
         registry = minimal_registry.parent / "no_spec.yaml"
         registry.write_text(content, encoding="utf-8")
+        step_spec = {"step_id": "x", "object_id": "bare_cube", "grasp_width_m": 0.05}
         with pytest.raises(ValueError, match="no 'spec' block"):
-            load_pick_contract("bare_cube", registry_path=registry)
+            load_pick_contract("bare_cube", step_spec, registry_path=registry)
 
     def test_custom_registry_path(self, minimal_registry: Path) -> None:
-        contract = load_pick_contract("test_cube", registry_path=minimal_registry)
+        contract = load_pick_contract("test_cube", TEST_CUBE_STEP_SPEC, registry_path=minimal_registry)
         assert contract.object_id == "test_cube"
         assert contract.grasp_width_m == pytest.approx(0.055)
         assert contract.force_threshold_n == pytest.approx(0.42)

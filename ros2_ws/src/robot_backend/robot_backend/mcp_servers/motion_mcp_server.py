@@ -253,7 +253,8 @@ def _compose_grasp_center_from_object(
     """Compose T_frame_graspcentre = T_frame_object * T_object_graspcentre.
 
     object_pose is the object's own pose in frame_id; the o* arguments are the
-    registry's spec.grasp.grasp_center_offset (T_object_grasp_center). Any
+    task instruction step's grasp_center_offset (T_object_grasp_center) --
+    see agents/tasks/*.yaml's steps: block, not the model registry. Any
     component left None defaults to identity (position 0, quaternion 0,0,0,1),
     so a caller can supply only the axes that differ from identity.
     """
@@ -305,9 +306,10 @@ def _compute_approach_geometry(
 
     When any grasp_center_offset_* is supplied, x..qw are interpreted as the
     OBJECT pose in frame_id and the grasp centre is composed from the object
-    pose and the registry offset; "grasp_center_offset" is appended to
-    defaults_used to record that interpretation. When all are None, x..qw are
-    the grasp-centre pose directly (behaviour unchanged).
+    pose and the offset supplied by the caller (sourced from the task
+    instruction step, not the model registry); "grasp_center_offset" is
+    appended to defaults_used to record that interpretation. When all are
+    None, x..qw are the grasp-centre pose directly (behaviour unchanged).
     """
 
     gripper_width_m, approach_distance_m, defaults_used = _resolve_approach_defaults(
@@ -643,10 +645,10 @@ if mcp is not None:
         gripper_width_m : float, optional
             Expected physical finger gap in meters at the moment of contact.
             This determines where the grasp center sits relative to the fixed
-            TCP frame. Obtain this value from the model registry field
-            spec.grasp.grasp_width_m for the target object. When omitted,
-            defaults to fully open (0.104 m) and "gripper_width_m" is added
-            to defaults_used in the response.
+            TCP frame. Obtain this value from the target step's
+            grasp_width_m in the task instruction's steps: block. When
+            omitted, defaults to fully open (0.104 m) and "gripper_width_m"
+            is added to defaults_used in the response.
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
             pre-grasp staging position, measured along the approach vector.
@@ -663,9 +665,10 @@ if mcp is not None:
         grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
         grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
         grasp_center_offset_qw : float, optional
-            T_object_grasp_center from the model registry
-            (spec.grasp.grasp_center_offset): where the grasp centre sits
-            relative to the object's own frame. Identity for a symmetric object
+            T_object_grasp_center from the task instruction's step
+            (grasp_center_offset in the steps: block, see agents/tasks/*.yaml
+            -- NOT the model registry): where the grasp centre sits relative
+            to the object's own frame. Identity for a symmetric object
             grasped at its centre. Supply this and pass the OBJECT pose in
             x..qw; omit it and pass the grasp-centre pose directly. When any
             component is supplied, "grasp_center_offset" is added to
@@ -791,8 +794,9 @@ if mcp is not None:
             top-down grasp use (qx=1, qy=0, qz=0, qw=0).
         gripper_width_m : float, optional
             Expected physical finger gap in meters at the moment of contact.
-            Obtain from the model registry spec.grasp.grasp_width_m. Defaults
-            to fully open (0.104 m) when omitted; recorded in defaults_used.
+            Obtain from the target step's grasp_width_m in the task
+            instruction's steps: block. Defaults to fully open (0.104 m)
+            when omitted; recorded in defaults_used.
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
             pre-grasp staging position. Defaults to 0.05 m when omitted.
@@ -806,9 +810,10 @@ if mcp is not None:
         grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
         grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
         grasp_center_offset_qw : float, optional
-            T_object_grasp_center from the model registry
-            (spec.grasp.grasp_center_offset): where the grasp centre sits
-            relative to the object's own frame. Identity for a symmetric object
+            T_object_grasp_center from the task instruction's step
+            (grasp_center_offset in the steps: block, see agents/tasks/*.yaml
+            -- NOT the model registry): where the grasp centre sits relative
+            to the object's own frame. Identity for a symmetric object
             grasped at its centre. Supply this and pass the OBJECT pose in
             x..qw; omit it and pass the grasp-centre pose directly. When any
             component is supplied, "grasp_center_offset" is added to

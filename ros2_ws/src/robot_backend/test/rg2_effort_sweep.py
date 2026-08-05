@@ -49,7 +49,6 @@ import argparse
 import csv
 import sys
 import time
-from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
@@ -78,6 +77,13 @@ FINGER_JOINT = "finger_joint"
 DEFAULT_CLEARANCES = [0.001, 0.002, 0.003, 0.004, 0.005]
 DEFAULT_THRESHOLDS = [0.5, 1.0, 2.0, 3.5, 5.0, 8.0]
 
+# grasp_width_m is instruction-sourced, not registry-sourced (see
+# agents/tasks/*.yaml's steps: block); it no longer lives in
+# model_registry.yaml. This sweep is a standalone calibration tool with no
+# task YAML of its own, so --width_m must be passed explicitly. These are
+# the known objects' former registry values, kept only as --object defaults.
+KNOWN_OBJECT_WIDTHS_M = {"red_cube": 0.06, "green_cube": 0.04, "u_green": 0.021}
+
 SETTLE_SEC = 1.0
 HOLD_SEC = 1.5          # settled-plateau measurement window, per cell
 POST_OPEN_SEC = 0.6
@@ -86,20 +92,6 @@ POST_OPEN_SEC = 0.6
 def _pose(x, y, z):
     return make_pose(position={"x": x, "y": y, "z": z},
                       orientation=dict(TOP_DOWN_QUAT), frame_id=WORLD_FRAME)
-
-
-def _load_registry() -> dict:
-    import yaml
-    try:
-        from ament_index_python.packages import get_package_share_directory
-        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
-    except Exception:
-        return {}
-    try:
-        with path.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
-    except OSError:
-        return {}
 
 
 class TFReader:
@@ -140,6 +132,11 @@ class TFReader:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--object", default="green_cube")
+    ap.add_argument("--width_m", type=float, default=None,
+                     help="expected grasp width in metres (instruction-sourced; "
+                          "no longer read from the registry). Defaults to the "
+                          "--object's known width if it is red_cube, green_cube, "
+                          "or u_green.")
     ap.add_argument("--clearances", default=None,
                      help="comma-separated metres, e.g. 0.001,0.003,0.005")
     ap.add_argument("--thresholds", default=None,
@@ -158,12 +155,16 @@ def main() -> int:
     if not rclpy.ok():
         rclpy.init()
 
-    registry = _load_registry()
-    if not registry:
-        print("ERROR: registry empty.")
+    if args.width_m is not None:
+        true_width = args.width_m
+    elif oid in KNOWN_OBJECT_WIDTHS_M:
+        true_width = KNOWN_OBJECT_WIDTHS_M[oid]
+    else:
+        print(f"ERROR: --width_m not given and {oid!r} has no known default "
+              f"width. grasp_width_m is instruction-sourced now -- pass "
+              f"--width_m explicitly.")
         return 1
-    true_width = float(registry["objects"][oid]["spec"]["grasp"]["grasp_width_m"])
-    print(f"object={oid}  registry grasp_width_m={true_width}  "
+    print(f"object={oid}  width_m={true_width}  "
           f"(the object's true width; the probe's commanded floor is "
           f"true_width - clearance, i.e. inside the object)")
 
