@@ -49,20 +49,24 @@ steps:
   - step_id: pick_u_green
     object_id: u_green
     # T_object_grasp_center for a top-down grasp on the U's RIGHT arm.
-    # Derived from the mesh (config/assets/fmb_u_green.obj):
-    #   right arm occupies X in [0.014, 0.035] (thickness 0.021 m = the
-    #   jaw-closing dimension), free/graspable over the slot region
-    #   Y in [-0.0355, -0.004]; part is 0.021 m tall in Z, TF at part centre.
-    # position: centre of the right arm's free region -> X=(0.014+0.035)/2,
-    #   Y=mid of [-0.0355,-0.004], Z=0 (mid-height).
+    # u_green now uses the vertex-baked 2x mesh (config/assets/u_green_2x.obj,
+    # points = fmb_u_green.obj points * 2 in meters, scaled uniformly about the
+    # object origin). Uniform scaling about the origin scales every linear
+    # quantity (position and width) identically and leaves orientation
+    # unchanged, so these values are the 1x values doubled -- not
+    # re-derived from a fresh midpoint on the 2x mesh:
+    #   right arm now occupies X in [0.028, 0.070] (thickness 0.042 m = the
+    #   jaw-closing dimension, was 0.021 m), free/graspable over the slot
+    #   region Y in [-0.071, -0.008] (was [-0.0355, -0.004]); part is now
+    #   0.042 m tall in Z (was 0.021 m), TF at part centre.
     # orientation: 180 deg about (1,1,0)/sqrt(2) -> approach along object -Z
     #   (top-down) with the RG2 jaw axis (grasp-centre +Y, fingers separate
     #   along Y per the URDF) aligned to object +X, so the jaws straddle the
-    #   0.021 m arm thickness. tcp_to_grasp_center is identity, so grasp-
+    #   0.042 m arm thickness. tcp_to_grasp_center is identity, so grasp-
     #   centre axes are the tcp axes. (Live jaw sense confirmed in M3.)
-    grasp_width_m: 0.021    # measured right-arm thickness (jaw-closing dimension)
+    grasp_width_m: 0.042    # measured right-arm thickness (jaw-closing dimension), 2x of 0.021
     grasp_center_offset:
-      position: {x: 0.0245, y: -0.020, z: 0.011}
+      position: {x: 0.049, y: -0.040, z: 0.022}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 object_ids: |

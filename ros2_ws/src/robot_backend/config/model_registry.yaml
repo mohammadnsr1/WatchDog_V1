@@ -204,7 +204,9 @@ objects:
     graspable: true
     collision:
       type: mesh
-      mesh_path: assets/fmb_u_green.obj   # relative to asset_root (defaults to config/)
+      mesh_path: assets/u_green_2x.obj   # relative to asset_root (defaults to config/)
+      # u_green_2x.obj is the vertex-baked 2x scale of fmb_u_green.obj (points
+      # already multiplied by 2 in meters) -- scale stays [1,1,1], no double-count.
       scale: [1.0, 1.0, 1.0]
       pose_offset:
         position: {x: 0.0, y: 0.0, z: 0.0}
