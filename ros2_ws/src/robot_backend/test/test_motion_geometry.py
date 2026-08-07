@@ -101,7 +101,6 @@ def test_compute_geometry_omitting_offset_uses_pose_directly():
         frame_id="world", x=0.5, y=0.2, z=0.1,
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
         gripper_width_m=0.04, approach_distance_m=0.05,
-        approach_vec_x=None, approach_vec_y=None, approach_vec_z=None,
     )
     grasp_center_pose, _, _, _, _, _, defaults_used = res
     assert grasp_center_pose["position"] == {"x": 0.5, "y": 0.2, "z": 0.1}
@@ -114,7 +113,6 @@ def test_compute_geometry_with_offset_interprets_pose_as_object():
         frame_id="world", x=0.5, y=0.2, z=0.1,
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
         gripper_width_m=0.04, approach_distance_m=0.05,
-        approach_vec_x=None, approach_vec_y=None, approach_vec_z=None,
         grasp_center_offset_z=0.03,
     )
     grasp_center_pose, _, _, _, _, _, defaults_used = res

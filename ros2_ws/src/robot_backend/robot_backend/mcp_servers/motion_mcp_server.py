@@ -291,9 +291,6 @@ def _compute_approach_geometry(
     qw: Any,
     gripper_width_m: Any,
     approach_distance_m: Any,
-    approach_vec_x: Any,
-    approach_vec_y: Any,
-    approach_vec_z: Any,
     grasp_center_offset_x: Any = None,
     grasp_center_offset_y: Any = None,
     grasp_center_offset_z: Any = None,
@@ -307,7 +304,10 @@ def _compute_approach_geometry(
     Returns (grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose,
              effective_width_m, effective_dist_m, approach_vector, defaults_used).
 
-    approach_vector is the normalized world-frame direction used for the offset.
+    approach_vector is always world +Z -- the pre-grasp staging position sits
+    directly above the grasp center, correct for a top-down grasp. There is
+    no side-approach configurability; every caller in this study only ever
+    performs top-down grasps.
 
     When any grasp_center_offset_* is supplied, x..qw are interpreted as the
     OBJECT pose in frame_id and the grasp centre is composed from the object
@@ -321,27 +321,7 @@ def _compute_approach_geometry(
         gripper_width_m, approach_distance_m
     )
 
-    # Detect whether the caller supplied an approach vector at all.  All three
-    # components must be None for the [0, 0, 1] default to apply.
-    if approach_vec_x is None and approach_vec_y is None and approach_vec_z is None:
-        approach_vec_x = 0.0
-        approach_vec_y = 0.0
-        approach_vec_z = 1.0
-        defaults_used.append("approach_vector")
-        if _NODE is not None:
-            _NODE.get_logger().warning(
-                "approach_vec not supplied; using fallback [0, 0, 1] (world +Z)"
-            )
-
-    raw_x = _validate_float("approach_vec_x", 0.0 if approach_vec_x is None else approach_vec_x)
-    raw_y = _validate_float("approach_vec_y", 0.0 if approach_vec_y is None else approach_vec_y)
-    raw_z = _validate_float("approach_vec_z", 1.0 if approach_vec_z is None else approach_vec_z)
-    vec_norm = math.sqrt(raw_x ** 2 + raw_y ** 2 + raw_z ** 2)
-    if vec_norm < 1e-6:
-        raise ValueError(
-            "approach vector norm is too small; supply a non-zero direction."
-        )
-    ux, uy, uz = raw_x / vec_norm, raw_y / vec_norm, raw_z / vec_norm
+    ux, uy, uz = 0.0, 0.0, 1.0
     approach_vector: dict[str, float] = {"x": ux, "y": uy, "z": uz}
 
     supplied_pose = _build_pose_dict(
@@ -613,9 +593,6 @@ if mcp is not None:
         qw: float,
         gripper_width_m: float,
         approach_distance_m: float | None = None,
-        approach_vec_x: float | None = None,
-        approach_vec_y: float | None = None,
-        approach_vec_z: float | None = None,
         grasp_center_offset_x: float | None = None,
         grasp_center_offset_y: float | None = None,
         grasp_center_offset_z: float | None = None,
@@ -658,16 +635,9 @@ if mcp is not None:
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
             pre-grasp staging position, measured along the approach vector.
-            Defaults to 0.05 m when omitted.
-        approach_vec_x, approach_vec_y, approach_vec_z : float, optional
-            World-frame direction the robot backs off along to place the
-            pre-grasp pose. Default [0, 0, 1] positions the pre-grasp directly
-            above the grasp center in world Z, which is correct for top-down
-            grasps. For a side grasp approaching from world +X, supply
-            approach_vec_x=1 and leave the others at 0. The vector is
-            normalized internally so its magnitude does not matter. When all
-            three are omitted the [0, 0, 1] default is used and
-            "approach_vector" is added to defaults_used.
+            Defaults to 0.05 m when omitted. The approach vector itself is
+            fixed at world +Z (top-down only, not configurable): the
+            pre-grasp position always sits directly above the grasp center.
         grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
         grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
         grasp_center_offset_qw : float, optional
@@ -695,7 +665,7 @@ if mcp is not None:
                 frame_id, position, and orientation.
             pre_grasp_tcp_pose : dict
                 Fixed TCP target for the staging position, offset from the
-                grasp center by approach_distance_m along the approach vector.
+                grasp center by approach_distance_m along world +Z.
             grasp_tcp_pose : dict
                 Fixed TCP target that places the grasp center on the requested
                 position.
@@ -704,7 +674,7 @@ if mcp is not None:
             approach_distance_m : float
                 Effective approach distance used.
             approach_vector : dict
-                Normalized approach direction used, with keys x, y, z.
+                Always {"x": 0.0, "y": 0.0, "z": 1.0} -- world +Z.
             defaults_used : list of str
                 Names of parameters for which fallback values were applied.
 
@@ -729,9 +699,6 @@ if mcp is not None:
                 qx=qx, qy=qy, qz=qz, qw=qw,
                 gripper_width_m=gripper_width_m,
                 approach_distance_m=approach_distance_m,
-                approach_vec_x=approach_vec_x,
-                approach_vec_y=approach_vec_y,
-                approach_vec_z=approach_vec_z,
                 grasp_center_offset_x=grasp_center_offset_x,
                 grasp_center_offset_y=grasp_center_offset_y,
                 grasp_center_offset_z=grasp_center_offset_z,
@@ -767,9 +734,6 @@ if mcp is not None:
         qw: float,
         gripper_width_m: float,
         approach_distance_m: float | None = None,
-        approach_vec_x: float | None = None,
-        approach_vec_y: float | None = None,
-        approach_vec_z: float | None = None,
         grasp_center_offset_x: float | None = None,
         grasp_center_offset_y: float | None = None,
         grasp_center_offset_z: float | None = None,
@@ -807,14 +771,10 @@ if mcp is not None:
             instruction's steps: block.
         approach_distance_m : float, optional
             Distance in meters between the grasp center target and the
-            pre-grasp staging position. Defaults to 0.05 m when omitted.
-        approach_vec_x, approach_vec_y, approach_vec_z : float, optional
-            World-frame direction along which the pre-grasp position is offset
-            from the grasp center. Default [0, 0, 1] gives a position directly
-            above the grasp center in world Z, correct for top-down grasps.
-            For a side grasp approaching from world +X, supply approach_vec_x=1
-            and leave the others at 0. The vector is normalized internally.
-            Omit all three for the [0, 0, 1] default; recorded in defaults_used.
+            pre-grasp staging position. Defaults to 0.05 m when omitted. The
+            approach vector itself is fixed at world +Z (top-down only, not
+            configurable): the pre-grasp position always sits directly above
+            the grasp center.
         grasp_center_offset_x, grasp_center_offset_y, grasp_center_offset_z,
         grasp_center_offset_qx, grasp_center_offset_qy, grasp_center_offset_qz,
         grasp_center_offset_qw : float, optional
@@ -837,9 +797,8 @@ if mcp is not None:
 
         Sequence
         --------
-        1. Robot moves the grasp center to approach_distance_m along the
-           approach vector away from the target, with the gripper open
-           (pre-grasp TCP pose).
+        1. Robot moves the grasp center to approach_distance_m above the
+           target along world +Z, with the gripper open (pre-grasp TCP pose).
         2. If stop_at_pregrasp is True, returns here.
         3. Robot moves the grasp center to the exact requested position
            (grasp TCP pose). Gripper remains open.
@@ -861,7 +820,7 @@ if mcp is not None:
             approach_distance_m : float
                 Effective approach distance used.
             approach_vector : dict
-                Normalized approach direction used, with keys x, y, z.
+                Always {"x": 0.0, "y": 0.0, "z": 1.0} -- world +Z.
             defaults_used : list of str
                 Names of parameters for which fallback values were applied.
             pregrasp_motion_result : dict
@@ -896,9 +855,6 @@ if mcp is not None:
                 qx=qx, qy=qy, qz=qz, qw=qw,
                 gripper_width_m=gripper_width_m,
                 approach_distance_m=approach_distance_m,
-                approach_vec_x=approach_vec_x,
-                approach_vec_y=approach_vec_y,
-                approach_vec_z=approach_vec_z,
                 grasp_center_offset_x=grasp_center_offset_x,
                 grasp_center_offset_y=grasp_center_offset_y,
                 grasp_center_offset_z=grasp_center_offset_z,

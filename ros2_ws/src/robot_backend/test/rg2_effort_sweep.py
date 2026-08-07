@@ -97,11 +97,13 @@ POST_OPEN_SEC = 0.6
 def _resolve_tf_frame(object_id: str) -> str:
     """Resolve object_id -> the TF child frame to look up.
 
-    Usually identical (red_cube, green_cube), but u_green's registry entry
-    sets tf_frame: u_green_2x (the scene prim Isaac publishes into TF) while
-    object_id stays u_green -- the 2x asset swap renamed the prim, not the
-    task/registry key. Falls back to object_id itself if the registry can't
-    be loaded or has no entry for it, so an ad-hoc test object still works.
+    Reads tf_frame from the registry rather than assuming it always equals
+    object_id: the two have diverged before (u_green's registry entry
+    briefly set tf_frame: u_green_2x, the scene prim name, while object_id
+    stayed u_green -- the mesh file is still u_green_2x.obj, but the scene
+    prim itself was later renamed back to u_green, so today they match
+    again). Falls back to object_id itself if the registry can't be loaded
+    or has no entry for it, so an ad-hoc test object still works.
     """
     try:
         from ament_index_python.packages import get_package_share_directory
