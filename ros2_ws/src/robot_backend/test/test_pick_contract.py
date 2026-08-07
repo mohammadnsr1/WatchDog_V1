@@ -354,6 +354,62 @@ class TestLoadFromRegistry:
         with pytest.raises(ValueError, match="no 'spec' block"):
             load_pick_contract("bare_cube", step_spec, registry_path=registry)
 
+    # ------------------------------------------------------------------
+    # contract_clause_groups (optional step_spec field)
+    # ------------------------------------------------------------------
+
+    def test_no_clause_groups_key_yields_all_three(
+        self, red_cube_contract: PickContract
+    ) -> None:
+        # RED_CUBE_STEP_SPEC carries no contract_clause_groups -- default is
+        # all three, unchanged from before this field existed.
+        assert len(red_cube_contract.preconditions) == 3
+        assert len(red_cube_contract.effects) == 4
+        assert len(red_cube_contract.invariants) == 1
+
+    def test_clause_groups_subset_omits_preconditions(self) -> None:
+        step_spec = {
+            **RED_CUBE_STEP_SPEC,
+            "contract_clause_groups": ["effects", "invariants"],
+        }
+        contract = load_pick_contract("red_cube", step_spec)
+        assert contract.preconditions == []
+        assert len(contract.effects) == 4
+        assert len(contract.invariants) == 1
+
+    def test_clause_groups_does_not_change_thresholds(self) -> None:
+        # Same clause_id/threshold/comparison as the full contract -- only
+        # which groups are INCLUDED changes, never the clause definitions.
+        full = load_pick_contract("red_cube", RED_CUBE_STEP_SPEC)
+        step_spec = {
+            **RED_CUBE_STEP_SPEC,
+            "contract_clause_groups": ["effects", "invariants"],
+        }
+        subset = load_pick_contract("red_cube", step_spec)
+        assert subset.effects == full.effects
+        assert subset.invariants == full.invariants
+
+    def test_clause_groups_empty_list_yields_no_clauses_and_warns(self) -> None:
+        step_spec = {**RED_CUBE_STEP_SPEC, "contract_clause_groups": []}
+        with pytest.warns(UserWarning, match="no clauses at all"):
+            contract = load_pick_contract("red_cube", step_spec)
+        assert contract.preconditions == []
+        assert contract.effects == []
+        assert contract.invariants == []
+
+    def test_clause_groups_not_a_list_raises(self) -> None:
+        step_spec = {**RED_CUBE_STEP_SPEC, "contract_clause_groups": "effects"}
+        with pytest.raises(ValueError, match="red_cube"):
+            load_pick_contract("red_cube", step_spec)
+
+    def test_clause_groups_unknown_value_raises(self) -> None:
+        step_spec = {
+            **RED_CUBE_STEP_SPEC,
+            "contract_clause_groups": ["effects", "bogus"],
+        }
+        with pytest.raises(ValueError, match="bogus"):
+            load_pick_contract("red_cube", step_spec)
+
     def test_custom_registry_path(self, minimal_registry: Path) -> None:
         contract = load_pick_contract("test_cube", TEST_CUBE_STEP_SPEC, registry_path=minimal_registry)
         assert contract.object_id == "test_cube"

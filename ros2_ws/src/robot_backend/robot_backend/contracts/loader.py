@@ -21,6 +21,7 @@ running ROS context is required either way.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,47 @@ from .schema import Clause, Comparison, PickContract
 _DEFAULT_REGISTRY_PATH = (
     Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
 )
+
+# Valid values for step_spec's optional contract_clause_groups. Default (the
+# key absent or None) is all three -- current behavior, so every task
+# without this key (e.g. the cube tasks) is unaffected.
+_ALL_CLAUSE_GROUPS = ("preconditions", "effects", "invariants")
+
+
+def _resolve_clause_groups(step_spec: dict[str, Any], object_id: str) -> set[str]:
+    """Validate and resolve step_spec's optional contract_clause_groups.
+
+    Controls which of preconditions/effects/invariants load_pick_contract
+    builds -- NOT the clause definitions or thresholds themselves, which
+    stay registry+step sourced regardless. Absent/None means "all three",
+    matching every existing task's behavior.
+    """
+    raw = step_spec.get("contract_clause_groups")
+    if raw is None:
+        return set(_ALL_CLAUSE_GROUPS)
+
+    step_id = step_spec.get("step_id")
+    if not isinstance(raw, list) or not all(isinstance(g, str) for g in raw):
+        raise ValueError(
+            f"step_spec for object_id={object_id!r}, step_id={step_id!r} has "
+            f"contract_clause_groups={raw!r}; expected a list of strings "
+            f"drawn from {list(_ALL_CLAUSE_GROUPS)}."
+        )
+    unknown = sorted(set(raw) - set(_ALL_CLAUSE_GROUPS))
+    if unknown:
+        raise ValueError(
+            f"step_spec for object_id={object_id!r}, step_id={step_id!r} has "
+            f"unknown contract_clause_groups {unknown}; valid groups are "
+            f"{list(_ALL_CLAUSE_GROUPS)}."
+        )
+    if not raw:
+        warnings.warn(
+            f"step_spec for object_id={object_id!r}, step_id={step_id!r} sets "
+            f"contract_clause_groups to an empty list -- the resulting "
+            f"contract will have no clauses at all.",
+            stacklevel=3,
+        )
+    return set(raw)
 
 
 def _make_clause(section: str, field: str, **kwargs: Any) -> Clause:
@@ -101,6 +143,7 @@ def load_pick_contract(
             "not registry-sourced, and has no fallback default."
         )
     grasp_width_m: float = float(step_spec["grasp_width_m"])
+    clause_groups = _resolve_clause_groups(step_spec, object_id)
 
     registry = _load_registry(registry_path)
     objects = registry.get("objects", {})
@@ -149,7 +192,11 @@ def load_pick_contract(
     # "gripper_is_open" uses threshold 1.0 (boolean encoded as float); this is
     # a logical constant (open=true), not a per-object spec value. All other
     # thresholds are sourced from the registry spec above.
-    preconditions: list[Clause] = [
+    #
+    # Built only when "preconditions" is in clause_groups -- see
+    # _resolve_clause_groups. This controls which GROUPS are included, never
+    # the clause definitions or thresholds themselves.
+    preconditions: list[Clause] = [] if "preconditions" not in clause_groups else [
         _make_clause(
             "preconditions",
             "object_position_error_m",
@@ -183,7 +230,9 @@ def load_pick_contract(
     ]
 
     # --- Effects: must hold AFTER a claimed-success outcome ---
-    effects: list[Clause] = [
+    # Built only when "effects" is in clause_groups -- see comment on
+    # preconditions above.
+    effects: list[Clause] = [] if "effects" not in clause_groups else [
         _make_clause(
             "effects",
             "object_lift_height_m",
@@ -235,7 +284,9 @@ def load_pick_contract(
     ]
 
     # --- Invariants: must hold THROUGHOUT execution ---
-    invariants: list[Clause] = [
+    # Built only when "invariants" is in clause_groups -- see comment on
+    # preconditions above.
+    invariants: list[Clause] = [] if "invariants" not in clause_groups else [
         _make_clause(
             "invariants",
             "grasp_effort_instantaneous",
