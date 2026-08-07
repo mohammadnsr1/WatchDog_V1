@@ -255,7 +255,33 @@ def main() -> int:
     print(f"transcript={result.transcript_path}")
     if result.verdict_count is not None:
         print(f"verdict_count={result.verdict_count}")
+
+    _render_own_transcript(result.transcript_path)
+
     return 0
+
+
+def _render_own_transcript(transcript_path: str) -> None:
+    """Render THIS agent's own timeline views, best-effort, at process exit.
+
+    executor and watchdog are two separate processes launched sequentially
+    (see module docstring) -- neither can tell from inside itself whether the
+    other has finished, so each process renders only its own transcript here.
+    Both <agent>_timeline.* files exist once both processes have exited; there
+    is no cross-process coordination. Never lets a render failure affect the
+    run's exit code -- the raw transcript is already complete and correct
+    regardless of whether this derived view could be produced.
+    """
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        from render_session_log import render_transcript
+
+        transcript = Path(transcript_path)
+        render_transcript(transcript, transcript.parent)
+    except Exception as exc:
+        print(f"WARNING: session-log render failed (non-fatal): {exc}", file=sys.stderr)
 
 
 async def _dry_run(config, system_prompt: str, task_text: str) -> int:

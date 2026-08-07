@@ -77,7 +77,6 @@ def _stub_config(tmp_dir: Path) -> SimpleNamespace:
         mcp_client_timeout_sec=30.0,
         loop=SimpleNamespace(
             max_turns=10,
-            wait_timeout_sec=None,
             stop_after_consecutive_timeouts=None,
         ),
     )

@@ -30,13 +30,14 @@ mcp_servers:
 
 loop:
   max_turns: 200
-  wait_timeout_sec: 120.0
   stop_after_consecutive_timeouts: 2
 
 transcript_dir: transcripts
 
 # No gate_timeout_sec here: WatchDog never calls request_go, so there is no
 # gate timeout on this side of the handshake to order against. Still keep
-# this comfortably above the longest blocking call this agent makes
-# (wait_for_event's own timeout_sec, bounded by loop.wait_timeout_sec above).
+# this comfortably above the longest blocking call this agent makes: the
+# agent chooses its own per-call timeout_sec on wait_for_event (clamped to
+# [0, 600] server-side -- see watchdog_mcp_server.py's wait_for_event), not
+# a value from this config.
 mcp_client_timeout_sec: 180.0

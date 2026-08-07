@@ -197,7 +197,7 @@ objects:
   u_green:
     enabled: true
     object_id: u_green
-    tf_frame: u_green
+    tf_frame: u_green_2x   # matches the scene prim name (/World/u_green_2x) that Isaac publishes into TF
     lookup_frame: world
     class_name: fmb_u
     source: isaac_gt

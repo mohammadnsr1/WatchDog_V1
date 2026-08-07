@@ -32,14 +32,11 @@ you are going to close from, taken from the task instruction's step
 default that will not match your actual grasp, and the gripper will arrive at
 the wrong height for the object.
 
-Two different offsets meet when you position for a grasp, and they come from
-different places. The gripper-side offset, from the TCP frame to the point where
-the fingers close, depends on jaw opening and is applied for you when you pass
-gripper_width_m. The object-side offset, from the object's own frame to the point
-on it you intend to grasp, comes from the task instruction's step
-(grasp_center_offset in the steps: block). Pass it when the step carries one,
-along with the object's pose; it is identity for a symmetric object grasped at
-its centre.
+A second, object-side offset also applies: from the object's own frame to the
+point on it you intend to grasp. It comes from the task instruction's step
+(grasp_center_offset in the steps: block). Pass it, along with the object's
+pose, when the step carries one; it is identity for a symmetric object grasped
+at its centre.
 
 ## MoveIt and the planning scene
 
@@ -68,10 +65,10 @@ allowed to touch. Apply them with set_permitted_contacts. This tells MoveIt's
 collision checker to ignore contact between exactly those pairs, so that when
 you later plan from a state where they are touching -- lifting the top cube off
 a stack, for instance -- MoveIt does not reject the start state as "in
-collision" and refuse to plan. Without it, planning from a legitimately stacked
-or inserted state fails. It changes nothing about which objects you are
-permitted to touch; the specification is the only source for that. It only keeps
-the planner from tripping over contact the task intends.
+collision" and refuse to plan; without it, planning from a legitimately stacked
+or inserted state fails. It is a planner tractability setting only -- it
+changes nothing about which objects you are permitted to touch. The
+specification remains the only source for that.
 
 ## How to work a step
 
@@ -109,10 +106,10 @@ For each step in the plan:
    argument to whichever approach/preposition tool you use (for example
    gripper_width_m on execute_approach_and_preposition or
    move_grasp_center_to_pose), and as expected_width_m to grasp(). Do the same
-   for grasp_center_offset when the step carries one. You must not omit these and
-   let a tool fall back to its own default; a default gripper width will not
-   match this step's object, and an omitted expected_width_m weakens what the
-   grasp skill can verify about its own result.
+   for grasp_center_offset when the step carries one. Never omit these and let a
+   tool fall back to its own default: a default gripper width will not match
+   this step's object, and an omitted expected_width_m weakens what the grasp
+   skill can verify about its own result.
 
    When you establish a physical relationship the rest of the step depends on,
    such as closing the gripper on an object, call mark_phase to record that the

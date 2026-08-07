@@ -11,7 +11,14 @@ context_keep_recent_turns: 5       # never elide within this many turns
 # the openai provider. Both are validated at config load -- see
 # agent_harness/config.py -- so a bad value here fails loudly before any
 # provider call rather than with an opaque request-time error.
-reasoning_effort: medium
+#
+# FROZEN EVAL PARAMETER: reasoning_effort is low here, not medium. The
+# executor's turns are mechanical (one contract-driven skill call at a time),
+# unlike WatchDog's conformance judgment calls -- see watchdog_agent.yaml,
+# which stays at medium deliberately. Do not raise this without re-running
+# the eval suite; it is a latency/behavior tradeoff decided for this study,
+# not a default to drift back toward "medium" out of habit.
+reasoning_effort: low
 thinking_budget_tokens: 4096
 
 system_prompt: prompts/executor_system.txt
