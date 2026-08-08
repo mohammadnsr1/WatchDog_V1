@@ -213,7 +213,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 4.0
+        force_threshold_n: 8.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -221,5 +221,5 @@ objects:
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
-        max_clamp_effort: 4.0
+        max_clamp_effort: 10.0
         grasp_effort_floor: 0.05

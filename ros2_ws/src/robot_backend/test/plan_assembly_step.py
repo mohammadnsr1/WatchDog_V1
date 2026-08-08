@@ -32,10 +32,14 @@ that loop directly, no agent in the middle:
      the actual system-wide convention rather than just this script's.
   3. Compute pre-grasp/pre-place and grasp/place TCP poses the same way
      motion_mcp_server._compute_approach_geometry does: tcp_target_from_grasp_center
-     at the target center, and at the target center backed off by
-     approach_distance_m along ITS OWN local -Z axis (via compose_poses, not
+     at the target center, and at the target center offset by
+     approach_distance_m along ITS OWN local Z axis (via compose_poses, not
      a hand-rolled quaternion rotation, and not a hardcoded world axis --
      this generalizes to a side approach/placement, not just top-down).
+     approach_distance_m's SIGN is yours to choose: it is applied exactly as
+     given, not forced negative, since which local direction backs away
+     from the object depends on the orientation you picked -- see
+     pregrasp_center_from_grasp_center's docstring.
   4. DRY-RUN by default. Prints every computed pose. Nothing moves.
   5. With --execute: runs the plan step by step, using the same skills
      (grasp_skill, release_skill, execute_approach_and_preposition-equivalent
@@ -137,18 +141,21 @@ line by line (see the code for exact file:line references):
     this script's output as provisional until motion_mcp_server.py is
     updated to match -- do not paste a non-identity-derived offset into a
     real executor.yaml before that lands.
-  - Approach/pre-place backoff direction: the previous draft's
-    pregrasp_center_from_grasp_center composed the backoff in the grasp
-    center's own LOCAL frame; motion_mcp_server._compute_approach_geometry
-    had drifted to a hardcoded WORLD +Z addition (a side-effect of an
-    unrelated approach-vector-removal edit) and has been fixed back to the
-    general local-frame form to match, and to actually support a side
-    approach/placement rather than assuming top-down. Both now compose the
-    backoff along the target pose's own local -Z (the grasp/place frame's
-    +Z is, by convention, the approach axis pointing INTO the object/
-    surface), via compose_poses, and both produce byte-identical results to
-    the old hardcoded behavior for every grasp orientation actually used in
-    this repo's registry today (all top-down, qx=1,qy=0,qz=0,qw=0).
+  - Approach/pre-place offset direction: both this script's
+    pregrasp_center_from_grasp_center and motion_mcp_server._compute_approach_geometry
+    compose the offset in the target pose's own LOCAL frame via
+    compose_poses (not a hardcoded world axis), which is what makes either
+    one work for a side approach/placement, not just top-down. They now
+    DIVERGE on sign, deliberately: motion_mcp_server.py still forces the
+    offset negative (assumes local +Z always points into the object).
+    This script's version takes approach_distance_m exactly as given,
+    positive or negative your choice, since that assumption breaks the
+    moment someone picks a grasp/place orientation where local +Z points
+    away from the surface instead (e.g. identity) -- see
+    pregrasp_center_from_grasp_center's docstring. Both still produce
+    identical results for every grasp orientation in this repo's registry
+    today (all top-down, qx=1,qy=0,qz=0,qw=0) PROVIDED approach_distance_m
+    is given negative here to match motion_mcp_server.py's forced sign.
   - Live gripper width: rg2_controller.py continuously publishes the
     measured true opening width on /gripper_width_true (std_msgs/Float64),
     computed from the TF separation of left_contact_frame/right_contact_frame
@@ -169,7 +176,13 @@ PLAN FILE FORMAT
 -----------------
 object_id: u_green                  # default object for steps that omit it
 gripper_width_m: 0.042              # default width for steps that omit it
-approach_distance_m: 0.10           # default approach standoff
+approach_distance_m: -0.10          # default approach standoff -- SIGNED, taken as
+                                     # given along the target's own local Z (see
+                                     # pregrasp_center_from_grasp_center). Negative is
+                                     # correct for the top-down orientation below
+                                     # (local +Z points into the object); flip the
+                                     # sign if you pick an orientation where local +Z
+                                     # points away from the surface instead.
 
 steps:
   - step_id: approach_and_grasp
@@ -189,7 +202,7 @@ steps:
 
   - step_id: lift
     action: move_grasp_center_to_pose
-    frame: delta_from_last          # object | world | delta_from_last
+    frame: delta_from_last          # object | target_object | world | delta_from_last
     delta: {x: 0.0, y: 0.0, z: 0.12}
 
   - step_id: place
@@ -328,6 +341,19 @@ def grasp_center_world_from_object_and_offset(object_pose: dict, offset_spec: di
     a top-down orientation doesn't drive the fingers through the table for
     an object lying on its side). That's exactly what dry-running this
     script before --execute is for.
+
+    There is no grasp_center TF frame -- tcp is the only physical frame
+    that exists. "Grasp center" is a logical point this script computes
+    (tcp_target_from_grasp_center, via the width-dependent RG2 calibration
+    in robot_backend.utils.rg2_geometry) and never a rotation: every
+    calibration entry (tcp_offset_from_width) carries IDENTITY orientation,
+    always, at every width. So the orientation returned here IS the TCP's
+    own world orientation, exactly, not a separate "grasp-center-frame"
+    convention layered on top of it -- for a top-down pose, that's the TCP's
+    own +Z pointing down into the object (the object's own frame still has
+    +Z pointing up off the table; the TCP is flipped 180 relative to it).
+    This is also why pregrasp_center_from_grasp_center's local-Z offset
+    below is, byte-for-byte, the same offset applied to the TCP directly.
     """
     position_only_offset = make_pose(
         position=offset_spec["position"],
@@ -343,26 +369,35 @@ def grasp_center_world_from_object_and_offset(object_pose: dict, offset_spec: di
 
 
 def pregrasp_center_from_grasp_center(grasp_center_pose: dict, approach_distance_m: float) -> dict:
-    """Back off from grasp/place center along ITS OWN local -Z by approach_distance_m.
+    """Offset from grasp/place center along ITS OWN local Z by approach_distance_m,
+    taken exactly as given -- sign included, no implicit flip.
 
-    Matches motion_mcp_server._compute_approach_geometry exactly (both were
-    reconciled together -- see the ASSUMPTIONS header): the target frame's
-    own +Z is, by convention, the approach axis pointing INTO the object or
-    placement surface, so retreating along -Z backs away from it regardless
-    of the target's actual world orientation. This is what makes the same
-    function correct for both a top-down pick AND a side approach/placement,
-    with no separate "approach vector" parameter needed -- the orientation
-    you already supply for the grasp/place pose fully determines it.
+    "Grasp center" here is standing in for the TCP: they always share
+    orientation (see grasp_center_world_from_object_and_offset's tail note),
+    so this offset is, byte-for-byte, the same as offsetting the TCP pose
+    directly along its own local Z.
 
     T_world_pregrasp = T_world_target * T_target_pregrasp (a pure
     local-frame translation composed via compose_poses, not a hand-rolled
-    quaternion rotation and not a world-axis addition).
+    quaternion rotation and not a world-axis addition) -- this part is what
+    makes it correct for any grasp/place orientation, top-down or side,
+    with no separate "approach vector" parameter needed.
+
+    Which SIGN backs away from the object depends entirely on which way you
+    pointed the grasp/place orientation's own local +Z when you chose it --
+    this function has no opinion and does not assume the common convention
+    (local +Z pointing into the object/surface, so a NEGATIVE
+    approach_distance_m backs away). Get the orientation backwards (e.g.
+    identity, which points local +Z away from a table instead of into it)
+    and the same positive value that worked for a top-down grasp will drive
+    the target straight through the surface instead of hovering above it.
+    Dry-run and check the printed pre_grasp/pre_place Z before --execute.
     """
-    local_backoff = make_pose(
-        position={"x": 0.0, "y": 0.0, "z": -approach_distance_m},
+    local_offset = make_pose(
+        position={"x": 0.0, "y": 0.0, "z": approach_distance_m},
         orientation=IDENTITY_QUAT,
     )
-    return compose_poses(grasp_center_pose, local_backoff)
+    return compose_poses(grasp_center_pose, local_offset)
 
 
 def ros_pose_to_posedict(pose_msg, frame_id: str) -> dict:
@@ -610,7 +645,7 @@ def run_step(
         print(f"    grasp point (OBJECT-frame position)  : ({offset_pos['x']:+.4f}, {offset_pos['y']:+.4f}, {offset_pos['z']:+.4f})")
         print(f"    grasp orientation (DESIRED WORLD)     : ({offset_ori['x']:+.4f}, {offset_ori['y']:+.4f}, {offset_ori['z']:+.4f}, {offset_ori['w']:+.4f})")
         print(f"    grasp_center (world)             : {fmt_pose(grasp_center_world)}")
-        print(f"    pre_grasp_center (world, -{approach_distance_m:.3f}m local Z): {fmt_pose(pre_grasp_center_world)}")
+        print(f"    pre_grasp_center (world, {approach_distance_m:+.3f}m local Z): {fmt_pose(pre_grasp_center_world)}")
         print(f"    pre_grasp TCP                    : {fmt_pose(pre_grasp_tcp)}")
         print(f"    grasp TCP                        : {fmt_pose(grasp_tcp)}")
 
@@ -670,6 +705,36 @@ def run_step(
         elif frame == "world":
             target_center_world = offset_pose_from_spec(step["world_pose"], frame_id="world")
             result.update(structured=False)
+
+        elif frame == "target_object":
+            # NOT the same semantics as frame: object, and deliberately so.
+            # This is for moving an object that is ALREADY ATTACHED (a
+            # reorient/carry step between grasp and release) to a target
+            # pose you're giving directly (e.g. an Isaac Sim gizmo showing
+            # where the object should end up) -- there's nothing to TF-query,
+            # since the object hasn't physically gotten there yet.
+            #
+            # An attached object is RIGID with the gripper: you don't get to
+            # independently choose the grasp orientation the way a live pick
+            # does (grasp_center_world_from_object_and_offset's "desired
+            # world orientation directly" rule does not apply here -- the
+            # object's orientation is a CONSEQUENCE of the TCP's orientation,
+            # not something you can separately dictate while still attached).
+            # grasp_center_offset here is therefore the FIXED object-relative
+            # transform established when you grasped it (same offset you
+            # picked with -- position AND orientation both), composed onto
+            # the target object pose the classic way: T_world_graspcenter =
+            # T_world_objectTARGET * T_object_graspcenter. This is what
+            # solves for the TCP orientation the target object orientation
+            # actually requires.
+            object_id = resolve(step, plan, "object_id", required=True)
+            object_target_pose = offset_pose_from_spec(step["object_pose"], frame_id="world")
+            offset_pose = offset_pose_from_spec(step["grasp_center_offset"])
+            target_center_world = compose_poses(object_target_pose, offset_pose)
+            print(f"    object target pose (world, NOT queried) : {fmt_pose(object_target_pose)}")
+            result.update(
+                object_id=object_id, grasp_center_offset=step["grasp_center_offset"], structured=True
+            )
 
         elif frame == "delta_from_last":
             if "last_grasp_center_world" not in state:
@@ -817,6 +882,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--report", type=str, default=None, help="write computed poses for every step to this JSON path")
     p.add_argument("--service", type=str, default="/get_object_pose", help="override the get-object-pose service name")
     p.add_argument("--registry", type=str, default=None, help="override the model_registry.yaml path")
+    p.add_argument(
+        "--settle-sec", type=float, default=1.0,
+        help="seconds to sleep after each executed step (default 1.0, --execute only) -- "
+             "gives MoveIt's point-cloud-derived octomap time to catch up with the scene "
+             "(e.g. an object that just moved or was attached/detached) before the next "
+             "step plans against it. A planner that plans against a stale octomap will "
+             "route around obstacles that have already moved, or fail entirely against "
+             "ones that haven't been cleared yet.",
+    )
     return p
 
 
@@ -859,6 +933,10 @@ def main() -> int:
                     continue
             result = run_step(step, plan, pose_client, registry, width_reader, backend, state, execute=args.execute)
             results.append(result)
+
+            if args.execute and args.settle_sec > 0:
+                print(f"    (settling {args.settle_sec:.1f}s for the scene/octomap to catch up...)")
+                time.sleep(args.settle_sec)
 
         print("\n\n===== paste into executor.yaml steps: =====\n")
         print(render_steps_fragment(results))

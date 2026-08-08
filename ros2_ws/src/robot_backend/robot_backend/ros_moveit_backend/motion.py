@@ -196,13 +196,13 @@ class ROSMoveItMotionBackend(MotionBackend):
         # Policy defaults for these tunables live in motion_mcp_server.py, which
         # always passes them explicitly; the literals below are only a
         # last-resort mechanism default for direct backend callers.
-        allowed_planning_time = float(kwargs.get("allowed_planning_time", 10.0))
-        num_planning_attempts = int(kwargs.get("num_planning_attempts", 10))
+        allowed_planning_time = float(kwargs.get("allowed_planning_time", 15.0))
+        num_planning_attempts = int(kwargs.get("num_planning_attempts", 15))
         max_velocity_scaling_factor = float(
-            kwargs.get("max_velocity_scaling_factor", 0.3)
+            kwargs.get("max_velocity_scaling_factor", 1.0)
         )
         max_acceleration_scaling_factor = float(
-            kwargs.get("max_acceleration_scaling_factor", 0.1)
+            kwargs.get("max_acceleration_scaling_factor", 0.3)
         )
         # 0.001 matches the single owned value in motion_mcp_server.py
         # (_DEFAULT_POSITION_TOLERANCE_M); this is not a second tuning knob.

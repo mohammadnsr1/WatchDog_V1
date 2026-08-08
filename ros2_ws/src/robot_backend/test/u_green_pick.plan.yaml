@@ -4,7 +4,6 @@
 
 object_id: u_green
 gripper_width_m: 0.042
-approach_distance_m: 0.10
 
 steps:
   - step_id: safe_start
@@ -13,6 +12,11 @@ steps:
 
   - step_id: pick_u_green
     action: approach_and_preposition
+    # Top-down TCP -- local +Z points DOWN into the object, so
+    # approach_distance_m is NEGATIVE: -100mm along the TCP's own local +Z
+    # backs UP away from the table. Sign is yours to set per orientation --
+    # see pregrasp_center_from_grasp_center.
+    approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -24,42 +28,58 @@ steps:
   - step_id: lift_u_green
     action: move_grasp_center_to_pose
     frame: delta_from_last
-    delta: {x: 0.0, y: 0.0, z: 0.5}
+    delta: {x: 0.0, y: 0.0, z: 0.3}
 
   - step_id: reorient_u_green
     action: move_grasp_center_to_pose
-    frame: world
-    world_pose:
-      position: {x: -0.09644, y: -0.16329, z: 0.06}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
+    # frame: target_object, not world: the position/orientation below are
+    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
+    # grasp-center/TCP pose the robot can drive to directly. u_green is
+    # still ATTACHED here (no release yet), so this is NOT a live-pick
+    # composition (frame: object's "orientation is whatever world
+    # orientation you want" rule does not apply to an attached object --
+    # its orientation is a consequence of the TCP's, not independently
+    # choosable). grasp_center_offset is the FIXED object-relative
+    # transform from when it was grasped (same values as pick_u_green's),
+    # composed the classic way onto the target object pose to solve for
+    # the TCP orientation that target actually requires.
+    frame: target_object
+    object_pose:
+      position: {x: 0.06, y: -0.16329, z: 0.06}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}   # -90 deg about X (upright)
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: release_u_green
     action: release
 
+  - step_id: safe_pose
+    action: move_named_safe_pose
+    name: ready
+
+
   - step_id: repick_u_green
     action: approach_and_preposition
+  #   # This TCP orientation points local +Z INTO the object (like top-down),
+  #   # not away from it like pick_u_green's upright pose above -- so this
+  #   # needs a NEGATIVE approach_distance_m (e.g. -0.10), not the script's
+  #   # +0.10 code default, or the pre-grasp hover drives through the object
+  #   # instead of backing off it.
+    approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      # Desired WORLD orientation, not object-relative (see the script's
-      # grasp_center_offset semantics) -- u_green now rests tipped -90 deg
-      # about X from reorient_u_green, so the world orientation that
-      # approaches the same physical point the same way as the first pick
-      # is the original top-down 180-about-X composed with that -90 tilt =
-      # 90 about X, i.e. reorient_u_green's own world_pose orientation.
-      # {1,0,0,0} here would still mean "top-down in WORLD frame" and drive
-      # the gripper into the now-tilted object wrong.
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
+  #     # Desired WORLD orientation, not object-relative (see the script's
+  #     # grasp_center_offset semantics) -- u_green now rests tipped -90 deg
+  #     # about X from reorient_u_green, so the world orientation that
+  #     # approaches the same physical point the same way as the first pick
+  #     # is the original top-down 180-about-X composed with that -90 tilt =
+  #     # 90 about X, i.e. reorient_u_green's own world_pose orientation.
+  #     # {1,0,0,0} here would still mean "top-down in WORLD frame" and drive
+  #     # the gripper into the now-tilted object wrong.
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     stop_at_pregrasp: false
 
   - step_id: regrasp_u_green
     action: grasp
 
-  # - step_id: place_u_green
-  #   action: move_grasp_center_to_pose
-  #   frame: world
-  #   world_pose:
-  #     position: {x: 0.363081, y: -0.153466, z: 0.129839}
-  #     orientation: {x: -0.433769, y: 0.558529, z: -0.434659, w: -0.557639}
-  #
-  # - step_id: release_u_green_final
-  #   action: release
