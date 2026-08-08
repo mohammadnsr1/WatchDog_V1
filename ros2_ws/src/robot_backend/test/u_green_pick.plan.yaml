@@ -1,0 +1,65 @@
+# Example plan for plan_assembly_step.py -- u_green pick, reorient, place.
+# See plan_assembly_step.py's own docstring for the plan file format,
+# available actions, and the frame: options on move_grasp_center_to_pose.
+
+object_id: u_green
+gripper_width_m: 0.042
+approach_distance_m: 0.10
+
+steps:
+  - step_id: safe_start
+    action: move_named_safe_pose
+    name: ready
+
+  - step_id: pick_u_green
+    action: approach_and_preposition
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    stop_at_pregrasp: false
+
+  - step_id: grasp_u_green
+    action: grasp
+
+  - step_id: lift_u_green
+    action: move_grasp_center_to_pose
+    frame: delta_from_last
+    delta: {x: 0.0, y: 0.0, z: 0.5}
+
+  - step_id: reorient_u_green
+    action: move_grasp_center_to_pose
+    frame: world
+    world_pose:
+      position: {x: -0.09644, y: -0.16329, z: 0.06}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
+
+  - step_id: release_u_green
+    action: release
+
+  - step_id: repick_u_green
+    action: approach_and_preposition
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      # Desired WORLD orientation, not object-relative (see the script's
+      # grasp_center_offset semantics) -- u_green now rests tipped -90 deg
+      # about X from reorient_u_green, so the world orientation that
+      # approaches the same physical point the same way as the first pick
+      # is the original top-down 180-about-X composed with that -90 tilt =
+      # 90 about X, i.e. reorient_u_green's own world_pose orientation.
+      # {1,0,0,0} here would still mean "top-down in WORLD frame" and drive
+      # the gripper into the now-tilted object wrong.
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
+    stop_at_pregrasp: false
+
+  - step_id: regrasp_u_green
+    action: grasp
+
+  # - step_id: place_u_green
+  #   action: move_grasp_center_to_pose
+  #   frame: world
+  #   world_pose:
+  #     position: {x: 0.363081, y: -0.153466, z: 0.129839}
+  #     orientation: {x: -0.433769, y: 0.558529, z: -0.434659, w: -0.557639}
+  #
+  # - step_id: release_u_green_final
+  #   action: release
