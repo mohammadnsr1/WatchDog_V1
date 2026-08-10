@@ -267,6 +267,9 @@ from robot_backend.skills.gripper_skills import (
     grasp_skill,
     release_skill,
 )
+from robot_backend.skills.maintenance_skills import (
+    set_permitted_contacts as set_permitted_contacts_skill,
+)
 
 IDENTITY_QUAT = {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
 GRIPPER_WIDTH_TOPIC = "/gripper_width_true"
@@ -626,7 +629,46 @@ def run_step(
 
     result: dict = {"step_id": step_id, "action": action}
 
-    if action == "approach_and_preposition":
+    if action == "sync_scene":
+        # Explicit, plan-authored list -- deliberately NOT defaulting to
+        # plan_object_ids(plan) (the set of objects this plan actually
+        # manipulates). A static object this plan never touches still needs
+        # to be in MoveIt's world scene at its actual TF pose, or the planner
+        # either can't see it (never registered) or plans against wherever
+        # it was last synced (registered but stale) -- both look identical
+        # to a hard/failing planning problem from the outside. See
+        # model_registry.yaml's acm_allowed_object_pairs for the mutual-
+        # contact side of sharing a crowded table with these.
+        object_ids = step.get("object_ids") or plan_object_ids(plan)
+        print(f"    (sync_collision_objects for {object_ids})")
+        result.update(object_ids=object_ids)
+
+        if execute:
+            def _do_sync():
+                return backend.scene.sync_collision_objects(object_ids)
+            outcome = confirm_and_run(step_id, _do_sync)
+            result["sync_result"] = outcome
+
+    elif action == "set_permitted_contacts":
+        # sync_collision_objects (above) and this are two SEPARATE MoveIt
+        # mechanisms -- syncing pushes CollisionObject geometry/pose into
+        # the planning scene; it never touches the Allowed Collision Matrix.
+        # acm_allowed_object_pairs in the registry is just declared data
+        # until this actively pushes it into MoveIt. Reuses the same skill
+        # (and therefore the same object_id validation) the executor's
+        # set_permitted_contacts MCP tool calls -- see executor_system.txt's
+        # "Intended contact between objects" section.
+        pairs = registry.get("acm_allowed_object_pairs") or []
+        print(f"    (set_permitted_contacts for {pairs})")
+        result.update(acm_allowed_object_pairs=pairs)
+
+        if execute:
+            def _do_set_permitted_contacts():
+                return set_permitted_contacts_skill(backend, registry=registry)
+            outcome = confirm_and_run(step_id, _do_set_permitted_contacts)
+            result["set_permitted_contacts_result"] = outcome
+
+    elif action == "approach_and_preposition":
         object_id = resolve(step, plan, "object_id", required=True)
         width = resolve(step, plan, "gripper_width_m", required=True)
         approach_distance_m = resolve(step, plan, "approach_distance_m", default=0.10)

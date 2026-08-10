@@ -6,6 +6,22 @@ object_id: u_green
 gripper_width_m: 0.042
 
 steps:
+  - step_id: sync_scene
+    action: sync_scene
+    # All the static parts sharing the table with u_green, so MoveIt plans
+    # against their real TF pose instead of not knowing about them at all
+    # (or, worse, an earlier stale sync) -- this is what a planning-timeout
+    # in the middle of a plan turned out to be last time.
+    object_ids: [u_green, base2, hex_blue, hex_red, inverted_u_brown]
+
+  - step_id: set_permitted_contacts
+    action: set_permitted_contacts
+    # Separate from sync_scene above -- applies model_registry.yaml's
+    # acm_allowed_object_pairs to MoveIt's Allowed Collision Matrix so
+    # planning near this crowded table doesn't refuse contact between the
+    # declared pairs. Reads the pairs straight from the registry; no
+    # per-step fields needed.
+
   - step_id: safe_start
     action: move_named_safe_pose
     name: ready

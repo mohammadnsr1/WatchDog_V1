@@ -110,7 +110,20 @@ cell:
 # conformance violation, detected by the supervisory monitor from physical
 # evidence, and is deliberately not prevented by the planner.
 acm_allowed_object_pairs:
-  - [green_cube, red_cube]
+  # Static FMB parts sharing the table with u_green (see registry entries
+  # below) -- allowed to touch each other so the planner doesn't refuse to
+  # plan near a crowded table; carries no task-level permission, same as
+  # the pair above.
+  - [u_green, base2]
+  - [u_green, hex_blue]
+  - [u_green, hex_red]
+  - [u_green, inverted_u_brown]
+  - [base2, hex_blue]
+  - [base2, hex_red]
+  - [base2, inverted_u_brown]
+  - [hex_blue, hex_red]
+  - [hex_blue, inverted_u_brown]
+  - [hex_red, inverted_u_brown]
 
 objects:
   red_cube:
@@ -207,6 +220,126 @@ objects:
       mesh_path: assets/u_green_2x.obj   # relative to asset_root (defaults to config/)
       # u_green_2x.obj is the vertex-baked 2x scale of fmb_u_green.obj (points
       # already multiplied by 2 in meters) -- scale stays [1,1,1], no double-count.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 8.0
+      tolerances:
+        position_m: 0.005
+        orientation_deg: 5.0
+        lift_height_min_m: 0.02
+        disturbance_tolerance_m: 0.005
+        grasp_width_tolerance_m: 0.005
+      limits:
+        max_clamp_effort: 10.0
+        grasp_effort_floor: 0.05
+
+  # Static FMB parts sharing the table with u_green. base2 is the fixture/
+  # baseplate parts get assembled onto -- not a grasp target, graspable:
+  # false, no spec: block (spec is only read for contract loading, which
+  # only ever runs for a step's graspable object). Registered so
+  # sync_collision_objects can push their TF-derived pose into MoveIt's
+  # world scene: an unregistered-but-physically-present object is invisible
+  # to the planner, and a registered-but-never-synced one is worse --
+  # planning happens against wherever it was last synced (or never was),
+  # not where it actually is. See acm_allowed_object_pairs above for why
+  # they're mutually allowed to touch.
+  base2:
+    enabled: true
+    object_id: base2
+    tf_frame: base2   # matches the scene prim name (/World/base2) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_base
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: mesh
+      mesh_path: assets/base2_2x.obj
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+
+  # hex_blue, hex_red, inverted_u_brown are grasp targets (unlike base2) --
+  # graspable: true, so they need a spec: block (grasp_skill reads
+  # spec.grasp.force_threshold_n; the contract loader reads
+  # spec.tolerances/spec.limits). UNVERIFIED: these three spec blocks are
+  # copied from u_green's as a starting placeholder, NOT measured for these
+  # parts -- run rg2_effort_sweep.py against each before trusting
+  # max_clamp_effort/grasp_effort_floor/force_threshold_n here for a real
+  # fault-injection or contract-bound run. u_green's own values ARE
+  # sweep-derived (see the ceiling-law comment near the top of this file);
+  # these are not, yet.
+  hex_blue:
+    enabled: true
+    object_id: hex_blue
+    tf_frame: hex_blue   # matches the scene prim name (/World/hex_blue) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_hex
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/hex_blue_2x.obj
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 8.0
+      tolerances:
+        position_m: 0.005
+        orientation_deg: 5.0
+        lift_height_min_m: 0.02
+        disturbance_tolerance_m: 0.005
+        grasp_width_tolerance_m: 0.005
+      limits:
+        max_clamp_effort: 10.0
+        grasp_effort_floor: 0.05
+
+  hex_red:
+    enabled: true
+    object_id: hex_red
+    tf_frame: hex_red   # matches the scene prim name (/World/hex_red) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_hex
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/hex_red_2x.obj
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 8.0
+      tolerances:
+        position_m: 0.005
+        orientation_deg: 5.0
+        lift_height_min_m: 0.02
+        disturbance_tolerance_m: 0.005
+        grasp_width_tolerance_m: 0.005
+      limits:
+        max_clamp_effort: 10.0
+        grasp_effort_floor: 0.05
+
+  inverted_u_brown:
+    enabled: true
+    object_id: inverted_u_brown
+    tf_frame: inverted_u_brown   # matches the scene prim name (/World/inverted_u_brown) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_u
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/inverted_u_brown_2x.obj
       scale: [1.0, 1.0, 1.0]
       pose_offset:
         position: {x: 0.0, y: 0.0, z: 0.0}
