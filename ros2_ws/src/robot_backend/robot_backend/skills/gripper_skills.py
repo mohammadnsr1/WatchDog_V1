@@ -43,7 +43,16 @@ GRASP_WIDTH_TOLERANCE_M: float = 0.005   # ±5 mm post-grasp width check
 GRASP_MIN_PLAUSIBLE_WIDTH_M: float = 0.003   # 3 mm; see rationale above
 # Clearance applied to the safety-floor target so the floor sits inside the
 # object, guaranteeing mechanical contact before the floor clamp stops progress.
-GRASP_CLEARANCE_M: float = 0.003
+# Shared across EVERY object -- this is not a per-object registry field, so
+# raising it raises the settled-effort ceiling (see the ceiling-law ~1.15
+# effort-units/mm relationship in model_registry.yaml's header comment) for
+# every grasp, not just the one you're tuning. Was 0.003 (3mm), chosen
+# because its ~3.43 measured ceiling sat under red_cube/green_cube's
+# max_clamp_effort=4.0; at 0.005 (5mm) the ceiling measures ~5.54 on
+# green_cube, ABOVE that 4.0 bound -- red_cube/green_cube grasps will now
+# violate their own max_clamp_effort by design until those registry values
+# are raised too (u_green's was raised to 50.0, comfortably clear of 5.54).
+GRASP_CLEARANCE_M: float = 0.005
 # Fallback only, used when the registry entry lacks force_threshold_n.
 # Matches the controller's hard-guard default (DEFAULT_HARD_FORCE_THRESHOLD in
 # rg2_controller.py); per-object tuned overrides belong in the registry's

@@ -223,6 +223,27 @@ steps:
     # another move_grasp_center_to_pose step after this if you want a
     # retreat -- no retreat is bundled in.
 
+Optional per-step motion tuning (any move step):
+    motion:
+      solve_ik_first: true            # exact-IK + joint-space plan instead of
+                                       # a tolerance-sphere pose goal; use for
+                                       # placement steps that must land exactly
+      joint_tolerance: 0.0005         # applies on the solve_ik_first path
+      position_tolerance_m: 0.0002    # applies on the default pose-goal path
+      orientation_tolerance_rad: 0.002
+      planner_id: RRTConnectkConfigDefault   # any config in ompl_planning.yaml
+      planner_fallbacks: []           # [] disables the automatic retry with
+                                       # alternate planners; omit for defaults
+      allowed_planning_time: 20.0
+      max_velocity_scaling_factor: 0.2
+Keys go straight through to the motion backend; omit the block for defaults.
+
+On a planning failure (PLANNING_FAILED/INVALID_MOTION_PLAN/FAILURE) the
+backend retries with alternate planners automatically -- see
+DEFAULT_PLANNER_FALLBACKS in ros_moveit_backend/motion.py. It does NOT retry
+START_STATE_IN_COLLISION, GOAL_IN_COLLISION, or CONTROL_FAILED: those are
+geometry/execution problems no planner change can fix.
+
 RUN (full stack up, workspace sourced, from test/):
     python3 plan_assembly_step.py --plan u_green_pick.plan.yaml
     python3 plan_assembly_step.py --plan u_green_pick.plan.yaml --execute
@@ -622,12 +643,22 @@ def run_step(
     backend,
     state: dict,
     execute: bool,
+    settle_sec: float = 0.0,
 ) -> dict:
     step_id = step.get("step_id", "?")
     action = step["action"]
     print(f"\n--- step '{step_id}'  action={action} ---")
 
     result: dict = {"step_id": step_id, "action": action}
+
+    # Optional per-step motion tuning, passed straight through to the motion
+    # backend. Anything move_to_pose/move_to_joint_positions accepts as a
+    # kwarg works here -- planner_id, solve_ik_first, position_tolerance_m,
+    # orientation_tolerance_rad, joint_tolerance, allowed_planning_time,
+    # max_velocity_scaling_factor. Absent means the backend defaults apply.
+    motion_kwargs = step.get("motion", {}) or {}
+    if motion_kwargs:
+        print(f"    motion overrides: {motion_kwargs}")
 
     if action == "sync_scene":
         # Explicit, plan-authored list -- deliberately NOT defaulting to
@@ -646,7 +677,7 @@ def run_step(
         if execute:
             def _do_sync():
                 return backend.scene.sync_collision_objects(object_ids)
-            outcome = confirm_and_run(step_id, _do_sync)
+            outcome = confirm_and_run(step_id, _do_sync, settle_sec=settle_sec)
             result["sync_result"] = outcome
 
     elif action == "set_permitted_contacts":
@@ -665,7 +696,7 @@ def run_step(
         if execute:
             def _do_set_permitted_contacts():
                 return set_permitted_contacts_skill(backend, registry=registry)
-            outcome = confirm_and_run(step_id, _do_set_permitted_contacts)
+            outcome = confirm_and_run(step_id, _do_set_permitted_contacts, settle_sec=settle_sec)
             result["set_permitted_contacts_result"] = outcome
 
     elif action == "approach_and_preposition":
@@ -707,9 +738,17 @@ def run_step(
         )
 
         if execute:
-            confirm_and_run(step_id, lambda: move_tcp_to_pose_skill(backend, pre_grasp_tcp))
+            confirm_and_run(
+                step_id,
+                lambda: move_tcp_to_pose_skill(backend, pre_grasp_tcp, **motion_kwargs),
+                settle_sec=settle_sec,
+            )
             if not stop_at_pregrasp:
-                confirm_and_run(step_id, lambda: move_tcp_to_pose_skill(backend, grasp_tcp))
+                confirm_and_run(
+                    step_id,
+                    lambda: move_tcp_to_pose_skill(backend, grasp_tcp, **motion_kwargs),
+                    settle_sec=settle_sec,
+                )
 
     elif action == "grasp":
         object_id = resolve(step, plan, "object_id", required=True)
@@ -726,8 +765,25 @@ def run_step(
         if execute:
             def _do_grasp():
                 return grasp_skill(backend, object_id=object_id, registry=registry, expected_width_m=width)
-            outcome = confirm_and_run(step_id, _do_grasp)
+            outcome = confirm_and_run(step_id, _do_grasp, settle_sec=settle_sec)
             result["grasp_result"] = outcome
+            if not outcome.get("ok", False):
+                # grasp_skill returns early on a failed close/contact check
+                # WITHOUT ever calling attach_object (see its "Success
+                # criteria" block) -- the object is still a WORLD collision
+                # object, untouched by touch_links, while the gripper sits
+                # closed right where it is. Continuing the plan from here
+                # doesn't fail cleanly: the NEXT motion step hits
+                # START_STATE_IN_COLLISION against the un-attached object,
+                # which reads as a confusing planning/collision bug two
+                # steps removed from the actual failure. Stop here instead,
+                # at the step that actually failed and with the actual
+                # reason (see outcome['reason']).
+                raise RuntimeError(
+                    f"step '{step_id}': grasp failed, not attached -- "
+                    f"{outcome.get('reason', outcome)}. Stopping rather than "
+                    "continuing with an ungrasped, un-attached object."
+                )
 
     elif action == "move_grasp_center_to_pose":
         frame = step.get("frame", "object")
@@ -816,7 +872,13 @@ def run_step(
         result.update(grasp_center_world=target_center_world, gripper_width_m=width)
 
         if execute:
-            confirm_and_run(step_id, lambda: move_grasp_center_to_pose_skill(backend, target_center_world, width))
+            confirm_and_run(
+                step_id,
+                lambda: move_grasp_center_to_pose_skill(
+                    backend, target_center_world, width, **motion_kwargs
+                ),
+                settle_sec=settle_sec,
+            )
 
     elif action == "release":
         object_id = resolve(step, plan, "object_id", required=True)
@@ -829,20 +891,20 @@ def run_step(
         if execute:
             def _do_release():
                 return release_skill(backend, object_id=object_id)
-            outcome = confirm_and_run(step_id, _do_release)
+            outcome = confirm_and_run(step_id, _do_release, settle_sec=settle_sec)
             result["release_result"] = outcome
 
     elif action == "open_gripper":
         print("    (open gripper -- no attach/detach implied; use 'grasp'/'release' "
               "for a real pick/place)")
         if execute:
-            confirm_and_run(step_id, lambda: open_gripper_skill(backend))
+            confirm_and_run(step_id, lambda: open_gripper_skill(backend), settle_sec=settle_sec)
 
     elif action == "move_named_safe_pose":
         name = step["name"]
         print(f"    (move to named safe pose '{name}')")
         if execute:
-            confirm_and_run(step_id, lambda: move_to_named_safe_joint_pose_skill(backend, name))
+            confirm_and_run(step_id, lambda: move_to_named_safe_joint_pose_skill(backend, name), settle_sec=settle_sec)
 
     else:
         raise ValueError(f"step '{step_id}': unknown action '{action}'")
@@ -850,9 +912,20 @@ def run_step(
     return result
 
 
-def confirm_and_run(step_id: str, fn):
+def confirm_and_run(step_id: str, fn, settle_sec: float = 0.0):
     outcome = fn()
     print(f"    -> executed, result: {outcome}")
+    if settle_sec > 0:
+        # Per-ACTION settle, not just per-step: a step like
+        # approach_and_preposition issues TWO motion commands back to back
+        # (pre-grasp hover, then descend) with nothing between them, and
+        # grasp/release each chain 2-3 backend calls (open, guarded-move,
+        # attach / open, detach, sync) the same way. Only settling once at
+        # the end of the whole step (the old behavior) left every one of
+        # those intermediate transitions racing MoveIt's scene/octomap
+        # update -- exactly the "runs too fast" symptom.
+        print(f"    (settling {settle_sec:.1f}s...)")
+        time.sleep(settle_sec)
     return outcome
 
 
@@ -925,13 +998,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--service", type=str, default="/get_object_pose", help="override the get-object-pose service name")
     p.add_argument("--registry", type=str, default=None, help="override the model_registry.yaml path")
     p.add_argument(
-        "--settle-sec", type=float, default=1.0,
-        help="seconds to sleep after each executed step (default 1.0, --execute only) -- "
-             "gives MoveIt's point-cloud-derived octomap time to catch up with the scene "
-             "(e.g. an object that just moved or was attached/detached) before the next "
-             "step plans against it. A planner that plans against a stale octomap will "
-             "route around obstacles that have already moved, or fail entirely against "
-             "ones that haven't been cleared yet.",
+        "--settle-sec", type=float, default=2.5,
+        help="seconds to sleep after each executed ACTION -- not just each step, but "
+             "every individual backend call within one (default 2.5, --execute only): "
+             "approach_and_preposition's pre-grasp-then-descend, grasp's "
+             "open/guarded-move/attach, release's open/detach/sync all settle "
+             "between their own sub-calls now, not just once at the end of the "
+             "step. Gives MoveIt's point-cloud-derived octomap time to catch up "
+             "with the scene (e.g. an object that just moved or was "
+             "attached/detached) before the next command plans against it. A "
+             "planner that plans against a stale octomap will route around "
+             "obstacles that have already moved, or fail entirely against ones "
+             "that haven't been cleared yet.",
     )
     return p
 
@@ -971,12 +1049,12 @@ def main() -> int:
                 if ans != "y":
                     print("    skipped")
                     continue
-            result = run_step(step, plan, pose_client, registry, width_reader, backend, state, execute=args.execute)
+            result = run_step(
+                step, plan, pose_client, registry, width_reader, backend, state,
+                execute=args.execute,
+                settle_sec=args.settle_sec if args.execute else 0.0,
+            )
             results.append(result)
-
-            if args.execute and args.settle_sec > 0:
-                print(f"    (settling {args.settle_sec:.1f}s for the scene/octomap to catch up...)")
-                time.sleep(args.settle_sec)
 
         print("\n\n===== paste into executor.yaml steps: =====\n")
         print(render_steps_fragment(results))

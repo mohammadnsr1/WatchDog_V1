@@ -56,6 +56,40 @@ _ERROR_CODE_NAMES = {
     if name.isupper() and isinstance(getattr(MoveItErrorCodes, name), int)
 }
 
+# Codes where retrying with a DIFFERENT sampling algorithm is a plausible fix:
+# the planner searched and came up empty on a problem another algorithm may
+# solve, and it failed before any trajectory was sent to the controller.
+#
+# Deliberately narrow. Excluded on purpose:
+#   START_STATE_IN_COLLISION / GOAL_IN_COLLISION -- rejected before (or
+#     regardless of) the planner; the geometry is the problem, not the search.
+#   CONTROL_FAILED / PREEMPTED -- execution stage: the trajectory already ran
+#     in part, so the arm is somewhere unmodelled and a blind replan would
+#     stack a second motion on top of an unknown state.
+#   MOTION_PLAN_INVALIDATED_BY_ENVIRONMENT_CHANGE / TIMED_OUT -- ambiguous as
+#     to whether execution had begun, so they get the same treatment.
+#   The invalid-request and NO_IK_SOLUTION codes -- no planner change helps.
+_PLANNER_RETRYABLE_ERROR_CODES = frozenset(
+    {
+        MoveItErrorCodes.PLANNING_FAILED,       # -1
+        MoveItErrorCodes.INVALID_MOTION_PLAN,   # -2
+        MoveItErrorCodes.FAILURE,               # 99999, OMPL's generic "no path found"
+    }
+)
+
+# Tried in order after the requested planner fails with a retryable code.
+# Mixed by algorithm family on purpose -- a bidirectional tree, a cost-aware
+# tree that pushes through narrow passages, then two roadmap/optimizing
+# planners. Reseeding the same planner is already covered by
+# num_planning_attempts, so a fallback list of RRT variants would add nothing.
+# Every name here must exist in ur5e_moveit_config/config/ompl_planning.yaml.
+DEFAULT_PLANNER_FALLBACKS = (
+    "RRTConnectkConfigDefault",
+    "BiTRRTkConfigDefault",
+    "PRMstarkConfigDefault",
+    "BITstarkConfigDefault",
+)
+
 
 class MoveGroupPlanningError(RuntimeError):
     """Raised when a MoveGroup goal completes with a non-SUCCESS error code.
@@ -131,9 +165,17 @@ class ROSMoveItMotionBackend(MotionBackend):
         constraint for the fixed `tcp` link and performs IK + collision-aware
         planning internally. The URDF TCP remains fixed.
 
-        `solve_ik_first=True` is available only as a debug path. It resolves the
-        target pose through `/compute_ik` first, then reuses the joint-space
-        planning path. Normal planning should leave this disabled.
+        `solve_ik_first=True` resolves the target pose to one exact joint
+        solution through `/compute_ik` first, then plans in joint space
+        against that solution with joint_tolerance (default 1e-3 rad). Use
+        this when a call needs the end-effector to land at (deterministically
+        close to) the literal target instead of anywhere inside the default
+        pose-goal's tolerance sphere/cone -- the default Cartesian pose-goal
+        path only requires the sampled plan to land inside that region, not
+        at its center. Leave disabled for ordinary moves: it is a single IK
+        seed (from the current joint state) with no retry across multiple
+        seeds, so it can fail on poses the sampling-based path would still
+        solve.
         """
 
         requested_pose_stamped = self._coerce_pose_stamped(target_pose)
@@ -212,7 +254,7 @@ class ROSMoveItMotionBackend(MotionBackend):
         )
         action_timeout_sec = float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT))
 
-        def _plan_and_execute(pose_stamped: PoseStamped) -> Any:
+        def _build_goal(pose_stamped: PoseStamped, planner_id: str) -> MoveGroup.Goal:
             goal = MoveGroup.Goal()
             goal.request = self._build_pose_motion_plan_request(
                 pose_stamped=pose_stamped,
@@ -224,13 +266,17 @@ class ROSMoveItMotionBackend(MotionBackend):
                 max_acceleration_scaling_factor=max_acceleration_scaling_factor,
                 position_tolerance_m=position_tolerance_m,
                 orientation_tolerance_rad=orientation_tolerance_rad,
+                planner_id=planner_id,
             )
             goal.planning_options = self._build_planning_options(kwargs)
-            return self._execute_move_group_goal(
-                goal, timeout_sec=action_timeout_sec
-            )
+            return goal
 
-        result_response = _plan_and_execute(tcp_target_pose_stamped)
+        result_response = self._run_goal_with_planner_fallbacks(
+            build_goal=lambda planner: _build_goal(tcp_target_pose_stamped, planner),
+            planner_id=str(kwargs.get("planner_id", "")),
+            planner_fallbacks=self._resolve_planner_fallbacks(kwargs),
+            timeout_sec=action_timeout_sec,
+        )
 
         return {
             "ok": True,
@@ -261,24 +307,29 @@ class ROSMoveItMotionBackend(MotionBackend):
         # last-resort mechanism default for direct backend callers.
         allowed_planning_time = float(kwargs.get("allowed_planning_time", 10.0))
 
-        goal = MoveGroup.Goal()
-        goal.request = self._build_joint_motion_plan_request(
-            joint_positions=normalized_joint_positions,
-            planning_group=planning_group,
-            allowed_planning_time=allowed_planning_time,
-            num_planning_attempts=int(kwargs.get("num_planning_attempts", 10)),
-            max_velocity_scaling_factor=float(
-                kwargs.get("max_velocity_scaling_factor", 1.0)
-            ),
-            max_acceleration_scaling_factor=float(
-                kwargs.get("max_acceleration_scaling_factor", 1.0)
-            ),
-            joint_tolerance=float(kwargs.get("joint_tolerance", 1e-3)),
-        )
-        goal.planning_options = self._build_planning_options(kwargs)
+        def _build_goal(planner_id: str) -> MoveGroup.Goal:
+            goal = MoveGroup.Goal()
+            goal.request = self._build_joint_motion_plan_request(
+                joint_positions=normalized_joint_positions,
+                planning_group=planning_group,
+                allowed_planning_time=allowed_planning_time,
+                num_planning_attempts=int(kwargs.get("num_planning_attempts", 10)),
+                max_velocity_scaling_factor=float(
+                    kwargs.get("max_velocity_scaling_factor", 0.5)
+                ),
+                max_acceleration_scaling_factor=float(
+                    kwargs.get("max_acceleration_scaling_factor", 0.5)
+                ),
+                joint_tolerance=float(kwargs.get("joint_tolerance", 1e-3)),
+                planner_id=planner_id,
+            )
+            goal.planning_options = self._build_planning_options(kwargs)
+            return goal
 
-        result_response = self._execute_move_group_goal(
-            goal,
+        result_response = self._run_goal_with_planner_fallbacks(
+            build_goal=_build_goal,
+            planner_id=str(kwargs.get("planner_id", "")),
+            planner_fallbacks=self._resolve_planner_fallbacks(kwargs),
             timeout_sec=float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT)),
         )
 
@@ -411,6 +462,7 @@ class ROSMoveItMotionBackend(MotionBackend):
         max_velocity_scaling_factor: float,
         max_acceleration_scaling_factor: float,
         joint_tolerance: float,
+        planner_id: str = "",
     ) -> MotionPlanRequest:
         request = self._base_motion_plan_request(
             planning_group=planning_group,
@@ -418,6 +470,7 @@ class ROSMoveItMotionBackend(MotionBackend):
             num_planning_attempts=num_planning_attempts,
             max_velocity_scaling_factor=max_velocity_scaling_factor,
             max_acceleration_scaling_factor=max_acceleration_scaling_factor,
+            planner_id=planner_id,
         )
 
         constraints = Constraints()
@@ -447,6 +500,7 @@ class ROSMoveItMotionBackend(MotionBackend):
         max_acceleration_scaling_factor: float,
         position_tolerance_m: float,
         orientation_tolerance_rad: float,
+        planner_id: str = "",
     ) -> MotionPlanRequest:
         request = self._base_motion_plan_request(
             planning_group=planning_group,
@@ -454,6 +508,7 @@ class ROSMoveItMotionBackend(MotionBackend):
             num_planning_attempts=num_planning_attempts,
             max_velocity_scaling_factor=max_velocity_scaling_factor,
             max_acceleration_scaling_factor=max_acceleration_scaling_factor,
+            planner_id=planner_id,
         )
         request.start_state = self._build_current_robot_state(
             timeout_sec=_INITIAL_JOINT_STATE_TIMEOUT
@@ -505,7 +560,7 @@ class ROSMoveItMotionBackend(MotionBackend):
         timeout_sec: float,
         avoid_collisions: bool,
     ) -> dict[str, float]:
-        """Debug-only helper that resolves one IK solution through /compute_ik."""
+        """Resolve one exact IK solution through /compute_ik, seeded from the current joint state."""
 
         current_joint_state = self._wait_for_joint_state(
             timeout_sec=_INITIAL_JOINT_STATE_TIMEOUT
@@ -571,9 +626,11 @@ class ROSMoveItMotionBackend(MotionBackend):
         num_planning_attempts: int,
         max_velocity_scaling_factor: float,
         max_acceleration_scaling_factor: float,
+        planner_id: str = "",
     ) -> MotionPlanRequest:
         request = MotionPlanRequest()
         request.group_name = planning_group
+        request.planner_id = planner_id
         request.num_planning_attempts = max(num_planning_attempts, 1)
         request.allowed_planning_time = max(allowed_planning_time, 0.1)
         request.max_velocity_scaling_factor = self._clamp_scaling_factor(
@@ -669,6 +726,71 @@ class ROSMoveItMotionBackend(MotionBackend):
             )
 
         return result_response
+
+    @staticmethod
+    def _resolve_planner_fallbacks(kwargs: Mapping[str, Any]) -> tuple[str, ...]:
+        """Alternate planners to try after the requested one fails.
+
+        Pass planner_fallbacks=[] to opt out and get single-planner behavior.
+        """
+
+        if "planner_fallbacks" not in kwargs:
+            return DEFAULT_PLANNER_FALLBACKS
+        fallbacks = kwargs.get("planner_fallbacks") or ()
+        return tuple(str(name) for name in fallbacks if str(name).strip())
+
+    def _run_goal_with_planner_fallbacks(
+        self,
+        *,
+        build_goal: Any,
+        planner_id: str,
+        planner_fallbacks: Sequence[str],
+        timeout_sec: float,
+    ) -> Any:
+        """Run a MoveGroup goal, retrying with alternate planners on planning failure.
+
+        Only codes in _PLANNER_RETRYABLE_ERROR_CODES are retried; everything
+        else re-raises immediately, because a different sampling algorithm
+        cannot address it and retrying would only burn the time budget (or,
+        for an execution-stage failure, command a second motion from an
+        unmodelled state). The goal is rebuilt per attempt, so each retry
+        re-reads the current joint state as its start state.
+        """
+
+        attempts: list[str] = [planner_id]
+        for candidate in planner_fallbacks:
+            if candidate and candidate not in attempts:
+                attempts.append(candidate)
+
+        last_error: MoveGroupPlanningError | None = None
+        for index, candidate in enumerate(attempts):
+            try:
+                return self._execute_move_group_goal(
+                    build_goal(candidate), timeout_sec=timeout_sec
+                )
+            except MoveGroupPlanningError as error:
+                if error.error_code_val not in _PLANNER_RETRYABLE_ERROR_CODES:
+                    raise
+                last_error = error
+                remaining = attempts[index + 1 :]
+                if not remaining:
+                    break
+                self._node.get_logger().warning(
+                    f"Planner {candidate or '(group default)'} failed with "
+                    f"{self._format_moveit_error_code_name(error.error_code_val)}; "
+                    f"retrying with {remaining[0]}."
+                )
+
+        tried = ", ".join(name or "(group default)" for name in attempts)
+        raise MoveGroupPlanningError(
+            last_error.error_code_val,
+            f"{last_error}. Tried {len(attempts)} planner(s) with no motion "
+            f"plan found: {tried}.",
+        )
+
+    @staticmethod
+    def _format_moveit_error_code_name(error_code_val: int) -> str:
+        return _ERROR_CODE_NAMES.get(error_code_val, str(error_code_val))
 
     def _coerce_pose_stamped(self, target_pose: PoseLike) -> PoseStamped:
         pose_dict = self._coerce_pose_dict(target_pose)

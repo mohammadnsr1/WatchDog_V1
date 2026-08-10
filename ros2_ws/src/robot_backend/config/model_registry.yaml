@@ -69,10 +69,13 @@
 #   effort ceiling — force_threshold_n can only stop the close early, never push
 #   past it. Measured on green_cube (clearance x settled effort, from
 #   test/rg2_effort_sweep.py's effort_plateau cells): 1 mm -> 0.944, 2 mm -> 2.150,
-#   3 mm -> 3.425, 4 mm -> 4.41, 5 mm -> 5.54 (~1.15 effort-units per mm). At
-#   GRASP_CLEARANCE_M = 3 mm the measured ceiling (~3.43) sits ~15% under
-#   max_clamp_effort = 4.0 — that margin is WHY 3 mm was chosen; 4 mm and 5 mm
-#   clearances measure above the bound and would violate it on every grasp.
+#   3 mm -> 3.425, 4 mm -> 4.41, 5 mm -> 5.54 (~1.15 effort-units per mm).
+#   GRASP_CLEARANCE_M (gripper_skills.py) is now 5 mm, measured ceiling ~5.54
+#   on green_cube -- ABOVE red_cube/green_cube's max_clamp_effort = 4.0 below,
+#   so THEIR grasps now violate their own bound by design until those two
+#   values are raised to match (u_green's max_clamp_effort was raised to 50.0
+#   for exactly this reason). This is a SHARED constant, not per-object --
+#   raising it for one object's tuning affects the ceiling for every object.
 
 # cell: properties of the cell itself (robot + gripper), not of any one
 # tracked object -- the joint and frame names monitor primitives need but
@@ -226,7 +229,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 30.0
+        force_threshold_n: 20.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -234,7 +237,7 @@ objects:
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
-        max_clamp_effort: 50.0
+        max_clamp_effort: 25.0
         grasp_effort_floor: 0.05
 
   # Static FMB parts sharing the table with u_green. base2 is the fixture/
