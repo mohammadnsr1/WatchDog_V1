@@ -17,6 +17,6 @@ isaac_point_cloud:
   # More aggressive self-filter padding to suppress robot leakage from the camera view.
   padding_offset: 0.14
   padding_scale: 1.20
-  max_update_rate: 2.0
+  max_update_rate: 10.0   # overridden by sim_moveit_bringup's pointcloud_filter_rate launch arg when launched that way; kept in sync as the standalone default.
   # /moveit/filtered_cloud is the MoveIt robot-self-filtered diagnostic output.
   filtered_cloud_topic: /moveit/filtered_cloud

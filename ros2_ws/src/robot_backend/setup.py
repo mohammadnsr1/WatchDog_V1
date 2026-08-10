@@ -28,7 +28,14 @@ setup(
         ),
         (
             "share/robot_backend/config/assets",
-            ["config/assets/fmb_u_green.obj", "config/assets/u_green_2x.obj"],
+            [
+                "config/assets/fmb_u_green.obj",
+                "config/assets/u_green_2x.obj",
+                "config/assets/base2_2x.obj",
+                "config/assets/hex_blue_2x.obj",
+                "config/assets/hex_red_2x.obj",
+                "config/assets/inverted_u_brown_2x.obj",
+            ],
         ),
     ],
     install_requires=["setuptools", "mcp", "PyYAML", "trimesh"],

@@ -954,16 +954,14 @@ def main() -> int:
         backend = create_ros_moveit_backend(node=node)
         width_reader = GripperWidthReader()
 
-        if args.execute:
-            object_ids = plan_object_ids(plan)
-            print(f"\nsyncing {object_ids} into MoveIt's world collision scene...")
-            sync_result = backend.scene.sync_collision_objects(object_ids)
-            print(f"    -> {sync_result}")
-            if not sync_result.get("ok", False):
-                raise RuntimeError(
-                    f"sync_collision_objects({object_ids}) failed: {sync_result} -- "
-                    "grasp/attach will fail without this; not proceeding."
-                )
+        # No implicit sync here -- the plan owns this explicitly via its own
+        # sync_scene / set_permitted_contacts steps (see those actions).
+        # An earlier version auto-synced plan_object_ids(plan) (the object_id
+        # this plan manipulates) before the step loop; that's exactly the
+        # NARROW set sync_scene was added to stop being limited to -- static
+        # objects the plan never directly targets (other parts sharing the
+        # table) need syncing too, and plan_object_ids has no way to know
+        # about them. Put a sync_scene step first in your plan.
 
         state: dict = {}
         results = []

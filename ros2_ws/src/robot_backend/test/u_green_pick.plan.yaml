@@ -99,3 +99,50 @@ steps:
   - step_id: regrasp_u_green
     action: grasp
 
+  - step_id: lift_u_green_second
+    action: move_grasp_center_to_pose
+    frame: delta_from_last
+    delta: {x: 0.0, y: 0.0, z: 0.3}
+
+  - step_id: placement_approach
+    action: move_grasp_center_to_pose
+    # frame: target_object, not world: the position/orientation below are
+    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
+    # grasp-center/TCP pose the robot can drive to directly. u_green is
+    # still ATTACHED here (no release yet), so this is NOT a live-pick
+    # composition (frame: object's "orientation is whatever world
+    # orientation you want" rule does not apply to an attached object --
+    # its orientation is a consequence of the TCP's, not independently
+    # choosable). grasp_center_offset is the FIXED object-relative
+    # transform from when it was grasped (same values as pick_u_green's),
+    # composed the classic way onto the target object pose to solve for
+    # the TCP orientation that target actually requires.
+    frame: target_object
+    object_pose:
+      position: {x: 0.40204, y: -0.16211, z: 0.1809}
+      orientation: {x: -0.5 , y: -0.50, z: -0.50, w: 0.5}   # -90 deg about X (upright)
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: placement
+    action: move_grasp_center_to_pose
+    # frame: target_object, not world: the position/orientation below are
+    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
+    # grasp-center/TCP pose the robot can drive to directly. u_green is
+    # still ATTACHED here (no release yet), so this is NOT a live-pick
+    # composition (frame: object's "orientation is whatever world
+    # orientation you want" rule does not apply to an attached object --
+    # its orientation is a consequence of the TCP's, not independently
+    # choosable). grasp_center_offset is the FIXED object-relative
+    # transform from when it was grasped (same values as pick_u_green's),
+    # composed the classic way onto the target object pose to solve for
+    # the TCP orientation that target actually requires.
+    frame: target_object
+    object_pose:
+      position: {x: 0.40204, y: -0.16211, z: 0.0809}
+      orientation: {x: -0.5 , y: -0.50, z: -0.50, w: 0.5}   # -90 deg about X (upright)
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+

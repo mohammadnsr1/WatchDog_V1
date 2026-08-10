@@ -463,8 +463,16 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "pointcloud_filter_rate",
-                default_value="2.0",
-                description="Maximum publish rate for the filtered point cloud in Hz.",
+                default_value="10.0",
+                description=(
+                    "Maximum publish rate for the filtered point cloud in Hz. Also "
+                    "used directly as MoveIt's octomap max_update_rate (see "
+                    "sensors_3d.yaml's isaac_point_cloud sensor plugin) -- one "
+                    "argument controls both, since a faster republish with a "
+                    "slower octomap consumer would just be wasted work. Was 2.0; "
+                    "raised for faster scene catch-up after an object moves/is "
+                    "attached/is released."
+                ),
             ),
             DeclareLaunchArgument(
                 "output_stamp_mode",
