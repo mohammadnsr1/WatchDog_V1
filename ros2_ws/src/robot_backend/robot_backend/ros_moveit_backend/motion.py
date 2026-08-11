@@ -239,7 +239,7 @@ class ROSMoveItMotionBackend(MotionBackend):
         # always passes them explicitly; the literals below are only a
         # last-resort mechanism default for direct backend callers.
         allowed_planning_time = float(kwargs.get("allowed_planning_time", 15.0))
-        num_planning_attempts = int(kwargs.get("num_planning_attempts", 15))
+        num_planning_attempts = int(kwargs.get("num_planning_attempts", 30))
         max_velocity_scaling_factor = float(
             kwargs.get("max_velocity_scaling_factor", 1.0)
         )

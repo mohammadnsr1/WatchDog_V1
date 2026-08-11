@@ -7,7 +7,7 @@
 # 1.8x longer in X, so u_green's grasp point does NOT carry over.
 
 object_id: inverted_u_brown
-gripper_width_m: 0.042        # TODO verify -- matches the 42mm Z thickness,
+gripper_width_m: 0.08        # TODO verify -- matches the 42mm Z thickness,
                               # same as u_green, but confirm against the
                               # actual grasp feature on this part.
 
@@ -29,8 +29,8 @@ steps:
     # distance is negative to back up off the table.
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}          # TODO grasp point, OBJECT frame
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}   # top-down world TCP orientation
+      position: {x: 0.0, y: -0.05, z: 0.015}         
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}  
     stop_at_pregrasp: false
 
   - step_id: grasp_inverted_u_brown
@@ -41,6 +41,52 @@ steps:
     frame: delta_from_last
     delta: {x: 0.0, y: 0.0, z: 0.2}
 
+
+  - step_id: reorient_inverted_u_brown
+    action: move_grasp_center_to_pose
+    frame: target_object
+    object_pose:
+      position: {x: 0.0, y: -0.16329, z: 0.16}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}   # -90 deg about X (upright)
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.015} 
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
+
+  - step_id: reorient_u_inverted_u_brown
+    action: move_grasp_center_to_pose
+
+    frame: target_object
+    object_pose:
+      position: {x: 0.0, y: -0.16329, z: 0.085}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}   # -90 deg about X (upright)
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.015} 
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
+
+
+  - step_id: release_inverted_u_brown
+    action: release
+
+  - step_id: reorient for repick
+    action: approach_and_preposition
+    # Top-down TCP: local +Z points down into the object, so the approach
+    # distance is negative to back up off the table.
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.015}         
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}  
+    stop_at_pregrasp: false
+
+
+  - step_id: regrasp_inverted_u_brown
+    action: grasp
+
+  - step_id: lift_inverted_u_brown_second
+    action: move_grasp_center_to_pose
+    frame: delta_from_last
+    delta: {x: 0.0, y: 0.0, z: 0.2}
+
+
   - step_id: placement_approach
     action: move_grasp_center_to_pose
     frame: target_object
@@ -49,11 +95,11 @@ steps:
     # independently choosable -- the object->gripper transform is fixed at
     # grasp time. Dry-run first and check the reported grasp_center.
     object_pose:
-      position: {x: 0.0, y: 0.0, z: 0.0}          # TODO seated slot TF, +approach height in z
-      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}   # TODO seated slot orientation
+      position: {x: 0.48911, y: -0.16234, z: 0.21693}        
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 1.0}   
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}          # TODO same grasp point as the pick step
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}   # TODO world TCP orientation at placement
+      position: {x: 0.0, y: -0.05, z: 0.015}          
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     motion:
       solve_ik_first: true
       joint_tolerance: 0.0005
@@ -61,21 +107,21 @@ steps:
       max_acceleration_scaling_factor: 0.2
       allowed_planning_time: 20.0
 
-  # - step_id: placement
-  #   action: move_grasp_center_to_pose
-  #   frame: target_object
-  #   object_pose:
-  #     position: {x: 0.0, y: 0.0, z: 0.0}        # TODO seated slot TF
-  #     orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}   # TODO seated slot orientation
-  #   grasp_center_offset:
-  #     position: {x: 0.0, y: 0.0, z: 0.0}
-  #     orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
-  #   motion:
-  #     solve_ik_first: true
-  #     joint_tolerance: 0.0005
-  #     max_velocity_scaling_factor: 0.1
-  #     max_acceleration_scaling_factor: 0.1
-  #     allowed_planning_time: 20.0
+  - step_id: placement
+    action: move_grasp_center_to_pose
+    frame: target_object
+    object_pose:
+      position: {x: 0.48911, y: -0.16234, z: 0.11693}        
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 1.0}   
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.015}          
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    motion:
+      solve_ik_first: true
+      joint_tolerance: 0.0005
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
 
-  # - step_id: release_inverted_u_brown
-  #   action: release
+  - step_id: release_inverted_u_brown
+    action: release
