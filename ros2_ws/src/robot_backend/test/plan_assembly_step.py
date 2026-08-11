@@ -805,30 +805,23 @@ def run_step(
             result.update(structured=False)
 
         elif frame == "target_object":
-            # NOT the same semantics as frame: object, and deliberately so.
-            # This is for moving an object that is ALREADY ATTACHED (a
-            # reorient/carry step between grasp and release) to a target
-            # pose you're giving directly (e.g. an Isaac Sim gizmo showing
-            # where the object should end up) -- there's nothing to TF-query,
-            # since the object hasn't physically gotten there yet.
+            # Same grasp_center_offset rule as frame: object -- position is
+            # object-relative and gets rotated through the object's
+            # orientation, orientation is the desired WORLD orientation taken
+            # directly. The only difference is where the object pose comes
+            # from: given here as the object's DESIRED pose (e.g. off an
+            # Isaac Sim gizmo) rather than TF-queried, since the object is
+            # attached and hasn't physically gotten there yet.
             #
-            # An attached object is RIGID with the gripper: you don't get to
-            # independently choose the grasp orientation the way a live pick
-            # does (grasp_center_world_from_object_and_offset's "desired
-            # world orientation directly" rule does not apply here -- the
-            # object's orientation is a CONSEQUENCE of the TCP's orientation,
-            # not something you can separately dictate while still attached).
-            # grasp_center_offset here is therefore the FIXED object-relative
-            # transform established when you grasped it (same offset you
-            # picked with -- position AND orientation both), composed onto
-            # the target object pose the classic way: T_world_graspcenter =
-            # T_world_objectTARGET * T_object_graspcenter. This is what
-            # solves for the TCP orientation the target object orientation
-            # actually requires.
+            # Because the object is attached, the orientation you give is not
+            # actually free: the object->gripper transform is fixed at grasp
+            # time, so an orientation inconsistent with it means the object
+            # lands somewhere other than object_pose. Dry-run and check.
             object_id = resolve(step, plan, "object_id", required=True)
             object_target_pose = offset_pose_from_spec(step["object_pose"], frame_id="world")
-            offset_pose = offset_pose_from_spec(step["grasp_center_offset"])
-            target_center_world = compose_poses(object_target_pose, offset_pose)
+            target_center_world = grasp_center_world_from_object_and_offset(
+                object_target_pose, step["grasp_center_offset"]
+            )
             print(f"    object target pose (world, NOT queried) : {fmt_pose(object_target_pose)}")
             result.update(
                 object_id=object_id, grasp_center_offset=step["grasp_center_offset"], structured=True
