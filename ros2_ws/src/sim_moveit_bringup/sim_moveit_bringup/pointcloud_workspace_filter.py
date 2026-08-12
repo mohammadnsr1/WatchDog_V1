@@ -10,6 +10,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
+from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 
 
@@ -80,6 +81,16 @@ class PointCloudWorkspaceFilter(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        # Isaac's /clock restarts at zero on replay, leaving this buffer holding
+        # transforms stamped in what is now the future. tf2 then rejects every
+        # incoming transform as TF_OLD_DATA and never recovers on its own: the
+        # stale entries only age out as newer ones arrive, and those are exactly
+        # what is being rejected. Recreating the buffer is the way out, so
+        # expose it as a service instead of requiring this node be restarted.
+        # Mirrors scene_tf_sync_node's /reset_tf.
+        self.reset_tf_service = self.create_service(
+            Trigger, "~/reset_tf", self._handle_reset_tf
+        )
         self.publisher = self.create_publisher(PointCloud2, self.output_topic, output_qos)
         self.subscription = self.create_subscription(
             PointCloud2,
@@ -92,6 +103,16 @@ class PointCloudWorkspaceFilter(Node):
         self._last_log_times: Dict[str, float] = {}
 
         self._log_startup_configuration()
+
+    def _handle_reset_tf(self, request: Trigger.Request, response: Trigger.Response):
+        """Destroy and recreate the TF buffer to flush pre-reset transforms."""
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self._last_publish_time_sec = float("-inf")
+        self.get_logger().info("TF buffer flushed and recreated.")
+        response.success = True
+        response.message = "TF buffer flushed and recreated."
+        return response
 
     def _validate_crop_bounds(self):
         crop_bounds = [

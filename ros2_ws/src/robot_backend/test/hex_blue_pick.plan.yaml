@@ -1,0 +1,122 @@
+# Plan for plan_assembly_step.py -- hex_blue pick, reorient, place.
+# Structure mirrors inverted_u_brown_pick.plan.yaml (the proven one); see
+# plan_assembly_step.py's docstring for the format and frame: options.
+#
+# Mesh bounds for this part: 0.0323 (X) x 0.1400 (Y) x 0.0280 (Z) -- a hex pin
+# whose LONG axis is Y (140mm), cross-section 32.3 x 28.0 mm. hex_blue and
+# hex_red are dimensionally identical, so the numbers transfer between them.
+#
+# EVERY number marked TODO is a placeholder -- none of them are measured.
+# Dry-run (no --execute) and check the printed grasp_center before running.
+
+object_id: hex_blue
+gripper_width_m: 0.03       # TODO -- candidates are 0.0323 (across X) or
+                              # 0.0280 (across Z), depending on which way the
+                              # jaws close for your chosen grasp orientation.
+
+steps:
+  - step_id: sync_scene
+    action: sync_scene
+    object_ids: [u_green, base2, hex_blue, hex_red, inverted_u_brown]
+
+  - step_id: set_permitted_contacts
+    action: set_permitted_contacts
+
+  - step_id: safe_start
+    action: move_named_safe_pose
+    name: ready
+
+  - step_id: pick_hex_blue
+    action: approach_and_preposition
+    # Top-down TCP: local +Z points down into the part, so approach_distance_m
+    # is negative to back up off the table.
+    approach_distance_m: -0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}           
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0} 
+    stop_at_pregrasp: false
+
+  - step_id: grasp_hex_blue
+    action: grasp
+
+  - step_id: lift_hex_blue
+    action: move_grasp_center_to_pose
+    frame: delta_from_last
+    delta: {x: -0.1, y: 0.0, z: 0.2}
+
+  - step_id: clear_octomap_after_grasp
+    action: clear_octomap
+
+  # attach_object REMOVEs the part from the world before re-adding it as an
+  # attached body, so re-assert the ACM here rather than relying on the
+  # start-of-plan entries surviving that round trip.
+  - step_id: set_permitted_contacts_after_grasp
+    action: set_permitted_contacts
+
+  # - step_id: reorient
+  #   action: move_grasp_center_to_pose
+  #   frame: target_object
+  #   # object_pose is the part's DESIRED world pose. The part is ATTACHED here,
+  #   # so object_pose and grasp_center_offset orientations are NOT independently
+  #   # choosable -- the object->gripper transform is fixed at grasp time. An
+  #   # inconsistent pair silently lands the part somewhere else.
+  #   object_pose:
+  #     position: {x: 0.85533, y: -0.1, z: 0.075}
+  #     orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}    # -90, 0, 180 (intrinsic XYZ)
+  #   grasp_center_offset:
+  #     position: {x: 0.0, y: 0.04, z: 0.0}
+  #     # Not free: derived from the top-down pick above. hex_blue rests at
+  #     # (0,0,180) on the table, so the object->gripper transform is
+  #     # (0,-1,0,0), NOT identity -- this value is target (x) that transform.
+  #     # Re-derive it if either the resting pose or the pick orientation changes.
+  #     orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+  #   motion:
+
+  #     max_velocity_scaling_factor: 0.2
+  #     max_acceleration_scaling_factor: 0.2
+  #     allowed_planning_time: 20.0
+
+
+
+  # Delete this reorient block (through repick_hex_blue) if the part can be
+  # picked straight into its final orientation and never needs setting down.
+  - step_id: prepare for insertion
+    action: move_grasp_center_to_pose
+    frame: target_object
+    # object_pose is the part's DESIRED world pose. The part is ATTACHED here,
+    # so object_pose and grasp_center_offset orientations are NOT independently
+    # choosable -- the object->gripper transform is fixed at grasp time. An
+    # inconsistent pair silently lands the part somewhere else.
+    object_pose:
+      position: {x: 0.59387, y: -0.1588, z: 0.18}        
+      orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}          
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+
+  # Essential before insertion, not just belt-and-braces: the surrounding
+  # parts are in the scene TWICE -- as synced collision objects (ACM-exempt)
+  # and as camera voxels (NOT exemptable). The pin has to enter space those
+  # voxels occupy.
+  - step_id: clear_octomap_before_insertion
+    action: clear_octomap
+
+
+  - step_id: placement
+    action: move_grasp_center_to_pose
+    frame: target_object
+    object_pose:
+      position: {x: 0.59387, y: -0.1588, z: 0.0955}  
+      orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}     
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    motion:
+      max_velocity_scaling_factor: 0.2
+      max_acceleration_scaling_factor: 0.2
+
+
+
+  - step_id: release_hex_blue
+    action: release

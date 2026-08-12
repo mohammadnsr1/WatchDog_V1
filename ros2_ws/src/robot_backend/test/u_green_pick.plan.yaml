@@ -108,6 +108,12 @@ steps:
   - step_id: regrasp_u_green
     action: grasp
 
+  # The part stood upright here while unattached, so the octomap holds its own
+  # voxels; attaching does not clear them and the lift then starts "in
+  # collision" with them. Drop them before moving.
+  - step_id: clear_octomap_after_regrasp
+    action: clear_octomap
+
   - step_id: lift_u_green_second
     action: move_grasp_center_to_pose
     frame: delta_from_last

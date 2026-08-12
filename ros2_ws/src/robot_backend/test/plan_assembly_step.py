@@ -223,6 +223,14 @@ steps:
     # another move_grasp_center_to_pose step after this if you want a
     # retreat -- no retreat is bundled in.
 
+  - step_id: clear_octomap_after_regrasp
+    action: clear_octomap
+    # Put this after any grasp of a part that was standing tall/unattached:
+    # the octomap still holds the voxels the part itself produced, attaching
+    # does not clear them (clearing needs free-space raycasts through space
+    # the part now fills), and the next move then fails
+    # START_STATE_IN_COLLISION against the part's own stale voxels.
+
 Optional per-step motion tuning (any move step):
     motion:
       solve_ik_first: true            # exact-IK + joint-space plan instead of
@@ -272,7 +280,12 @@ import rclpy.executors
 from rclpy.node import Node
 from std_msgs.msg import Float64
 
+from moveit_msgs.msg import MoveItErrorCodes
+from moveit_msgs.srv import GetStateValidity
+
 from robot_backend_interfaces.srv import GetObjectPose
+
+from robot_backend.ros_moveit_backend.motion import MoveGroupPlanningError
 
 from robot_backend.registry import load_registry
 from robot_backend.utils.geometry import make_pose, compose_poses
@@ -887,6 +900,18 @@ def run_step(
             outcome = confirm_and_run(step_id, _do_release, settle_sec=settle_sec)
             result["release_result"] = outcome
 
+    elif action == "clear_octomap":
+        # Drops all perception-derived occupancy. Useful right after a grasp:
+        # the part's own voxels, marked while it sat there unattached, do not
+        # clear the instant it is attached (clearing needs free-space
+        # raycasts through them), so the freshly attached collision body can
+        # overlap its own stale voxels.
+        print("    (clear_octomap -- drop perception occupancy)")
+
+        if execute:
+            outcome = confirm_and_run(step_id, backend.scene.clear_octomap, settle_sec=settle_sec)
+            result["clear_octomap_result"] = outcome
+
     elif action == "open_gripper":
         print("    (open gripper -- no attach/detach implied; use 'grasp'/'release' "
               "for a real pick/place)")
@@ -1042,11 +1067,19 @@ def main() -> int:
                 if ans != "y":
                     print("    skipped")
                     continue
-            result = run_step(
-                step, plan, pose_client, registry, width_reader, backend, state,
-                execute=args.execute,
-                settle_sec=args.settle_sec if args.execute else 0.0,
-            )
+            try:
+                result = run_step(
+                    step, plan, pose_client, registry, width_reader, backend, state,
+                    execute=args.execute,
+                    settle_sec=args.settle_sec if args.execute else 0.0,
+                )
+            except MoveGroupPlanningError as exc:
+                # The arm has not moved for a start-state rejection, so the
+                # colliding configuration is still live and can be queried.
+                print(f"\n!! step '{step.get('step_id', '?')}' failed: {exc}")
+                if exc.error_code_val == MoveItErrorCodes.START_STATE_IN_COLLISION:
+                    report_current_state_collisions(node)
+                raise
             results.append(result)
 
         print("\n\n===== paste into executor.yaml steps: =====\n")
@@ -1070,6 +1103,48 @@ def main() -> int:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
+
+_BODY_TYPE_NAMES = {0: "ROBOT_LINK", 1: "WORLD_OBJECT", 2: "ROBOT_ATTACHED"}
+
+
+def report_current_state_collisions(node, planning_group: str = "ur_manipulator") -> None:
+    """Ask MoveIt what is colliding RIGHT NOW and print the pairs.
+
+    START_STATE_IN_COLLISION says only that the start state is invalid, never
+    which bodies touch. /check_state_validity with an empty robot_state
+    evaluates the current state and returns named contacts, which is the
+    difference between a guess and knowing. Best effort: never re-raises, so
+    it cannot mask the original planning error.
+    """
+
+    try:
+        client = node.create_client(GetStateValidity, "/check_state_validity")
+        if not client.wait_for_service(timeout_sec=5.0):
+            print("    [collision detail] /check_state_validity unavailable")
+            return
+        request = GetStateValidity.Request()
+        request.group_name = planning_group
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(node, future, timeout_sec=5.0)
+        response = future.result() if future.done() else None
+        if response is None:
+            print("    [collision detail] no response from /check_state_validity")
+            return
+
+        print(f"    [collision detail] valid={response.valid} "
+              f"contacts={len(response.contacts)}")
+        if not response.contacts:
+            print("      (no contacts reported -- the colliding state may already "
+                  "have been cleared, or the collision is with the octomap, which "
+                  "some MoveIt versions report without naming)")
+        for contact in response.contacts:
+            t1 = _BODY_TYPE_NAMES.get(contact.body_type_1, contact.body_type_1)
+            t2 = _BODY_TYPE_NAMES.get(contact.body_type_2, contact.body_type_2)
+            print(f"      {contact.contact_body_1} [{t1}]  <->  "
+                  f"{contact.contact_body_2} [{t2}]   depth={contact.depth:.5f} m")
+    except Exception as exc:
+        print(f"    [collision detail] query failed: {exc}")
 
 
 def _json_safe(obj):

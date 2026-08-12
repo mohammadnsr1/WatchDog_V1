@@ -130,7 +130,7 @@ acm_allowed_object_pairs:
 
 objects:
   red_cube:
-    enabled: true
+    enabled: false
     object_id: red_cube
     tf_frame: red_cube
     lookup_frame: world
@@ -169,7 +169,7 @@ objects:
                                    # noise floor.
 
   green_cube:
-    enabled: true
+    enabled: false
     object_id: green_cube
     tf_frame: green_cube
     lookup_frame: world
@@ -293,7 +293,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 10.0
+        force_threshold_n: 15.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -321,7 +321,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 10.0
+        force_threshold_n: 15.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -349,7 +349,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 10.0
+        force_threshold_n: 20.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -357,5 +357,5 @@ objects:
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
-        max_clamp_effort: 20.0
+        max_clamp_effort: 30.0
         grasp_effort_floor: 0.05
