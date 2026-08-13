@@ -35,7 +35,8 @@ from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.watchdog import session as session_helper
-from robot_backend.utils.geometry import compose_poses, make_pose, rotate_vector
+from robot_backend.utils.geometry import compose_poses
+from robot_backend.utils.geometry import grasp_center_from_object_and_offset, make_pose, rotate_vector
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
 
@@ -54,7 +55,11 @@ _SAFE_NAMED_JOINT_POSES: dict[str, list[float]] = {
     "upright": [0.0, -1.2, 1.2, 0.0, 0.0, 0.0],
 }
 _DEFAULT_ALLOWED_PLANNING_TIME = 10.0
-_DEFAULT_APPROACH_DISTANCE_M = 0.05
+# NEGATIVE since approach_distance_m became signed and is applied exactly as
+# given: for the top-down grasps in this registry local +Z points INTO the
+# object, so backing off is -Z. Leaving this at +0.05 after the sign change
+# would have staged the pre-grasp 5cm inside the part.
+_DEFAULT_APPROACH_DISTANCE_M = -0.05
 _DEFAULT_NUM_PLANNING_ATTEMPTS = 10
 _DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 1.0
 _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 1.0
@@ -255,13 +260,23 @@ def _compose_grasp_center_from_object(
     oqz: Any,
     oqw: Any,
 ) -> dict[str, Any]:
-    """Compose T_frame_graspcentre = T_frame_object * T_object_graspcentre.
+    """Resolve the grasp centre from an object pose and a grasp_center_offset.
 
     object_pose is the object's own pose in frame_id; the o* arguments are the
-    task instruction step's grasp_center_offset (T_object_grasp_center) --
-    see agents/tasks/*.yaml's steps: block, not the model registry. Any
-    component left None defaults to identity (position 0, quaternion 0,0,0,1),
-    so a caller can supply only the axes that differ from identity.
+    task instruction step's grasp_center_offset -- see agents/tasks/*.yaml's
+    steps: block, not the model registry. Any component left None defaults to
+    identity, so a caller can supply only the axes that differ.
+
+    CONVENTION CHANGE: this previously returned
+    compose_poses(object_pose, offset_pose), composing orientation against the
+    object frame. It now delegates to
+    geometry.grasp_center_from_object_and_offset, where POSITION is
+    object-relative but ORIENTATION is the desired WORLD orientation taken
+    directly. That is the convention test/plan_assembly_step.py validates
+    against, so an offset proven there now means the same thing here. The two
+    agree exactly whenever the object's orientation is identity at grasp time
+    (every task in the registry when this changed); they differ for a
+    reorient/flip step, which is precisely the case the old form got wrong.
     """
     offset_pose = make_pose(
         position={
@@ -276,7 +291,7 @@ def _compose_grasp_center_from_object(
             "w": _validate_float("grasp_center_offset_qw", 1.0 if oqw is None else oqw),
         },
     )
-    return compose_poses(object_pose, offset_pose)
+    return grasp_center_from_object_and_offset(object_pose, offset_pose)
 
 
 def _compute_approach_geometry(
@@ -305,7 +320,8 @@ def _compute_approach_geometry(
              effective_width_m, effective_dist_m, approach_vector, defaults_used).
 
     The pre-grasp staging position is the grasp center backed off by
-    approach_distance_m along the grasp center's OWN local -Z axis, composed
+    approach_distance_m along the grasp center's OWN local Z axis (sign taken
+    as given), composed
     via compose_poses (T_world_pregrasp = T_world_graspcenter *
     T_graspcenter_pregrasp), not a fixed world-frame direction. This is what
     makes the geometry correct for ANY grasp orientation, not just top-down:
@@ -314,7 +330,7 @@ def _compute_approach_geometry(
     from the object regardless of which way the gripper is actually pointed
     in world coordinates. For the top-down orientation every object in this
     registry currently uses (qx=1, qy=0, qz=0, qw=0, a 180-degree flip about
-    X), local -Z resolves to world +Z, matching the old hardcoded behavior
+    X), a NEGATIVE distance resolves to world +Z, matching the old behavior
     exactly -- so this is a strict generalization, not a behavior change for
     any grasp defined today. approach_vector in the return value is that
     same direction expressed in world/frame_id coordinates, for diagnostics.
@@ -366,21 +382,28 @@ def _compute_approach_geometry(
         grasp_center_pose = supplied_pose
     width = _validate_width(gripper_width_m)
     dist = _validate_float("approach_distance_m", approach_distance_m)
-    if dist < 0.0:
-        raise ValueError("approach_distance_m must be non-negative.")
 
-    # Retreat along the grasp center's own local -Z (see docstring): a pure
-    # local-frame translation composed onto the grasp center, not a
-    # world-frame addition. Generalizes to any grasp orientation, side
-    # approaches included.
+    # Offset along the grasp center's own local Z: a pure local-frame
+    # translation composed onto the grasp center, not a world-frame addition.
+    # Generalizes to any grasp orientation, side approaches included.
+    #
+    # SIGN CONVENTION CHANGE: dist is now applied EXACTLY as given rather than
+    # negated, and negative values are no longer rejected. Forcing the sign
+    # assumed local +Z always points into the object, which is only true for
+    # the top-down orientation; it breaks for any orientation where local +Z
+    # points away from the surface. Callers choose the sign, matching
+    # test/plan_assembly_step.py's pregrasp_center_from_grasp_center. For the
+    # top-down grasps in the registry today, pass -0.10 where you previously
+    # passed +0.10.
     local_backoff = make_pose(
-        position={"x": 0.0, "y": 0.0, "z": -dist},
+        position={"x": 0.0, "y": 0.0, "z": dist},
         orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
     )
     pre_grasp_center_pose = compose_poses(grasp_center_pose, local_backoff)
 
     approach_vector = rotate_vector(
-        {"x": 0.0, "y": 0.0, "z": -1.0}, grasp_center_pose["orientation"]
+        {"x": 0.0, "y": 0.0, "z": 1.0 if dist >= 0 else -1.0},
+        grasp_center_pose["orientation"],
     )
 
     grasp_tcp_pose = tcp_target_from_grasp_center(grasp_center_pose, width)
@@ -489,6 +512,9 @@ if mcp is not None:
         qy: float,
         qz: float,
         qw: float,
+        solve_ik_first: bool = False,
+        position_tolerance_m: float | None = None,
+        orientation_tolerance_rad: float | None = None,
     ) -> dict[str, Any]:
         """Move the fixed TCP frame to a target pose."""
 
@@ -508,8 +534,15 @@ if mcp is not None:
             result = backend.motion.move_to_pose(
                 pose,
                 target_is_grasp_center=False,
-                position_tolerance_m=_DEFAULT_POSITION_TOLERANCE_M,
-                orientation_tolerance_rad=_DEFAULT_ORIENTATION_TOLERANCE_RAD,
+                solve_ik_first=bool(solve_ik_first),
+                position_tolerance_m=(
+                    _DEFAULT_POSITION_TOLERANCE_M if position_tolerance_m is None
+                    else _validate_float("position_tolerance_m", position_tolerance_m)
+                ),
+                orientation_tolerance_rad=(
+                    _DEFAULT_ORIENTATION_TOLERANCE_RAD if orientation_tolerance_rad is None
+                    else _validate_float("orientation_tolerance_rad", orientation_tolerance_rad)
+                ),
                 allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
                 num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
                 max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
@@ -542,8 +575,28 @@ if mcp is not None:
         qz: float,
         qw: float,
         gripper_width_m: float,
+        solve_ik_first: bool = False,
+        position_tolerance_m: float | None = None,
+        orientation_tolerance_rad: float | None = None,
     ) -> dict[str, Any]:
-        """Move the logical gripper grasp center to a target pose."""
+        """Move the logical gripper grasp center to a target pose.
+
+        The three optional arguments exist for insertions and other
+        land-exactly moves; leave them alone for ordinary free-space motion.
+
+        solve_ik_first resolves ONE exact IK solution and plans in joint
+        space, so the end effector lands at the literal target instead of
+        anywhere inside the goal tolerance region. It is a single IK seed with
+        no retry, so it can fail on poses the sampling path would solve, and
+        it makes the two tolerances below inert (the joint-space path returns
+        before they are read) -- do not combine them.
+
+        position_tolerance_m / orientation_tolerance_rad widen or tighten the
+        goal region. An insertion usually wants the opposite trade from a
+        free-space move: position tight so the part enters the hole,
+        orientation loose (e.g. 0.05 rad) so the planner can absorb the small
+        tilt the part has in the gripper and still find a collision-free goal.
+        """
 
         command = "move_grasp_center_to_pose"
         try:
@@ -558,13 +611,24 @@ if mcp is not None:
                 qw=qw,
             )
             width = _validate_width(gripper_width_m)
+            pos_tol = (
+                _DEFAULT_POSITION_TOLERANCE_M
+                if position_tolerance_m is None
+                else _validate_float("position_tolerance_m", position_tolerance_m)
+            )
+            ori_tol = (
+                _DEFAULT_ORIENTATION_TOLERANCE_RAD
+                if orientation_tolerance_rad is None
+                else _validate_float("orientation_tolerance_rad", orientation_tolerance_rad)
+            )
             backend = _ensure_backend()
             result = backend.motion.move_to_pose(
                 pose,
                 target_is_grasp_center=True,
                 gripper_width_m=width,
-                position_tolerance_m=_DEFAULT_POSITION_TOLERANCE_M,
-                orientation_tolerance_rad=_DEFAULT_ORIENTATION_TOLERANCE_RAD,
+                solve_ik_first=bool(solve_ik_first),
+                position_tolerance_m=pos_tol,
+                orientation_tolerance_rad=ori_tol,
                 allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
                 num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
                 max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
@@ -646,7 +710,7 @@ if mcp is not None:
             Distance in meters between the grasp center target and the
             pre-grasp staging position. Defaults to 0.05 m when omitted. The
             pre-grasp position is always the grasp center backed off along
-            its OWN local -Z axis (the grasp frame's +Z is the approach axis,
+            its OWN local Z axis by the SIGNED distance given (the grasp frame's +Z is conventionally the approach axis,
             pointing into the object, by convention) -- this generalizes to
             any grasp orientation, side approaches included, not just
             top-down. Not independently configurable: the direction is
@@ -678,8 +742,8 @@ if mcp is not None:
                 frame_id, position, and orientation.
             pre_grasp_tcp_pose : dict
                 Fixed TCP target for the staging position, offset from the
-                grasp center by approach_distance_m along the grasp center's
-                own local -Z axis.
+                grasp center by approach_distance_m (signed) along the grasp center's
+                own local Z axis, by the signed distance given.
             grasp_tcp_pose : dict
                 Fixed TCP target that places the grasp center on the requested
                 position.
@@ -688,7 +752,8 @@ if mcp is not None:
             approach_distance_m : float
                 Effective approach distance used.
             approach_vector : dict
-                The grasp center's local -Z axis expressed in frame_id
+                The retreat direction (local -Z if the distance is negative,
+                +Z if positive) expressed in frame_id
                 coordinates -- world +Z for a top-down grasp, some other
                 direction for a side grasp.
             defaults_used : list of str
@@ -789,7 +854,7 @@ if mcp is not None:
             Distance in meters between the grasp center target and the
             pre-grasp staging position. Defaults to 0.05 m when omitted. The
             pre-grasp position is always the grasp center backed off along
-            its OWN local -Z axis (the grasp frame's +Z is the approach axis,
+            its OWN local Z axis by the SIGNED distance given (the grasp frame's +Z is conventionally the approach axis,
             pointing into the object, by convention) -- this generalizes to
             any grasp orientation, side approaches included, not just
             top-down. Not independently configurable: the direction is
@@ -816,9 +881,10 @@ if mcp is not None:
 
         Sequence
         --------
-        1. Robot moves the grasp center to approach_distance_m back along the
-           grasp orientation's local -Z axis from the target, with the
-           gripper open (pre-grasp TCP pose).
+        1. Robot moves the grasp center to approach_distance_m along the
+           grasp orientation's local Z axis from the target, with the
+           gripper open (pre-grasp TCP pose). The sign is taken as given --
+           NEGATIVE backs off for a top-down grasp.
         2. If stop_at_pregrasp is True, returns here.
         3. Robot moves the grasp center to the exact requested position
            (grasp TCP pose). Gripper remains open.
@@ -840,7 +906,8 @@ if mcp is not None:
             approach_distance_m : float
                 Effective approach distance used.
             approach_vector : dict
-                The grasp center's local -Z axis expressed in frame_id
+                The retreat direction (local -Z if the distance is negative,
+                +Z if positive) expressed in frame_id
                 coordinates -- world +Z for a top-down grasp, some other
                 direction for a side grasp.
             defaults_used : list of str
@@ -928,6 +995,99 @@ if mcp is not None:
 
         except Exception as exc:
             return _error(command, exc, **payload)
+
+    @mcp.tool()
+    @emit_skill_events
+    def retreat_tcp(
+        distance_m: float,
+        frame_id: str,
+        x: float,
+        y: float,
+        z: float,
+        qx: float,
+        qy: float,
+        qz: float,
+        qw: float,
+    ) -> dict[str, Any]:
+        """Back the TCP away along its OWN local Z from a known TCP pose.
+
+        Use after a release, to clear a part that was just placed.
+
+        x..qw are the TCP pose to retreat FROM -- normally the tcp pose the
+        preceding placement reported, not the grasp centre. This is
+        deliberately a TCP-to-TCP move: grasp-centre targets convert to TCP
+        through the gripper opening, and a release has just opened the jaws to
+        ~104mm, so routing a retreat that way shifts the TCP by ~41mm on the
+        width change alone -- DOWNWARD, into the part just placed.
+
+        distance_m is applied exactly as given along local Z, same convention
+        as approach_distance_m: for a top-down TCP whose local +Z points down,
+        a NEGATIVE value backs up and away.
+        """
+
+        command = "retreat_tcp"
+        try:
+            base_tcp = _build_pose_dict(
+                frame_id=frame_id, x=x, y=y, z=z, qx=qx, qy=qy, qz=qz, qw=qw
+            )
+            dist = _validate_float("distance_m", distance_m)
+            retreat_tcp_pose = compose_poses(
+                base_tcp,
+                make_pose(
+                    position={"x": 0.0, "y": 0.0, "z": dist},
+                    orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                ),
+            )
+            backend = _ensure_backend()
+            result = backend.motion.move_to_pose(
+                retreat_tcp_pose,
+                position_tolerance_m=_DEFAULT_POSITION_TOLERANCE_M,
+                orientation_tolerance_rad=_DEFAULT_ORIENTATION_TOLERANCE_RAD,
+                allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
+                num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
+                max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
+                max_acceleration_scaling_factor=(
+                    _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR
+                ),
+            )
+            return _ok(
+                command,
+                from_tcp_pose=base_tcp,
+                distance_m=dist,
+                retreat_tcp_pose=retreat_tcp_pose,
+                result=result,
+            )
+        except Exception as exc:
+            return _error(command, exc, distance_m=distance_m)
+
+
+    @mcp.tool()
+    @emit_skill_events
+    def clear_octomap() -> dict[str, Any]:
+        """Drop every voxel in MoveIt's occupancy map; it refills from the camera.
+
+        Needed because octomap voxels are NOT covered by the Allowed Collision
+        Matrix -- an ACM pair exempts object-vs-object contact, but nothing can
+        exempt perception occupancy. Two cases where that bites:
+
+        - After grasping a part that had been standing on the table, its own
+          voxels remain and the next move fails START_STATE_IN_COLLISION
+          against the space the attached part now occupies. Attaching does not
+          clear them.
+        - Before an insertion, the surrounding parts are in the scene twice --
+          as synced collision objects (ACM-exempt) and as voxels (not
+          exemptable) -- and the part has to enter the space those voxels fill.
+
+        The map rebuilds from the next point clouds, so clear it immediately
+        before the move that needs the space, not long in advance.
+        """
+
+        command = "clear_octomap"
+        try:
+            backend = _ensure_backend()
+            return _ok(command, result=backend.scene.clear_octomap())
+        except Exception as exc:
+            return _error(command, exc)
 
 
 def main() -> None:

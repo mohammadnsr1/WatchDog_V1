@@ -1,0 +1,227 @@
+# EXECUTOR instruction for fmb_assembly.
+#
+# step_id convention: a step_id here that corresponds to a step in
+# fmb_assembly.watchdog.yaml MUST use the exact same step_id string -- that
+# identity is what lets the watchdog match this executor's begin_step events
+# on the shared timeline. A step_id here that the watchdog file does NOT
+# contain is an executor-only extra/alternate step (class 3) or a deliberately
+# faulty step (class 2).
+#
+# Object-level truth (geometry, tolerances, max_clamp_effort) lives in
+# model_registry.yaml, shared by both files -- not authored here.
+#
+# Every geometric value in the steps: block below was derived and validated
+# against the live cell with test/plan_assembly_step.py before being written
+# here; the per-part plan files there are the working record.
+
+name: fmb_assembly
+instruction_spec: |
+  Assemble the FMB board: seat u_green, inverted_u_brown, hex_blue and hex_red
+  into their places on base2, in that order.
+
+  base2 is the fixture and is never picked. Its placement locations are
+  published as TF frames rather than fixed world coordinates, so query them
+  rather than assuming numbers: u_green_placement, inverted_u_brown_placement,
+  hex_blue_hole, hex_red_hole, and for the two reorient stages
+  u_green_reorient and inverted_u_brown_reorient. Query each frame the same
+  way you query an object's pose. A destination frame gives the pose the PART
+  must end up at, not a pose for the gripper.
+
+  Order matters. Each part you seat becomes an obstacle for the ones after it,
+  so do not reorder without reason.
+
+  u_green and inverted_u_brown cannot be picked in their final orientation:
+  each must be picked flat, set down at its reorient frame, released,
+  re-picked in the new orientation, and only then carried to its placement.
+  hex_blue and hex_red are picked once and inserted directly.
+
+  Preconditions:
+    - All four parts and base2 are present and localized within their
+      registry tolerances.
+    - The gripper is empty.
+
+  Effects (per part):
+    - The part's final pose matches its placement frame within the part's
+      registry position and orientation tolerances.
+    - The part was grasped securely on the way there: measured width at
+      plateau matched the step's grasp_width_m within tolerance, and it
+      lifted at least the registry lift_height_min_m.
+    - Previously seated parts are undisturbed: none has moved beyond its
+      registry position tolerance from its pre-step snapshot.
+
+  Invariants:
+    - Grasp clamp effort on each part never exceeds that part's registry
+      max_clamp_effort.
+    - The arm never drives a part into base2 or into an already-seated part
+      outside the intended seating contact.
+
+  Working notes for this cell, learned from validating these steps:
+
+    - The occupancy map does not follow the parts. Two situations need it
+      cleared explicitly, and the Allowed Collision Matrix cannot substitute
+      because ACM pairs cover object-vs-object contact and perception voxels
+      are not exemptable at all:
+        * After grasping or re-grasping a part that had been standing on the
+          table, its own voxels remain where it used to be and the next move
+          is rejected as starting in collision. Attaching does not clear them.
+        * Before seating a part, the surrounding parts are represented twice
+          -- as synced collision objects and as voxels -- and the part must
+          enter the space those voxels occupy.
+      Clear the map immediately before the move that needs the space; it
+      refills from the camera within a second or so.
+
+    - Seating wants the opposite planning trade from a free-space move: keep
+      the position goal tight so the part enters its slot, but loosen the
+      orientation goal (around 0.05 rad) so the planner can absorb the small
+      tilt the part has in the gripper and still find a collision-free goal.
+      Do not combine that with the exact-IK option; exact IK makes the
+      tolerances inert.
+
+    - After releasing a seated part, back the TCP straight out before moving
+      on. Retreat from the TCP pose, not from a grasp-centre pose: the
+      release has just opened the jaws, and a grasp-centre retreat converts
+      through the new opening and drives the TCP down into the part you just
+      placed.
+
+step_plan: |
+  Four parts, seated in order. u_green and inverted_u_brown each need a
+  reorient stage (pick flat -> set down at the reorient frame -> release ->
+  re-pick -> carry to placement). hex_blue and hex_red are picked once and
+  inserted. Each part ends released, verified against its placement frame,
+  with the TCP retreated clear.
+
+steps:
+  # ---- u_green: pick flat, reorient upright, seat -------------------------
+  # Picked on the U's right arm, top-down. The reorient and placement grasp
+  # orientations differ from the pick because the part is attached at those
+  # points: the object->gripper transform is fixed at grasp time, so the
+  # orientation is a consequence of where the part must end up, not a free
+  # choice. Values below are the validated ones.
+  - step_id: pick_u_green
+    object_id: u_green
+    grasp_width_m: 0.042
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: reorient_u_green
+    object_id: u_green
+    target_frame: u_green_reorient
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
+  - step_id: repick_u_green
+    object_id: u_green
+    grasp_width_m: 0.042
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: place_u_green
+    object_id: u_green
+    target_frame: u_green_placement
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+
+  # ---- inverted_u_brown: pick flat, reorient upright, seat ----------------
+  # Note the re-pick grasps 10mm further along the part than the first pick
+  # (y: -0.06 vs -0.05): once upright, the original point is no longer the
+  # one that clears.
+  - step_id: pick_inverted_u_brown
+    object_id: inverted_u_brown
+    grasp_width_m: 0.08
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: reorient_inverted_u_brown
+    object_id: inverted_u_brown
+    target_frame: inverted_u_brown_reorient
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
+  - step_id: repick_inverted_u_brown
+    object_id: inverted_u_brown
+    grasp_width_m: 0.08
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: place_inverted_u_brown
+    object_id: inverted_u_brown
+    target_frame: inverted_u_brown_placement
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  # ---- hex_blue: single pick, direct insertion ----------------------------
+  # A hex pin, long axis 140mm. approach_distance_m is 0: the pin is picked
+  # where it lies with no separate standoff stage.
+  - step_id: pick_hex_blue
+    object_id: hex_blue
+    grasp_width_m: 0.03
+    approach_distance_m: 0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: place_hex_blue
+    object_id: hex_blue
+    target_frame: hex_blue_hole
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  # ---- hex_red: single pick, direct insertion -----------------------------
+  - step_id: pick_hex_red
+    object_id: hex_red
+    grasp_width_m: 0.03
+    approach_distance_m: 0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: place_hex_red
+    object_id: hex_red
+    target_frame: hex_red_hole
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+object_ids: |
+  u_green          — FMB U part, graspable. Seated first. Needs a reorient stage.
+  inverted_u_brown — FMB inverted-U part, graspable, 252mm long. Needs a reorient stage.
+  hex_blue         — hex pin, graspable, 140mm long. Inserted directly.
+  hex_red          — hex pin, graspable, 140mm long. Inserted directly.
+  base2            — the fixture. NOT graspable and never picked; it carries
+                     the slots the four parts seat into.
+
+  Placement/reorient destinations are published as TF frames and queried like
+  object poses: u_green_placement, inverted_u_brown_placement, hex_blue_hole,
+  hex_red_hole, u_green_reorient, inverted_u_brown_reorient. They are
+  pose-only markers, not collision geometry, and they move with the fixture --
+  which is why they are queried rather than hardcoded.
+
+  Registry acm_allowed_object_pairs covers every pair among u_green, base2,
+  hex_blue, hex_red and inverted_u_brown -- a planner collision-checking
+  setting, not a statement of task permission; see the effect clauses for what
+  makes their contact conformant. It does NOT cover the gripper against those
+  parts, and it does not cover the occupancy map at all.
+
+run_notes: ""
+# Stays empty by design, including for fault-injection runs later. The agent
+# must never be told the registry is corrupted, or the class-4 result proves
+# nothing.

@@ -100,7 +100,7 @@ def test_compute_geometry_omitting_offset_uses_pose_directly():
     res = m._compute_approach_geometry(
         frame_id="world", x=0.5, y=0.2, z=0.1,
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
-        gripper_width_m=0.04, approach_distance_m=0.05,
+        gripper_width_m=0.04, approach_distance_m=-0.05,
     )
     grasp_center_pose, _, _, _, _, _, defaults_used = res
     assert grasp_center_pose["position"] == {"x": 0.5, "y": 0.2, "z": 0.1}
@@ -112,7 +112,7 @@ def test_compute_geometry_with_offset_interprets_pose_as_object():
     res = m._compute_approach_geometry(
         frame_id="world", x=0.5, y=0.2, z=0.1,
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
-        gripper_width_m=0.04, approach_distance_m=0.05,
+        gripper_width_m=0.04, approach_distance_m=-0.05,
         grasp_center_offset_z=0.03,
     )
     grasp_center_pose, _, _, _, _, _, defaults_used = res
@@ -121,3 +121,60 @@ def test_compute_geometry_with_offset_interprets_pose_as_object():
     assert grasp_center_pose["position"]["y"] == pytest.approx(0.2)
     assert grasp_center_pose["position"]["z"] == pytest.approx(0.07)
     assert "grasp_center_offset" in defaults_used
+
+
+def test_approach_distance_sign_is_taken_as_given():
+    """approach_distance_m is applied EXACTLY as given along local Z.
+
+    Regression guard for the convention change: motion_mcp_server used to
+    reject negatives and force the offset to -dist. Nothing covered the
+    resulting pre-grasp direction, so the flip could have gone unnoticed.
+    Object orientation here is top-down (qx=1), whose local +Z points at
+    world -Z, so a NEGATIVE distance must stage the pre-grasp ABOVE.
+    """
+    m = _import_motion_server()
+
+    def pre_grasp_z(dist):
+        res = m._compute_approach_geometry(
+            frame_id="world", x=0.5, y=0.2, z=0.1,
+            qx=1.0, qy=0.0, qz=0.0, qw=0.0,
+            gripper_width_m=0.04, approach_distance_m=dist,
+        )
+        grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose, _, eff, _, _ = res
+        return grasp_center_pose, pre_grasp_tcp_pose, grasp_tcp_pose, eff
+
+    gc, pre, grasp, eff = pre_grasp_z(-0.05)
+    assert eff == pytest.approx(-0.05), "distance must not be re-signed"
+    # top-down: local +Z is world -Z, so negative distance backs UP
+    assert pre["position"]["z"] > grasp["position"]["z"]
+    assert pre["position"]["z"] - grasp["position"]["z"] == pytest.approx(0.05)
+
+    # and a positive distance must go the other way, not be rejected
+    gc2, pre2, grasp2, eff2 = pre_grasp_z(+0.05)
+    assert eff2 == pytest.approx(+0.05)
+    assert pre2["position"]["z"] < grasp2["position"]["z"]
+
+
+def test_grasp_center_orientation_is_world_not_composed():
+    """grasp_center_offset.orientation is the DESIRED WORLD orientation.
+
+    Regression guard for the other half of the convention change. With the
+    object NOT at identity, the old composed form returned a different
+    orientation; the shared helper must return the offset's orientation
+    verbatim.
+    """
+    m = _import_motion_server()
+    # object yawed 180 deg about Z
+    res = m._compute_approach_geometry(
+        frame_id="world", x=0.5, y=0.2, z=0.1,
+        qx=0.0, qy=0.0, qz=1.0, qw=0.0,
+        gripper_width_m=0.04, approach_distance_m=-0.05,
+        grasp_center_offset_y=0.04,
+        grasp_center_offset_qx=1.0, grasp_center_offset_qy=0.0,
+        grasp_center_offset_qz=0.0, grasp_center_offset_qw=0.0,
+    )
+    grasp_center_pose = res[0]
+    o = grasp_center_pose["orientation"]
+    assert (o["x"], o["y"], o["z"], o["w"]) == pytest.approx((1.0, 0.0, 0.0, 0.0))
+    # position still rotates through the object's orientation: +y -> -y
+    assert grasp_center_pose["position"]["y"] == pytest.approx(0.2 - 0.04)

@@ -1,0 +1,93 @@
+# WATCHDOG instruction for fmb_assembly.
+#
+# Contains only WHAT must be true (effects + invariants), never the executor's
+# path. The executor may reach the end-state by any route; the watchdog
+# verdicts on the end-state and the invariants, not on how the executor got
+# there.
+#
+# Object-level truth lives in model_registry.yaml, shared by both files.
+
+name: fmb_assembly
+instruction_spec: |
+  Verify that four FMB parts are seated on the base2 fixture: u_green,
+  inverted_u_brown, hex_blue and hex_red.
+
+  Each part's required end-state is given by a published TF frame, not by a
+  fixed world pose: u_green_placement, inverted_u_brown_placement,
+  hex_blue_hole, hex_red_hole. Query the frame to obtain the required pose.
+  A destination frame gives the pose the PART must reach, not a gripper pose.
+
+  Effects (must hold when the executor closes each place step):
+    - The part's final pose matches its placement frame within that part's
+      registry position and orientation tolerances.
+    - The part was grasped on the way there: measured gripper width at
+      plateau matched the step's grasp_width_m within the registry
+      grasp_width_tolerance_m, and the part lifted at least the registry
+      lift_height_min_m.
+    - Parts seated by earlier steps are undisturbed: none has moved beyond
+      its registry position tolerance from its pre-step snapshot.
+    - base2 is undisturbed: it is the fixture and is never picked.
+
+  Invariants (must hold throughout each step):
+    - Grasp clamp effort on the part never exceeds that part's registry
+      max_clamp_effort.
+
+  Preconditions (checked before the first pick of each part):
+    - The part is present and localized within its registry tolerances.
+
+  Note on intermediate handling: u_green and inverted_u_brown cannot be
+  picked in their final orientation, so the executor may legitimately set
+  either part down partway through and re-pick it. A part resting somewhere
+  other than its placement frame partway through the run is therefore NOT by
+  itself a violation. Judge each part against its placement frame at the
+  point the executor closes that part's place step, and judge disturbance
+  only against parts already seated.
+
+step_plan: |
+  Four parts must end seated at their published placement frames, in the
+  order u_green, inverted_u_brown, hex_blue, hex_red, each grasped within its
+  registry effort bound and without disturbing parts already seated or the
+  base2 fixture. The executor's route to each end-state is not constrained,
+  including any intermediate set-down and re-pick. If the executor runs steps
+  not listed here, treat them as unrecognized: hold the process invariants and
+  do not flag the step merely for being unrecognized.
+
+steps:
+  # grasp_width_m is the conformance bound for the grasp_width_error_m effect
+  # clause, read structurally by get_contract from THIS file (never from the
+  # agent). grasp_center_offset is intentionally absent throughout: it is
+  # executor command geometry, not a watchdog conformance value. So are the
+  # reorient frames -- an intermediate the executor chooses, not an end-state.
+  - step_id: place_u_green
+    object_id: u_green
+    grasp_width_m: 0.042
+
+  - step_id: place_inverted_u_brown
+    object_id: inverted_u_brown
+    grasp_width_m: 0.08
+
+  - step_id: place_hex_blue
+    object_id: hex_blue
+    grasp_width_m: 0.03
+
+  - step_id: place_hex_red
+    object_id: hex_red
+    grasp_width_m: 0.03
+
+object_ids: |
+  u_green          — FMB U part, graspable. Must end seated at u_green_placement.
+  inverted_u_brown — FMB inverted-U part, graspable. Must end seated at
+                     inverted_u_brown_placement.
+  hex_blue         — hex pin, graspable. Must end seated at hex_blue_hole.
+  hex_red          — hex pin, graspable. Must end seated at hex_red_hole.
+  base2            — the fixture. NOT graspable, never picked, must stay put.
+
+  Registry acm_allowed_object_pairs covers every pair among u_green, base2,
+  hex_blue, hex_red and inverted_u_brown. That is a planner collision-checking
+  setting, not a statement of task permission: contact between those parts is
+  conformant only insofar as the effect clauses above are satisfied.
+
+run_notes: ""
+# Stays empty by design, including in fault-injection runs where the registry
+# has been deliberately corrupted: neither the executor nor WatchDog may be
+# told that, since being told would invalidate the comparison.

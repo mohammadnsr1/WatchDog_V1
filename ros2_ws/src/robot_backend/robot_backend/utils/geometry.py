@@ -57,6 +57,46 @@ def compose_poses(base_pose: PoseDict, offset_pose: PoseDict) -> PoseDict:
     return make_pose(position, orientation, frame_id=base_pose.get("frame_id"))
 
 
+def grasp_center_from_object_and_offset(
+    object_pose: PoseDict, offset_pose: PoseDict
+) -> PoseDict:
+    """Resolve a grasp_center_offset against an object pose.
+
+    POSITION and ORIENTATION are handled asymmetrically, deliberately.
+
+    POSITION is object-relative: it names a physical point on the object, so
+    it is rotated and translated through the object's orientation. That is
+    what makes one offset reusable after the object moves or is reoriented.
+
+    ORIENTATION is the grasp center's DESIRED WORLD orientation, taken
+    directly -- NOT composed with the object's orientation. The composed
+    alternative would force the author to hand-solve
+        offset.orientation = inverse(object.orientation) (x) desired_world
+    again every time the object's resting orientation changed, just to keep
+    meaning "top down". Read as a world orientation, {1,0,0,0} means top-down
+    no matter how the object happens to be sitting.
+
+    Corollary the caller owns: position and orientation are chosen
+    independently here, so nothing checks that the named point is reachable
+    at the requested orientation. Dry-run the geometry first.
+
+    Single source of truth for this convention -- motion_mcp_server and
+    test/plan_assembly_step.py both call this, having previously each
+    implemented it (differently, and divergently).
+    """
+
+    position_only_offset = make_pose(
+        position=offset_pose["position"],
+        orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+    )
+    composed_position = compose_poses(object_pose, position_only_offset)["position"]
+    return make_pose(
+        position=composed_position,
+        orientation=offset_pose["orientation"],
+        frame_id=object_pose.get("frame_id"),
+    )
+
+
 def normalize_quaternion(quaternion: Quaternion) -> Quaternion:
     """Return a normalized quaternion."""
 
