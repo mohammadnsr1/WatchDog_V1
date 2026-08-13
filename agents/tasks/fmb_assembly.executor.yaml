@@ -30,6 +30,9 @@ instruction_spec: |
   Order matters. Each part you seat becomes an obstacle for the ones after it,
   so do not reorder without reason.
 
+  Moving to a safe joint pose at the beginning, and again when planning seems
+  to be failing, might be a good choice.
+
   u_green and inverted_u_brown cannot be picked in their final orientation:
   each must be picked flat, set down at its reorient frame, released,
   re-picked in the new orientation, and only then carried to its placement.

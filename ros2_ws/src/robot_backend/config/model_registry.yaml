@@ -233,7 +233,7 @@ objects:
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
-        lift_height_min_m: 0.02
+        lift_height_min_m: 0.3
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
@@ -297,7 +297,7 @@ objects:
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
-        lift_height_min_m: 0.02
+        lift_height_min_m: 0.2
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
@@ -325,7 +325,7 @@ objects:
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
-        lift_height_min_m: 0.02
+        lift_height_min_m: 0.2
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:
@@ -353,7 +353,7 @@ objects:
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
-        lift_height_min_m: 0.02
+        lift_height_min_m: 0.3
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
       limits:

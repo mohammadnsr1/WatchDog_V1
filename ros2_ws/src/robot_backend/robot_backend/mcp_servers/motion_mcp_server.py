@@ -278,6 +278,23 @@ def _compose_grasp_center_from_object(
     (every task in the registry when this changed); they differ for a
     reorient/flip step, which is precisely the case the old form got wrong.
     """
+    # Orientation has no safe default under this convention. It is the grasp
+    # centre's DESIRED WORLD orientation, so leaving it out silently means
+    # "align the grasp centre with the world axes" -- which is essentially
+    # never intended, and for the top-down grasps here inverts the approach
+    # axis, sending the pre-grasp BELOW the object instead of above it. (It
+    # used to be composed against the object, where identity harmlessly meant
+    # "inherit the object's orientation".) Fail loud instead.
+    if all(component is None for component in (oqx, oqy, oqz, oqw)):
+        raise ValueError(
+            "grasp_center_offset orientation (grasp_center_offset_qx/qy/qz/qw) is "
+            "required when a grasp_center_offset position is supplied. It is the "
+            "grasp centre's DESIRED WORLD orientation, not an object-relative "
+            "rotation, so there is no meaningful default -- e.g. pass "
+            "qx=1, qy=0, qz=0, qw=0 for a top-down grasp. Source it from this "
+            "step's grasp_center_offset in the task instruction's steps: block."
+        )
+
     offset_pose = make_pose(
         position={
             "x": _validate_float("grasp_center_offset_x", 0.0 if ox is None else ox),
@@ -578,8 +595,28 @@ if mcp is not None:
         solve_ik_first: bool = False,
         position_tolerance_m: float | None = None,
         orientation_tolerance_rad: float | None = None,
+        grasp_center_offset_x: float | None = None,
+        grasp_center_offset_y: float | None = None,
+        grasp_center_offset_z: float | None = None,
+        grasp_center_offset_qx: float | None = None,
+        grasp_center_offset_qy: float | None = None,
+        grasp_center_offset_qz: float | None = None,
+        grasp_center_offset_qw: float | None = None,
     ) -> dict[str, Any]:
         """Move the logical gripper grasp center to a target pose.
+
+        WITH a grasp_center_offset (use this for placing/reorienting a part
+        you are already holding): x..qw are the DESTINATION pose of the
+        OBJECT -- e.g. a placement or reorient frame you just queried, copied
+        through unchanged -- and this tool composes the grasp centre from it,
+        rotating the offset position through the destination orientation and
+        taking the offset's orientation as the grasp orientation. Do this
+        rather than composing by hand: for a destination rotated 90 degrees,
+        an offset of (0.049, -0.040, 0) contributes (0.049, 0, 0.040) in
+        world, and dropping the rotated x term puts the part ~50mm out with
+        no error raised.
+
+        WITHOUT an offset: x..qw are the grasp centre pose directly.
 
         The three optional arguments exist for insertions and other
         land-exactly moves; leave them alone for ordinary free-space motion.
@@ -611,6 +648,35 @@ if mcp is not None:
                 qw=qw,
             )
             width = _validate_width(gripper_width_m)
+            # When an offset is supplied, x..qw were the DESTINATION pose of the
+            # OBJECT and the grasp centre is composed from it here -- the same
+            # dual meaning execute_approach_and_preposition has. Without this
+            # the caller has to rotate the offset through the destination
+            # orientation by hand for every placement, which is exactly the
+            # arithmetic that silently mislocates a place step.
+            if any(
+                component is not None
+                for component in (
+                    grasp_center_offset_x,
+                    grasp_center_offset_y,
+                    grasp_center_offset_z,
+                    grasp_center_offset_qx,
+                    grasp_center_offset_qy,
+                    grasp_center_offset_qz,
+                    grasp_center_offset_qw,
+                )
+            ):
+                pose = _compose_grasp_center_from_object(
+                    pose,
+                    grasp_center_offset_x,
+                    grasp_center_offset_y,
+                    grasp_center_offset_z,
+                    grasp_center_offset_qx,
+                    grasp_center_offset_qy,
+                    grasp_center_offset_qz,
+                    grasp_center_offset_qw,
+                )
+
             pos_tol = (
                 _DEFAULT_POSITION_TOLERANCE_M
                 if position_tolerance_m is None
@@ -686,18 +752,29 @@ if mcp is not None:
         ----------
         frame_id : str
             The coordinate frame in which x, y, z are expressed. Use "world".
-        x, y, z : float
-            Position of the desired grasp center in frame_id. The grasp center
-            is the logical midpoint between the RG2 fingertips at the given
-            gripper width. For an object whose TF pose reports its geometric
-            center, pass that center here if you want the fingers to close
-            around it. The tool computes where the fixed TCP frame must be so
-            that the grasp center lands exactly on this point at the given width.
-        qx, qy, qz, qw : float
-            Orientation of the grasp center frame in frame_id. For a standard
-            top-down grasp use (qx=1, qy=0, qz=0, qw=0), which points the
-            gripper straight down. Identity orientation (qx=0, qy=0, qz=0,
-            qw=1) points the gripper upward and is not a valid top-down grasp.
+        x, y, z, qx, qy, qz, qw : float
+            THE MEANING OF THESE SEVEN DEPENDS ON WHETHER YOU SUPPLY A
+            grasp_center_offset. Getting this wrong silently mislocates the
+            grasp instead of erroring.
+
+            WITH a grasp_center_offset (the usual case when a task step
+            carries one): they are the OBJECT's CURRENT pose, exactly as
+            get_object_pose returned it -- copy its position AND its
+            orientation through unchanged. Do NOT put the grasp orientation
+            here. The tool derives the grasp centre itself by rotating the
+            offset position through this orientation and taking the offset's
+            own orientation as the grasp orientation. Passing (qx=1, qy=0,
+            qz=0, qw=0) here for an object that is actually resting at
+            identity flips the offset through 180 degrees about X, i.e.
+            (x, y, z) -> (x, -y, -z), landing the grasp on the opposite side
+            of the object.
+
+            WITHOUT a grasp_center_offset: they are the desired GRASP CENTRE
+            pose directly -- the logical midpoint between the RG2 fingertips
+            at the given width, and the orientation the grasp centre should
+            have. In that case a standard top-down grasp is (qx=1, qy=0,
+            qz=0, qw=0); identity (qw=1) points the gripper upward and is not
+            a top-down grasp.
         gripper_width_m : float
             Required. Expected physical finger gap in meters at the moment of
             contact. This determines where the grasp center sits relative to
@@ -836,13 +913,29 @@ if mcp is not None:
         ----------
         frame_id : str
             The coordinate frame in which x, y, z are expressed. Use "world".
-        x, y, z : float
-            Position of the desired grasp center in frame_id. See
-            compute_grasp_approach_poses for the physical definition of the
-            grasp center.
-        qx, qy, qz, qw : float
-            Orientation of the grasp center frame in frame_id. For a standard
-            top-down grasp use (qx=1, qy=0, qz=0, qw=0).
+        x, y, z, qx, qy, qz, qw : float
+            THE MEANING OF THESE SEVEN DEPENDS ON WHETHER YOU SUPPLY A
+            grasp_center_offset. Getting this wrong silently mislocates the
+            grasp instead of erroring.
+
+            WITH a grasp_center_offset (the usual case when a task step
+            carries one): they are the OBJECT's CURRENT pose, exactly as
+            get_object_pose returned it -- copy its position AND its
+            orientation through unchanged. Do NOT put the grasp orientation
+            here. The tool derives the grasp centre itself by rotating the
+            offset position through this orientation and taking the offset's
+            own orientation as the grasp orientation. Passing (qx=1, qy=0,
+            qz=0, qw=0) here for an object that is actually resting at
+            identity flips the offset through 180 degrees about X, i.e.
+            (x, y, z) -> (x, -y, -z), landing the grasp on the opposite side
+            of the object.
+
+            WITHOUT a grasp_center_offset: they are the desired GRASP CENTRE
+            pose directly -- the logical midpoint between the RG2 fingertips
+            at the given width, and the orientation the grasp centre should
+            have. In that case a standard top-down grasp is (qx=1, qy=0,
+            qz=0, qw=0); identity (qw=1) points the gripper upward and is not
+            a top-down grasp.
         gripper_width_m : float
             Required. Expected physical finger gap in meters at the moment of
             contact -- the TCP target is computed FROM this value, so there

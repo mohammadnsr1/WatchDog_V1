@@ -114,6 +114,10 @@ def test_compute_geometry_with_offset_interprets_pose_as_object():
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
         gripper_width_m=0.04, approach_distance_m=-0.05,
         grasp_center_offset_z=0.03,
+        # Orientation is now required whenever an offset position is given:
+        # it is the DESIRED WORLD orientation and has no safe default.
+        grasp_center_offset_qx=1.0, grasp_center_offset_qy=0.0,
+        grasp_center_offset_qz=0.0, grasp_center_offset_qw=0.0,
     )
     grasp_center_pose, _, _, _, _, _, defaults_used = res
     # Object-frame +z offset under a top-down object orientation -> world -z.
@@ -178,3 +182,35 @@ def test_grasp_center_orientation_is_world_not_composed():
     assert (o["x"], o["y"], o["z"], o["w"]) == pytest.approx((1.0, 0.0, 0.0, 0.0))
     # position still rotates through the object's orientation: +y -> -y
     assert grasp_center_pose["position"]["y"] == pytest.approx(0.2 - 0.04)
+
+
+def test_offset_without_orientation_is_rejected():
+    """An offset position with no orientation must fail loud, not default.
+
+    Under this convention the offset orientation is the grasp centre's
+    DESIRED WORLD orientation, so defaulting it to identity silently means
+    "align to world axes" -- which for a top-down grasp inverts the approach
+    axis and stages the pre-grasp BELOW the object. Identity used to be
+    harmless (it meant "inherit the object's orientation"), so this guard is
+    what stops a call written against the old convention from quietly
+    aiming into the table.
+    """
+    m = _import_motion_server()
+    with pytest.raises(ValueError, match="grasp_center_offset orientation"):
+        m._compute_approach_geometry(
+            frame_id="world", x=0.5, y=0.2, z=0.1,
+            qx=0.0, qy=0.0, qz=0.0, qw=1.0,
+            gripper_width_m=0.04, approach_distance_m=-0.05,
+            grasp_center_offset_x=0.049, grasp_center_offset_y=-0.040,
+        )
+
+
+def test_no_offset_at_all_still_treats_pose_as_grasp_centre():
+    """The guard must not fire when no offset is supplied at all."""
+    m = _import_motion_server()
+    res = m._compute_approach_geometry(
+        frame_id="world", x=0.5, y=0.2, z=0.1,
+        qx=1.0, qy=0.0, qz=0.0, qw=0.0,
+        gripper_width_m=0.04, approach_distance_m=-0.05,
+    )
+    assert res[0]["position"] == {"x": 0.5, "y": 0.2, "z": 0.1}
