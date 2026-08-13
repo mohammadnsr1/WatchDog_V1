@@ -153,8 +153,14 @@ def _format_steps(steps: list) -> str:
             continue
         lines.append(f"- step_id: {entry.get('step_id', '?')}")
         lines.append(f"  object_id: {entry.get('object_id', '?')}")
-        if "grasp_width_m" in entry:
-            lines.append(f"  grasp_width_m: {entry['grasp_width_m']}")
+        # Render EVERY remaining field rather than an allowlist. An allowlist
+        # silently drops whatever a task author adds -- approach_distance_m and
+        # target_frame were being dropped this way, so the agent never saw the
+        # authored values and substituted its own.
+        for key, value in entry.items():
+            if key in ("step_id", "object_id", "grasp_center_offset"):
+                continue
+            lines.append(f"  {key}: {value}")
         offset = entry.get("grasp_center_offset")
         if isinstance(offset, dict):
             pos = offset.get("position", {})

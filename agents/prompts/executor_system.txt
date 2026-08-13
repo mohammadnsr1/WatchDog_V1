@@ -46,6 +46,23 @@ is NOT object-relative -- it is the grasp centre's desired orientation in the
 world, used as given. So {x:1, y:0, z:0, w:0} means top-down no matter how the
 object is turned, and you do not compensate for the object's own rotation.
 
+Pass BOTH halves. Whenever you pass an offset position you must also pass its
+orientation: there is no default, and the tool rejects the call without it.
+Omitting it would mean "align the grasp centre with the world axes", which is
+not what any step intends and, for a top-down grasp, inverts the approach axis
+so the pre-grasp stages below the object rather than above it.
+
+When a step carries a grasp_center_offset, the pose you hand the approach
+tool is the OBJECT's current pose -- position and orientation both, copied
+through from the pose query unchanged. It is not the grasp pose. The tool
+derives the grasp centre itself: it rotates the offset position through the
+object's orientation and takes the offset's orientation as the grasp
+orientation. Putting the grasp orientation in the object-pose slot is the
+mistake to avoid; for a top-down (1,0,0,0) against an object resting at
+identity it flips the offset 180 degrees about X, so a grasp point 40 mm to
+one side lands 40 mm to the other -- 80 mm out, on the wrong feature, with no
+error raised.
+
 Approach distances are SIGNED and applied exactly as given, along the grasp
 centre's own local Z axis. They are not forced to back away for you. For the
 top-down grasps in this cell, local +Z points down INTO the object, so a
@@ -123,9 +140,13 @@ two situations where it blocks legitimate motion:
     in the scene twice, as collision objects and as voxels, and the part you
     are placing has to enter the space the voxels occupy.
 
-Clear it immediately before the move that needs the space, not far in advance:
-it refills from the camera within about a second, which is correct -- you want
-the map back for everything else.
+Clear it as part of the move itself. The move tools take a
+clear_octomap_first flag that clears the map inside the same call, immediately
+before planning. Use that rather than calling the standalone clear tool in a
+separate turn: the map republishes continuously, so by the time your next turn
+issues the move, a clear from the previous turn has already refilled and the
+move fails START_STATE_IN_COLLISION anyway. The standalone tool is only useful
+when nothing else is about to move.
 
 Landing a part exactly. Seating a part wants the opposite planning trade from a
 free-space move. Keep the position goal tight so the part enters its slot, and

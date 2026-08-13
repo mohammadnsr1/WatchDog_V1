@@ -70,8 +70,12 @@ instruction_spec: |
         * Before seating a part, the surrounding parts are represented twice
           -- as synced collision objects and as voxels -- and the part must
           enter the space those voxels occupy.
-      Clear the map immediately before the move that needs the space; it
-      refills from the camera within a second or so.
+      Clear it as part of the move itself: the move tools take a
+      clear_octomap_first flag that clears inside the same call, immediately
+      before planning. A separate clear in an earlier turn is useless here --
+      the map republishes continuously and has already refilled by the time
+      the next turn issues the move, which then fails as starting in
+      collision. That is exactly how the previous run stalled.
 
     - Seating wants the opposite planning trade from a free-space move: keep
       the position goal tight so the part enters its slot, but loosen the
@@ -84,7 +88,7 @@ instruction_spec: |
       on. Retreat from the TCP pose, not from a grasp-centre pose: the
       release has just opened the jaws, and a grasp-centre retreat converts
       through the new opening and drives the TCP down into the part you just
-      placed.
+      placed. no retreat needed for reorientation steps in general.
 
 step_plan: |
   Four parts, seated in order. u_green and inverted_u_brown each need a
@@ -95,11 +99,10 @@ step_plan: |
 
 steps:
   # ---- u_green: pick flat, reorient upright, seat -------------------------
-  # Picked on the U's right arm, top-down. The reorient and placement grasp
-  # orientations differ from the pick because the part is attached at those
-  # points: the object->gripper transform is fixed at grasp time, so the
-  # orientation is a consequence of where the part must end up, not a free
-  # choice. Values below are the validated ones.
+  # The reorient and placement grasp orientations differ from the pick because
+  # the part is ATTACHED at those points: the object->gripper transform is
+  # fixed at grasp time, so the orientation is a consequence of where the part
+  # must end up, not a free choice. Values below are the validated ones.
   - step_id: pick_u_green
     object_id: u_green
     grasp_width_m: 0.042
@@ -108,8 +111,25 @@ steps:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_u_green
+    object_id: u_green
+    action_hint: lift straight up from the grasp, no lateral motion
+    lift_height_m: 0.20
+    grasp_width_m: 0.042
+
+  - step_id: reorient_approach_u_green
+    object_id: u_green
+    action_hint: move to a standoff above the reorient frame, do not descend yet
+    target_frame: u_green_reorient
+    standoff_m: 0.00
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
   - step_id: reorient_u_green
     object_id: u_green
+    action_hint: descend from the standoff into the reorient frame, then release
     target_frame: u_green_reorient
     grasp_width_m: 0.042
     grasp_center_offset:
@@ -124,8 +144,25 @@ steps:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_u_green_second
+    object_id: u_green
+    action_hint: lift straight up from the re-grasp, no lateral motion
+    lift_height_m: 0.20
+    grasp_width_m: 0.042
+
+  - step_id: place_approach_u_green
+    object_id: u_green
+    action_hint: move to a standoff above the placement frame, do not descend yet
+    target_frame: u_green_placement
+    standoff_m: 0.15
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+
   - step_id: place_u_green
     object_id: u_green
+    action_hint: descend from the standoff into the placement frame, release, retreat
     target_frame: u_green_placement
     grasp_width_m: 0.042
     grasp_center_offset:
@@ -133,9 +170,8 @@ steps:
       orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
 
   # ---- inverted_u_brown: pick flat, reorient upright, seat ----------------
-  # Note the re-pick grasps 10mm further along the part than the first pick
-  # (y: -0.06 vs -0.05): once upright, the original point is no longer the
-  # one that clears.
+  # The re-pick grasps 10mm further along the part than the first pick
+  # (y: -0.06 vs -0.05): once upright, the original point no longer clears.
   - step_id: pick_inverted_u_brown
     object_id: inverted_u_brown
     grasp_width_m: 0.08
@@ -144,8 +180,25 @@ steps:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: lift straight up from the grasp, no lateral motion
+    lift_height_m: 0.30
+    grasp_width_m: 0.08
+
+  - step_id: reorient_approach_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: move to a standoff above the reorient frame, do not descend yet
+    target_frame: inverted_u_brown_reorient
+    standoff_m: 0.20
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
   - step_id: reorient_inverted_u_brown
     object_id: inverted_u_brown
+    action_hint: descend from the standoff into the reorient frame, then release
     target_frame: inverted_u_brown_reorient
     grasp_width_m: 0.08
     grasp_center_offset:
@@ -160,8 +213,25 @@ steps:
       position: {x: 0.0, y: -0.06, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_inverted_u_brown_second
+    object_id: inverted_u_brown
+    action_hint: lift straight up from the re-grasp, no lateral motion
+    lift_height_m: 0.20
+    grasp_width_m: 0.08
+
+  - step_id: place_approach_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: move to a standoff above the placement frame, do not descend yet
+    target_frame: inverted_u_brown_placement
+    standoff_m: 0.20
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
+    action_hint: descend from the standoff into the placement frame, release, retreat
     target_frame: inverted_u_brown_placement
     grasp_width_m: 0.08
     grasp_center_offset:
@@ -170,7 +240,7 @@ steps:
 
   # ---- hex_blue: single pick, direct insertion ----------------------------
   # A hex pin, long axis 140mm. approach_distance_m is 0: the pin is picked
-  # where it lies with no separate standoff stage.
+  # where it lies, with no separate standoff stage before the grasp.
   - step_id: pick_hex_blue
     object_id: hex_blue
     grasp_width_m: 0.03
@@ -179,8 +249,25 @@ steps:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_hex_blue
+    object_id: hex_blue
+    action_hint: lift straight up from the grasp, no lateral motion
+    lift_height_m: 0.20
+    grasp_width_m: 0.03
+
+  - step_id: place_approach_hex_blue
+    object_id: hex_blue
+    action_hint: move to a standoff above the hole, do not descend yet
+    target_frame: hex_blue_hole
+    standoff_m: 0.085
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
   - step_id: place_hex_blue
     object_id: hex_blue
+    action_hint: descend from the standoff into the hole, release, retreat
     target_frame: hex_blue_hole
     grasp_width_m: 0.03
     grasp_center_offset:
@@ -196,13 +283,31 @@ steps:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+  - step_id: lift_hex_red
+    object_id: hex_red
+    action_hint: lift straight up from the grasp, no lateral motion
+    lift_height_m: 0.30
+    grasp_width_m: 0.03
+
+  - step_id: place_approach_hex_red
+    object_id: hex_red
+    action_hint: move to a standoff above the hole, do not descend yet
+    target_frame: hex_red_hole
+    standoff_m: 0.185
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
   - step_id: place_hex_red
     object_id: hex_red
+    action_hint: descend from the standoff into the hole, release, retreat
     target_frame: hex_red_hole
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
 
 object_ids: |
   u_green          — FMB U part, graspable. Seated first. Needs a reorient stage.

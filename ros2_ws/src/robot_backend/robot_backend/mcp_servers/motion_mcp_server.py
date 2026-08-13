@@ -61,8 +61,8 @@ _DEFAULT_ALLOWED_PLANNING_TIME = 10.0
 # would have staged the pre-grasp 5cm inside the part.
 _DEFAULT_APPROACH_DISTANCE_M = -0.05
 _DEFAULT_NUM_PLANNING_ATTEMPTS = 10
-_DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 1.0
-_DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 1.0
+_DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.5
+_DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 0.5
 _DEFAULT_POSITION_TOLERANCE_M = 0.001
 _DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.01
 _MIN_QUATERNION_NORM = 1e-8
@@ -602,6 +602,7 @@ if mcp is not None:
         grasp_center_offset_qy: float | None = None,
         grasp_center_offset_qz: float | None = None,
         grasp_center_offset_qw: float | None = None,
+        clear_octomap_first: bool = False,
     ) -> dict[str, Any]:
         """Move the logical gripper grasp center to a target pose.
 
@@ -633,6 +634,15 @@ if mcp is not None:
         free-space move: position tight so the part enters the hole,
         orientation loose (e.g. 0.05 rad) so the planner can absorb the small
         tilt the part has in the gripper and still find a collision-free goal.
+
+        clear_octomap_first clears MoveIt's occupancy map inside THIS call,
+        immediately before planning. Use it whenever the move enters space the
+        camera currently sees as occupied -- carrying a part away from where
+        it was standing, or seating one against others. Prefer it over calling
+        clear_octomap as a separate step: the map republishes at the
+        point-cloud rate, so a clear from a previous turn has already refilled
+        by the time this plans, and the move then fails
+        START_STATE_IN_COLLISION.
         """
 
         command = "move_grasp_center_to_pose"
@@ -677,6 +687,18 @@ if mcp is not None:
                     grasp_center_offset_qw,
                 )
 
+            backend = _ensure_backend()
+            # Clearing must happen in THIS call, not as a separate tool call.
+            # The map republishes at the point-cloud rate (10 Hz here), so a
+            # clear issued in a previous turn has fully refilled by the time
+            # the plan is requested -- measured gaps of 3.5-34 s between a
+            # clear and the move it was meant to enable, every one of which
+            # then failed START_STATE_IN_COLLISION.
+            octomap_cleared = False
+            if clear_octomap_first:
+                backend.scene.clear_octomap()
+                octomap_cleared = True
+
             pos_tol = (
                 _DEFAULT_POSITION_TOLERANCE_M
                 if position_tolerance_m is None
@@ -687,7 +709,6 @@ if mcp is not None:
                 if orientation_tolerance_rad is None
                 else _validate_float("orientation_tolerance_rad", orientation_tolerance_rad)
             )
-            backend = _ensure_backend()
             result = backend.motion.move_to_pose(
                 pose,
                 target_is_grasp_center=True,
@@ -706,6 +727,7 @@ if mcp is not None:
                 command,
                 requested_grasp_center_pose=pose,
                 gripper_width_m=width,
+                octomap_cleared=octomap_cleared,
                 result=result,
             )
         except Exception as exc:
@@ -900,6 +922,7 @@ if mcp is not None:
         grasp_center_offset_qz: float | None = None,
         grasp_center_offset_qw: float | None = None,
         stop_at_pregrasp: bool = False,
+        clear_octomap_first: bool = False,
     ) -> dict[str, Any]:
         """Move the arm to the pre-grasp staging position and optionally
         continue to the grasp position, then return the planned poses and
@@ -968,6 +991,15 @@ if mcp is not None:
             gripper-side TCP-to-grasp-centre offset, which is width-dependent,
             comes from the RG2 calibration table, and is applied automatically
             from gripper_width_m.
+        clear_octomap_first : bool, optional
+            Clear MoveIt's occupancy map immediately before planning, inside
+            this same call. Use it whenever the move has to enter space the
+            camera currently sees as occupied: right after grasping a part
+            that was standing on the table (its old voxels remain), or before
+            seating a part against others. Prefer this over calling
+            clear_octomap as a separate step -- the map republishes at the
+            point-cloud rate, so a clear from a previous turn has refilled
+            before this plans, and the move fails START_STATE_IN_COLLISION.
         stop_at_pregrasp : bool, optional
             When True the arm stops at the pre-grasp TCP pose and the tool
             returns without proceeding to the grasp position. Defaults to False.
@@ -1072,6 +1104,12 @@ if mcp is not None:
 
         try:
             backend = _ensure_backend()
+            # Same-call clear: see move_grasp_center_to_pose. A clear issued as
+            # a separate tool call has already refilled by the time this plans.
+            if clear_octomap_first:
+                backend.scene.clear_octomap()
+                payload["octomap_cleared"] = True
+
             pregrasp_result = backend.motion.move_to_pose(
                 pre_grasp_tcp_pose, **_motion_kwargs()
             )
