@@ -79,9 +79,16 @@ steps:
     # so object_pose and grasp_center_offset orientations are NOT independently
     # choosable -- the object->gripper transform is fixed at grasp time. An
     # inconsistent pair silently lands the part somewhere else.
-    object_pose:
-      position: {x: 0.38313, y: -0.16239, z: 0.28}        
-      orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: hex_red_hole
+    # target_offset is in the FRAME's own axes, NOT world. This frame's
+    # local +Z does not point up, so the world-vertical standoff that
+    # the old hardcoded z encoded is along local Y here.
+    target_offset:
+      position: {x: 0.0, y: 0.18450, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}          
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -99,9 +106,10 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-    object_pose:
-      position: {x: 0.38313, y: -0.16239, z: 0.0955}  
-      orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: hex_red_hole
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}     
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -113,3 +121,11 @@ steps:
 
   - step_id: release_hex_red
     action: release
+
+  # Back the TCP straight out along its own local Z after letting go. Pure TCP
+  # move on purpose: the release just opened the jaws to ~104mm, and a
+  # grasp-center move would convert through that width and drop the TCP ~41mm
+  # INTO the part it just placed.
+  - step_id: retreat_after_placement
+    action: retreat
+    distance_m: -0.10

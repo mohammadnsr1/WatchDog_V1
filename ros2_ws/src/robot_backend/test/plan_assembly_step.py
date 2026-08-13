@@ -205,6 +205,24 @@ steps:
     frame: delta_from_last          # object | target_object | world | delta_from_last
     delta: {x: 0.0, y: 0.0, z: 0.12}
 
+  - step_id: place_at_live_frame
+    action: move_grasp_center_to_pose
+    frame: target_object
+    # target_id reads the part's DESTINATION live from a published TF frame
+    # (a registry entry with enabled: false -- pose-only, never synced as
+    # collision geometry). Use this instead of a literal object_pose so a
+    # placement survives the fixture being nudged. object_pose still works
+    # when there is no frame for the target.
+    target_id: hex_blue_hole
+    target_offset:                   # optional standoff, applied in the
+      position: {x: 0.0, y: 0.0, z: 0.15}   # FRAME's own axes so it stays
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}   # "above the hole"
+    # Unchanged convention: grasp point in the OBJECT frame, orientation is
+    # the desired WORLD orientation of the grasp center.
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
   - step_id: place
     action: move_grasp_center_to_pose
     frame: world                    # WORLD frame, absolute -- NOT resolved
@@ -542,6 +560,49 @@ def load_object_registry(explicit_path: str | None = None) -> dict[str, Any]:
 # plan loading
 # ---------------------------------------------------------------------
 
+def load_plan_sequence(args) -> list[tuple[str, dict]]:
+    """Return [(label, plan), ...] -- one entry normally, several for an assembly.
+
+    An ASSEMBLY plan is a YAML carrying an `include:` list of other plan files
+    instead of its own `steps:`, letting a whole build be run as one test:
+
+        include:
+          - u_green_pick.plan.yaml
+          - hex_blue_pick.plan.yaml
+
+    Paths resolve relative to the assembly file. Each included plan runs with a
+    FRESH step state, so delta_from_last in one part never chains off the
+    previous part's last grasp center.
+    """
+
+    if not args.plan:
+        return [("<ad hoc>", load_plan(args))]
+
+    path = Path(args.plan)
+    with path.open() as fh:
+        raw = yaml.safe_load(fh)
+
+    includes = raw.get("include")
+    if not includes:
+        return [(path.name, load_plan(args))]
+    if raw.get("steps"):
+        raise ValueError(f"{path}: use either include: or steps:, not both")
+
+    sequence: list[tuple[str, dict]] = []
+    for entry in includes:
+        sub_path = (path.parent / str(entry)).resolve()
+        if not sub_path.exists():
+            raise FileNotFoundError(
+                f"{path}: include entry {entry!r} resolves to {sub_path}, which does not exist"
+            )
+        with sub_path.open() as fh:
+            sub_plan = yaml.safe_load(fh)
+        if not sub_plan or not sub_plan.get("steps"):
+            raise ValueError(f"{sub_path}: no steps: block found")
+        sequence.append((sub_path.name, sub_plan))
+    return sequence
+
+
 def load_plan(args) -> dict:
     if args.plan:
         with open(args.plan) as fh:
@@ -738,6 +799,9 @@ def run_step(
         state["last_grasp_center_world"] = grasp_center_world
         state["last_object_id"] = object_id
         state["last_width"] = width
+        # Tracked separately from the grasp center because a retreat must not
+        # depend on the gripper opening -- see the "retreat" action.
+        state["last_tcp_world"] = pre_grasp_tcp if stop_at_pregrasp else grasp_tcp
 
         result.update(
             object_id=object_id,
@@ -821,23 +885,42 @@ def run_step(
             # Same grasp_center_offset rule as frame: object -- position is
             # object-relative and gets rotated through the object's
             # orientation, orientation is the desired WORLD orientation taken
-            # directly. The only difference is where the object pose comes
-            # from: given here as the object's DESIRED pose (e.g. off an
-            # Isaac Sim gizmo) rather than TF-queried, since the object is
-            # attached and hasn't physically gotten there yet.
+            # directly. The only difference is WHICH object pose it resolves
+            # against: the part's DESIRED destination, not where it is now.
             #
             # Because the object is attached, the orientation you give is not
             # actually free: the object->gripper transform is fixed at grasp
             # time, so an orientation inconsistent with it means the object
             # lands somewhere other than object_pose. Dry-run and check.
             object_id = resolve(step, plan, "object_id", required=True)
-            object_target_pose = offset_pose_from_spec(step["object_pose"], frame_id="world")
+
+            # The destination comes from either a live TF frame (target_id --
+            # preferred, so the placement follows the fixture if it moves) or a
+            # literal object_pose. Same composition either way.
+            target_id = step.get("target_id")
+            if target_id:
+                object_target_pose = pose_client.get_pose(target_id)
+                print(f"    object target pose (LIVE TF '{target_id}') : {fmt_pose(object_target_pose)}")
+                target_offset = step.get("target_offset")
+                if target_offset:
+                    # Composed in the FRAME's own axes, so a standoff stays
+                    # "above the hole" however the fixture is rotated.
+                    object_target_pose = compose_poses(
+                        object_target_pose, offset_pose_from_spec(target_offset)
+                    )
+                    print(f"    after target_offset                    : {fmt_pose(object_target_pose)}")
+            else:
+                object_target_pose = offset_pose_from_spec(step["object_pose"], frame_id="world")
+                print(f"    object target pose (world, NOT queried) : {fmt_pose(object_target_pose)}")
+
             target_center_world = grasp_center_world_from_object_and_offset(
                 object_target_pose, step["grasp_center_offset"]
             )
-            print(f"    object target pose (world, NOT queried) : {fmt_pose(object_target_pose)}")
             result.update(
-                object_id=object_id, grasp_center_offset=step["grasp_center_offset"], structured=True
+                object_id=object_id,
+                target_id=target_id,
+                grasp_center_offset=step["grasp_center_offset"],
+                structured=True,
             )
 
         elif frame == "delta_from_last":
@@ -875,6 +958,9 @@ def run_step(
 
         print(f"    target grasp_center (world) : {fmt_pose(target_center_world)}")
         state["last_grasp_center_world"] = target_center_world
+        state["last_tcp_world"] = tcp_target_from_grasp_center(
+            target_center_world, width_m=width
+        )
         result.update(grasp_center_world=target_center_world, gripper_width_m=width)
 
         if execute:
@@ -883,6 +969,46 @@ def run_step(
                 lambda: move_grasp_center_to_pose_skill(
                     backend, target_center_world, width, **motion_kwargs
                 ),
+                settle_sec=settle_sec,
+            )
+
+    elif action == "retreat":
+        # Back the TCP away along its OWN local Z from wherever the last move
+        # left it. Meant to run after a release, to clear the placed part
+        # before the next plan starts.
+        #
+        # Deliberately a pure TCP move, not a grasp-center one. Grasp-center
+        # targets are converted to TCP through the gripper opening, and the
+        # release just opened the jaws to ~104mm -- reusing that path would
+        # move the TCP ~41mm on the width change alone, DOWNWARD, into the
+        # part that was just placed. Retreating from the recorded TCP has no
+        # such dependency.
+        #
+        # distance_m is applied exactly as given, same convention as
+        # approach_distance_m: for a top-down TCP whose local +Z points down,
+        # a NEGATIVE value backs up and away.
+        if "last_tcp_world" not in state:
+            raise ValueError(
+                f"step '{step_id}': retreat needs a prior step that computed a TCP pose"
+            )
+        distance_m = float(resolve(step, plan, "distance_m", required=True))
+        base_tcp = state["last_tcp_world"]
+        retreat_tcp = compose_poses(
+            base_tcp,
+            make_pose(
+                position={"x": 0.0, "y": 0.0, "z": distance_m},
+                orientation=IDENTITY_QUAT,
+            ),
+        )
+        print(f"    from TCP                    : {fmt_pose(base_tcp)}")
+        print(f"    retreat TCP ({distance_m:+.3f}m local Z): {fmt_pose(retreat_tcp)}")
+        state["last_tcp_world"] = retreat_tcp
+        result.update(distance_m=distance_m, retreat_tcp=retreat_tcp, structured=False)
+
+        if execute:
+            confirm_and_run(
+                step_id,
+                lambda: move_tcp_to_pose_skill(backend, retreat_tcp, **motion_kwargs),
                 settle_sec=settle_sec,
             )
 
@@ -1004,6 +1130,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--plan", type=str, default=None, help="path to a plan YAML file")
+    p.add_argument("--continue-on-error", action="store_true",
+                   help="assembly mode: keep going after a plan fails instead of stopping. "
+                        "Off by default -- an unplaced part means every later plan is "
+                        "planning against a scene that does not match its assumptions.")
     p.add_argument("--object", type=str, default=None, help="ad hoc mode: object_id")
     p.add_argument("--offset-pos", type=str, default="0,0,0", help="ad hoc mode: x,y,z, a point on the object in the OBJECT frame")
     p.add_argument("--offset-quat", type=str, default="0,0,0,1", help="ad hoc mode: qx,qy,qz,qw, the DESIRED WORLD orientation of the grasp center/TCP (not object-frame)")
@@ -1034,7 +1164,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_arg_parser().parse_args()
-    plan = load_plan(args)
+    plans = load_plan_sequence(args)
     registry = load_object_registry(args.registry)
 
     rclpy.init()
@@ -1059,28 +1189,62 @@ def main() -> int:
         # table) need syncing too, and plan_object_ids has no way to know
         # about them. Put a sync_scene step first in your plan.
 
-        state: dict = {}
         results = []
-        for step in plan["steps"]:
-            if args.execute and not args.yes:
-                ans = input(f"\nrun step '{step.get('step_id', '?')}' ({step['action']})? [y/N] ").strip().lower()
-                if ans != "y":
-                    print("    skipped")
-                    continue
+        summary: list[tuple[str, int, str]] = []
+        multi = len(plans) > 1
+        failed = False
+
+        for plan_index, (label, plan) in enumerate(plans, start=1):
+            if multi:
+                print(f"\n{'=' * 72}")
+                print(f"=== plan {plan_index}/{len(plans)}: {label}")
+                print(f"{'=' * 72}")
+
+            # Fresh per plan: delta_from_last must not chain off the previous
+            # part's last grasp center.
+            state: dict = {}
+            plan_results = []
             try:
-                result = run_step(
-                    step, plan, pose_client, registry, width_reader, backend, state,
-                    execute=args.execute,
-                    settle_sec=args.settle_sec if args.execute else 0.0,
-                )
-            except MoveGroupPlanningError as exc:
-                # The arm has not moved for a start-state rejection, so the
-                # colliding configuration is still live and can be queried.
-                print(f"\n!! step '{step.get('step_id', '?')}' failed: {exc}")
-                if exc.error_code_val == MoveItErrorCodes.START_STATE_IN_COLLISION:
-                    report_current_state_collisions(node)
-                raise
-            results.append(result)
+                for step in plan["steps"]:
+                    if args.execute and not args.yes:
+                        ans = input(f"\nrun step '{step.get('step_id', '?')}' ({step['action']})? [y/N] ").strip().lower()
+                        if ans != "y":
+                            print("    skipped")
+                            continue
+                    try:
+                        result = run_step(
+                            step, plan, pose_client, registry, width_reader, backend, state,
+                            execute=args.execute,
+                            settle_sec=args.settle_sec if args.execute else 0.0,
+                        )
+                    except MoveGroupPlanningError as exc:
+                        # The arm has not moved for a start-state rejection, so
+                        # the colliding configuration is still live and can be
+                        # queried.
+                        print(f"\n!! step '{step.get('step_id', '?')}' failed: {exc}")
+                        if exc.error_code_val == MoveItErrorCodes.START_STATE_IN_COLLISION:
+                            report_current_state_collisions(node)
+                        raise
+                    plan_results.append(result)
+            except Exception as exc:
+                results.extend(plan_results)
+                summary.append((label, len(plan_results), f"FAILED at step {len(plan_results) + 1}: {exc.__class__.__name__}"))
+                failed = True
+                # Default to stopping: a part left unplaced means every later
+                # plan is planning against a scene that does not match its
+                # assumptions.
+                if not args.continue_on_error:
+                    if multi:
+                        print_plan_summary(summary)
+                    raise
+                print(f"\n!! continuing to the next plan after failure in {label}")
+                continue
+
+            results.extend(plan_results)
+            summary.append((label, len(plan_results), "ok"))
+
+        if multi:
+            print_plan_summary(summary)
 
         print("\n\n===== paste into executor.yaml steps: =====\n")
         print(render_steps_fragment(results))
@@ -1090,7 +1254,7 @@ def main() -> int:
                 json.dump(_json_safe(results), fh, indent=2)
             print(f"\nwrote {len(results)} step results to {args.report}")
 
-        return 0
+        return 1 if failed else 0
 
     finally:
         if backend is not None:
@@ -1103,6 +1267,18 @@ def main() -> int:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+
+
+def print_plan_summary(summary: list[tuple[str, int, str]]) -> None:
+    print(f"\n{'=' * 72}")
+    print("=== assembly summary")
+    print(f"{'=' * 72}")
+    width = max((len(name) for name, _, _ in summary), default=0)
+    for name, step_count, status in summary:
+        mark = "PASS" if status == "ok" else "FAIL"
+        print(f"  [{mark}] {name:<{width}}  {step_count} step(s)   {status}")
+    failures = [s for s in summary if s[2] != "ok"]
+    print(f"\n  {len(summary) - len(failures)}/{len(summary)} plan(s) completed")
 
 
 _BODY_TYPE_NAMES = {0: "ROBOT_LINK", 1: "WORLD_OBJECT", 2: "ROBOT_ATTACHED"}

@@ -1,0 +1,25 @@
+# Full FMB assembly -- runs every part plan back to back in one process.
+#
+#   python3 plan_assembly_step.py --plan full_assembly.plan.yaml            # dry run
+#   python3 plan_assembly_step.py --plan full_assembly.plan.yaml --execute --yes
+#
+# An `include:` list replaces this file's own `steps:` (the two are mutually
+# exclusive). Paths resolve relative to THIS file. Each included plan runs with
+# fresh step state, so delta_from_last never chains off the previous part.
+#
+# ORDER MATTERS and is the thing this test actually exercises. Each plan starts
+# with its own sync_scene / set_permitted_contacts / safe_start, so a part
+# placed earlier is picked up as world geometry by every plan after it -- which
+# is exactly what makes a late insertion harder than the same insertion run
+# alone. Reorder to match the real build sequence.
+#
+# By default the run STOPS at the first failed plan: a part left unplaced means
+# every later plan is planning against a scene that does not match its
+# assumptions. Pass --continue-on-error to push through anyway (useful for a
+# dry run, where nothing moves and you want every geometry error at once).
+
+include:
+  - u_green_pick.plan.yaml
+  - inverted_u_brown_pick.plan.yaml
+  - hex_blue_pick.plan.yaml
+  - hex_red_pick.plan.yaml

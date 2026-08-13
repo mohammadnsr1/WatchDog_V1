@@ -359,3 +359,94 @@ objects:
       limits:
         max_clamp_effort: 30.0
         grasp_effort_floor: 0.05
+
+  # ------------------------------------------------------------------
+  # Placement frames -- pose-only markers, NOT parts.
+  #
+  # Each names a TF frame Isaac publishes for where a part must END UP
+  # (rigidly attached to the fixture, so they move with it). Plans read these
+  # live via frame: target_tf instead of hardcoding a world pose, which is
+  # what makes a placement survive the base being nudged.
+  #
+  # enabled: false is load-bearing, not a leftover -- scene_tf_sync_node's
+  # _build_objects skips disabled entries, so these never become collision
+  # geometry, while get_object_pose ignores `enabled` and still resolves them.
+  # The 1mm box exists only because the registry loader requires a collision
+  # mapping; it is never built or synced.
+  # ------------------------------------------------------------------
+
+  u_green_placement:
+    enabled: false
+    object_id: u_green_placement
+    tf_frame: u_green_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  inverted_u_brown_placement:
+    enabled: false
+    object_id: inverted_u_brown_placement
+    tf_frame: inverted_u_brown_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  hex_blue_hole:
+    enabled: false
+    object_id: hex_blue_hole
+    tf_frame: hex_blue_hole
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  hex_red_hole:
+    enabled: false
+    object_id: hex_red_hole
+    tf_frame: hex_red_hole
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  # Reorient staging frames -- same pose-only pattern as the placement frames
+  # above. Each sits at the part's FINAL reorient pose; a two-stage descent
+  # reaches the upper waypoint with a target_offset in the frame's own axes.
+
+  u_green_reorient:
+    enabled: false
+    object_id: u_green_reorient
+    tf_frame: u_green_reorient
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  inverted_u_brown_reorient:
+    enabled: false
+    object_id: inverted_u_brown_reorient
+    tf_frame: inverted_u_brown_reorient
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]

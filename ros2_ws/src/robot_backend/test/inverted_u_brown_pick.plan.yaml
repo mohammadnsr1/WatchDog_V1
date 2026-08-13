@@ -47,9 +47,9 @@ steps:
     action: move_grasp_center_to_pose
 
     frame: target_object
-    object_pose:
-      position: {x: 0.0, y: -0.2, z: 0.085}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}   # -90 deg about X (upright)
+    # Reorient destination read LIVE from its published frame. The frame
+    # sits at the FINAL reorient pose.
+    target_id: inverted_u_brown_reorient
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0} 
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
@@ -95,9 +95,16 @@ steps:
     # attached here, object_pose and grasp_center_offset orientations are not
     # independently choosable -- the object->gripper transform is fixed at
     # grasp time. Dry-run first and check the reported grasp_center.
-    object_pose:
-      position: {x: 0.48911, y: -0.16234, z: 0.31693}        
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}  
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: inverted_u_brown_placement
+    # target_offset is in the FRAME's own axes, NOT world. This frame's
+    # local +Z does not point up, so the world-vertical standoff that
+    # the old hardcoded z encoded is along local Y here.
+    target_offset:
+      position: {x: 0.0, y: -0.20000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -111,9 +118,10 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-    object_pose:
-      position: {x: 0.48911, y: -0.16234, z: 0.11693}        
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}  
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: inverted_u_brown_placement
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -126,3 +134,11 @@ steps:
 
   - step_id: release_inverted_u_brown
     action: release
+
+  # Back the TCP straight out along its own local Z after letting go. Pure TCP
+  # move on purpose: the release just opened the jaws to ~104mm, and a
+  # grasp-center move would convert through that width and drop the TCP ~41mm
+  # INTO the part it just placed.
+  - step_id: retreat_after_placement
+    action: retreat
+    distance_m: -0.10

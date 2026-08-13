@@ -60,9 +60,15 @@ steps:
     # composed the classic way onto the target object pose to solve for
     # the TCP orientation that target actually requires.
     frame: target_object
-    object_pose:
-      position: {x: 0.06, y: -0.16329, z: 0.16}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}   # -90 deg about X (upright)
+    # Reorient destination read LIVE from its published frame. The frame
+    # sits at the FINAL reorient pose.
+    target_id: u_green_reorient
+    # Upper waypoint of the two-stage descent. In the FRAME's own axes:
+    # this frame's local +Z points along world +Y, so the 80mm
+    # world-vertical standoff is -80mm on local Y.
+    target_offset:
+      position: {x: 0.0, y: -0.08000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
@@ -81,9 +87,9 @@ steps:
     # composed the classic way onto the target object pose to solve for
     # the TCP orientation that target actually requires.
     frame: target_object
-    object_pose:
-      position: {x: 0.06, y: -0.16329, z: 0.08}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}   # -90 deg about X (upright)
+    # Reorient destination read LIVE from its published frame. The frame
+    # sits at the FINAL reorient pose.
+    target_id: u_green_reorient
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
@@ -133,10 +139,16 @@ steps:
     # composed the classic way onto the target object pose to solve for
     # the TCP orientation that target actually requires.
     frame: target_object
-    object_pose:
-      # xy from the measured seated TF; z is +0.15 above it for the approach.
-      position: {x: 0.48961, y: -0.16126, z: 0.23112}
-      orientation: {x: -0.5, y: -0.5, z: 0.5, w: 0.5}   # -90,-90,0 (intrinsic XYZ)
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: u_green_placement
+    # target_offset is in the FRAME's own axes, NOT world. This frame's
+    # local +Z does not point up, so the world-vertical standoff that
+    # the old hardcoded z encoded is along local Y here.
+    target_offset:
+      position: {x: 0.0, y: -0.15022, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
@@ -156,9 +168,10 @@ steps:
     # Measured seated TF of u_green in the slot -- ground truth, not a gizmo
     # reading. Same grasp_center_offset as placement_approach: the object is
     # attached, so the two orientations are not independently choosable.
-    object_pose:
-      position: {x: 0.48961, y: -0.16126, z: 0.0809}
-      orientation: {x: -0.5, y: -0.5, z: 0.5, w: 0.5}   # -90,-90,0 (intrinsic XYZ)
+    # Destination read LIVE from the published placement frame, so this
+    # survives the fixture being moved. The frame sits at the part's
+    # SEATED pose; the approach step adds a standoff to it.
+    target_id: u_green_placement
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
@@ -169,3 +182,13 @@ steps:
       max_acceleration_scaling_factor: 0.1
       allowed_planning_time: 20.0
 
+  - step_id: release_u_green_final
+    action: release
+
+  # Back the TCP straight out along its own local Z after letting go. Pure TCP
+  # move on purpose: the release just opened the jaws to ~104mm, and a
+  # grasp-center move would convert through that width and drop the TCP ~41mm
+  # INTO the part it just placed.
+  - step_id: retreat_after_placement
+    action: retreat
+    distance_m: -0.10
