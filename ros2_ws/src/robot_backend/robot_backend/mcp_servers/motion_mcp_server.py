@@ -184,6 +184,18 @@ def _validate_width(width_m: Any) -> float:
     return width
 
 
+def _validate_scaling(name: str, value: Any) -> float:
+    """Validate a MoveIt scaling factor: a fraction of the robot's limits."""
+
+    scaling = _validate_float(name, value)
+    if not (0.0 < scaling <= 1.0):
+        raise ValueError(
+            f"{name} must be in (0, 1] -- it is a FRACTION of the robot's "
+            f"configured limit, not a speed in m/s. Got {scaling}."
+        )
+    return scaling
+
+
 def _build_pose_dict(
     *,
     frame_id: str,
@@ -612,6 +624,9 @@ if mcp is not None:
         target_offset_qy: float | None = None,
         target_offset_qz: float | None = None,
         target_offset_qw: float | None = None,
+        max_velocity_scaling_factor: float | None = None,
+        max_acceleration_scaling_factor: float | None = None,
+        allowed_planning_time: float | None = None,
         clear_octomap_first: bool = False,
     ) -> dict[str, Any]:
         """Move the logical gripper grasp center to a target pose.
@@ -768,6 +783,26 @@ if mcp is not None:
                 if orientation_tolerance_rad is None
                 else _validate_float("orientation_tolerance_rad", orientation_tolerance_rad)
             )
+            # Speed is per-call: a seating move wants to be slow (the commanded
+            # trajectory is tracked more closely, and a part entering a slot is
+            # where tracking error becomes a jam), a free-space transit does
+            # not. None means "use the cell default", so an omitted argument
+            # behaves exactly as before.
+            vel = (
+                _DEFAULT_MAX_VELOCITY_SCALING_FACTOR
+                if max_velocity_scaling_factor is None
+                else _validate_scaling("max_velocity_scaling_factor", max_velocity_scaling_factor)
+            )
+            acc = (
+                _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR
+                if max_acceleration_scaling_factor is None
+                else _validate_scaling("max_acceleration_scaling_factor", max_acceleration_scaling_factor)
+            )
+            plan_time = (
+                _DEFAULT_ALLOWED_PLANNING_TIME
+                if allowed_planning_time is None
+                else _validate_float("allowed_planning_time", allowed_planning_time)
+            )
             result = backend.motion.move_to_pose(
                 pose,
                 target_is_grasp_center=True,
@@ -775,12 +810,10 @@ if mcp is not None:
                 solve_ik_first=bool(solve_ik_first),
                 position_tolerance_m=pos_tol,
                 orientation_tolerance_rad=ori_tol,
-                allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
+                allowed_planning_time=plan_time,
                 num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
-                max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
-                max_acceleration_scaling_factor=(
-                    _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR
-                ),
+                max_velocity_scaling_factor=vel,
+                max_acceleration_scaling_factor=acc,
             )
             return _ok(
                 command,

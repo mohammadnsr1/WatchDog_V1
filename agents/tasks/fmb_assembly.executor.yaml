@@ -164,6 +164,13 @@ steps:
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and a set-down is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.2
+      max_acceleration_scaling_factor: 0.2
+      allowed_planning_time: 10.0
 
   - step_id: repick_u_green
     object_id: u_green
@@ -209,6 +216,13 @@ steps:
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and seating into the slot is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
 
   # ---- inverted_u_brown: pick flat, reorient upright, seat ----------------
   # The re-pick grasps 10mm further along the part than the first pick
@@ -257,6 +271,13 @@ steps:
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and a set-down is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.2
+      max_acceleration_scaling_factor: 0.2
+      allowed_planning_time: 10.0
 
   - step_id: repick_inverted_u_brown
     object_id: inverted_u_brown
@@ -302,6 +323,13 @@ steps:
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and seating into the slot is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
 
   # ---- hex_blue: single pick, direct insertion ----------------------------
   # A hex pin, long axis 140mm. approach_distance_m is 0: the pin is picked
