@@ -45,7 +45,12 @@ mcp_servers:
       CELL_GATE_TIMEOUT_SEC: "90.0"
 
 loop:
-  max_turns: 60
+  # Budget the whole task, not one part. fmb_assembly is 24 steps; a run that
+  # got through u_green's 8 steps burned the old 60, i.e. ~7.5 turns per step
+  # once frame queries, clear-and-move retries and verification are counted.
+  # 24 x 7.5 ~= 180, and a step that needs two or three planning attempts is
+  # normal rather than exceptional, so carry headroom on top of that.
+  max_turns: 250
 
 transcript_dir: transcripts
 

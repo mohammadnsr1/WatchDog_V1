@@ -60,6 +60,20 @@ instruction_spec: |
 
   Working notes for this cell, learned from validating these steps:
 
+    - Sync the scene BEFORE the first pick, and again after any release, so
+      every part exists as a world collision object before you grasp it.
+      Attaching a part removes it from the world first; if it was never synced
+      in, that removal warns that the object does not exist and the part is
+      attached from message geometry rather than from its registry mesh. The
+      planner then reasons about the held part with the wrong shape. A run
+      that skipped the initial sync is how the previous attempt got there.
+
+    - A collision object named workspace_floor may appear in the scene. It is
+      the bench, published by the bringup, not a part and not a fixture. Never
+      pick it, query it or reason about it as a task object; it exists only so
+      the planner refuses to route below the work surface. If it is missing
+      the cell was launched without it, which is not something to work around.
+
     - The occupancy map does not follow the parts. Two situations need it
       cleared explicitly, and the Allowed Collision Matrix cannot substitute
       because ACM pairs cover object-vs-object contact and perception voxels
@@ -91,6 +105,9 @@ instruction_spec: |
       placed. no retreat needed for reorientation steps in general.
 
 step_plan: |
+  Sync the scene first, before any motion, so all five objects are in the
+  planning scene as collision objects.
+
   Four parts, seated in order. u_green and inverted_u_brown each need a
   reorient stage (pick flat -> set down at the reorient frame -> release ->
   re-pick -> carry to placement). hex_blue and hex_red are picked once and
@@ -116,12 +133,19 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.042
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_approach_u_green
     object_id: u_green
     action_hint: move to a standoff above the reorient frame, do not descend yet
     target_frame: u_green_reorient
-    standoff_m: 0.00
+    standoff_m: 0.05
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
@@ -149,6 +173,13 @@ steps:
     action_hint: lift straight up from the re-grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.042
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.049, y: -0.040, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_approach_u_green
     object_id: u_green
@@ -185,6 +216,13 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.30
     grasp_width_m: 0.08
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.05, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_approach_inverted_u_brown
     object_id: inverted_u_brown
@@ -218,6 +256,13 @@ steps:
     action_hint: lift straight up from the re-grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.08
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
@@ -254,6 +299,13 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.03
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_approach_hex_blue
     object_id: hex_blue
@@ -288,6 +340,13 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.30
     grasp_width_m: 0.03
+    # The part is already held: this is the SAME grasp relationship
+    # established at the pick. The lift tool needs it to keep the grasp
+    # centre on the grasp point and hold the orientation -- without it the
+    # object pose is taken as the grasp centre and the wrist flips.
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.04, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_approach_hex_red
     object_id: hex_red
