@@ -54,13 +54,16 @@ _SAFE_NAMED_JOINT_POSES: dict[str, list[float]] = {
     "ready": [0.0, -1.2, 1.2, -1.57, -1.57, 0.0],
     "upright": [0.0, -1.2, 1.2, 0.0, 0.0, 0.0],
 }
-_DEFAULT_ALLOWED_PLANNING_TIME = 10.0
+# 5s, not 10s: with a fallback chain each failure costs this in full, and the
+# observed 50s stalls were mostly budget burned on plans that were never going
+# to solve. Raise per-call via the tool argument for a genuinely hard move.
+_DEFAULT_ALLOWED_PLANNING_TIME = 5.0
 # NEGATIVE since approach_distance_m became signed and is applied exactly as
 # given: for the top-down grasps in this registry local +Z points INTO the
 # object, so backing off is -Z. Leaving this at +0.05 after the sign change
 # would have staged the pre-grasp 5cm inside the part.
 _DEFAULT_APPROACH_DISTANCE_M = -0.05
-_DEFAULT_NUM_PLANNING_ATTEMPTS = 10
+_DEFAULT_NUM_PLANNING_ATTEMPTS = 4
 _DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.5
 _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 0.5
 _DEFAULT_POSITION_TOLERANCE_M = 0.001

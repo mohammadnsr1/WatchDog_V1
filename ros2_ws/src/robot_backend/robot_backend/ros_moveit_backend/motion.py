@@ -21,6 +21,7 @@ from moveit_msgs.msg import PlanningOptions
 from moveit_msgs.msg import PositionConstraint
 from moveit_msgs.msg import RobotState
 from moveit_msgs.srv import GetPositionIK
+from moveit_msgs.srv import GetStateValidity
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -83,11 +84,14 @@ _PLANNER_RETRYABLE_ERROR_CODES = frozenset(
 # planners. Reseeding the same planner is already covered by
 # num_planning_attempts, so a fallback list of RRT variants would add nothing.
 # Every name here must exist in ur5e_moveit_config/config/ompl_planning.yaml.
+# Deliberately SHORT. Each entry costs a full allowed_planning_time on failure,
+# and observed runs showed that when RRTConnect cannot solve one of these, the
+# optimizing planners do not either -- they just spend their whole budget. Two
+# entries keep a genuinely different algorithm family in reserve without
+# turning a hopeless plan into a minute of latency.
 DEFAULT_PLANNER_FALLBACKS = (
     "RRTConnectkConfigDefault",
     "BiTRRTkConfigDefault",
-    "PRMstarkConfigDefault",
-    "BITstarkConfigDefault",
 )
 
 
@@ -137,6 +141,8 @@ class ROSMoveItMotionBackend(MotionBackend):
             GetPositionIK,
             self._ik_service_name,
         )
+        # Created lazily: only used to explain a START_STATE_IN_COLLISION.
+        self._state_validity_client = None
 
     @property
     def node(self) -> Node:
@@ -721,9 +727,19 @@ class ROSMoveItMotionBackend(MotionBackend):
         move_group_result = result_response.result
         error_code = move_group_result.error_code
         if error_code.val != MoveItErrorCodes.SUCCESS:
-            raise MoveGroupPlanningError(
-                int(error_code.val), self._format_moveit_error(error_code)
-            )
+            message = self._format_moveit_error(error_code)
+            if error_code.val == MoveItErrorCodes.START_STATE_IN_COLLISION:
+                # This code says only that the start state is invalid, never
+                # which bodies touch -- and the goal geometry is irrelevant to
+                # it, so the usual reflex of re-checking the target wastes a
+                # cycle. Ask MoveIt what is actually in contact right now.
+                group_name = getattr(
+                    getattr(goal, "request", None), "group_name", ""
+                ) or DEFAULT_PLANNING_GROUP
+                detail = self._describe_current_state_collisions(group_name)
+                if detail:
+                    message = f"{message} | current-state contacts: {detail}"
+            raise MoveGroupPlanningError(int(error_code.val), message)
 
         return result_response
 
@@ -768,6 +784,23 @@ class ROSMoveItMotionBackend(MotionBackend):
                 return self._execute_move_group_goal(
                     build_goal(candidate), timeout_sec=timeout_sec
                 )
+            except TimeoutError as error:
+                # A planner that overruns the action timeout escapes as
+                # TimeoutError, not MoveGroupPlanningError, so without this it
+                # bypassed the fallback chain entirely and surfaced as what
+                # looked like a transport fault. Treat it as this planner
+                # failing and move to the next one.
+                last_error = MoveGroupPlanningError(
+                    int(MoveItErrorCodes.TIMED_OUT), str(error)
+                )
+                remaining = attempts[index + 1 :]
+                if not remaining:
+                    break
+                self._node.get_logger().warning(
+                    f"Planner {candidate or '(group default)'} timed out; "
+                    f"retrying with {remaining[0]}."
+                )
+                continue
             except MoveGroupPlanningError as error:
                 if error.error_code_val not in _PLANNER_RETRYABLE_ERROR_CODES:
                     raise
@@ -791,6 +824,45 @@ class ROSMoveItMotionBackend(MotionBackend):
     @staticmethod
     def _format_moveit_error_code_name(error_code_val: int) -> str:
         return _ERROR_CODE_NAMES.get(error_code_val, str(error_code_val))
+
+
+    _BODY_TYPE_NAMES = {0: "ROBOT_LINK", 1: "WORLD_OBJECT", 2: "ROBOT_ATTACHED"}
+
+    def _describe_current_state_collisions(self, planning_group: str) -> str:
+        """Name the bodies currently in collision, for a -10 error message.
+
+        Best effort: any failure here returns "" so it can never mask the
+        planning error it is annotating.
+        """
+
+        try:
+            if self._state_validity_client is None:
+                self._state_validity_client = self._node.create_client(
+                    GetStateValidity, "/check_state_validity"
+                )
+            client = self._state_validity_client
+            if not client.wait_for_service(timeout_sec=2.0):
+                return ""
+            request = GetStateValidity.Request()
+            request.group_name = planning_group
+            future = client.call_async(request)
+            rclpy.spin_until_future_complete(self._node, future, timeout_sec=2.0)
+            if not future.done():
+                return ""
+            response = future.result()
+            if response is None or not response.contacts:
+                return ""
+            parts = []
+            for contact in response.contacts[:8]:
+                t1 = self._BODY_TYPE_NAMES.get(contact.body_type_1, contact.body_type_1)
+                t2 = self._BODY_TYPE_NAMES.get(contact.body_type_2, contact.body_type_2)
+                parts.append(
+                    f"{contact.contact_body_1}[{t1}] <-> {contact.contact_body_2}[{t2}] "
+                    f"depth={contact.depth:.4f}m"
+                )
+            return "; ".join(parts)
+        except Exception:
+            return ""
 
     def _coerce_pose_stamped(self, target_pose: PoseLike) -> PoseStamped:
         pose_dict = self._coerce_pose_dict(target_pose)

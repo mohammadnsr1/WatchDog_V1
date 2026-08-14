@@ -31,6 +31,17 @@ install(
 )
 
 install(
+  PROGRAMS sim_moveit_bringup/workspace_bounds_publisher.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  PROGRAMS sim_moveit_bringup/workspace_bounds_publisher.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME workspace_bounds_publisher
+)
+
+install(
   FILES README.md
   DESTINATION share/${PROJECT_NAME}
 )

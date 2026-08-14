@@ -4,7 +4,11 @@
 # The MoveIt octomap updater expects time-consistent point clouds; do not restamp old sensor data as now.
 
 octomap_frame: world
-octomap_resolution: 0.05
+# Standalone default; sim_moveit_bringup overrides it. Keep the two in step --
+# see sim_moveit_bringup's octomap_resolution argument for why 0.025, not 0.01.
+# This whole file is only loaded when move_group is launched with
+# use_octomap:=true, which is no longer the bringup default.
+octomap_resolution: 0.025
 sensors:
   - isaac_point_cloud
 

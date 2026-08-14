@@ -126,8 +126,11 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "octomap_resolution",
-                default_value="0.05",
-                description="MoveIt octomap resolution in meters.",
+                default_value="0.025",
+                description=(
+                    "MoveIt octomap resolution in meters. Keep in step with "
+                    "sensors_3d.yaml and sim_moveit_bringup's octomap_resolution."
+                ),
             ),
             DeclareLaunchArgument(
                 "max_update_rate",

@@ -154,6 +154,7 @@ def _launch_setup(context):
     raw_pointcloud_topic = LaunchConfiguration("raw_pointcloud_topic")
     filtered_pointcloud_topic = LaunchConfiguration("filtered_pointcloud_topic")
     pointcloud_filter_rate = LaunchConfiguration("pointcloud_filter_rate")
+    octomap_resolution = LaunchConfiguration("octomap_resolution")
     voxel_leaf_size = LaunchConfiguration("voxel_leaf_size")
     use_crop_box = LaunchConfiguration("use_crop_box")
     use_voxel_filter = LaunchConfiguration("use_voxel_filter")
@@ -175,6 +176,15 @@ def _launch_setup(context):
     rg2_close_position = LaunchConfiguration("rg2_close_position")
     rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
     rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
+    publish_workspace_floor = LaunchConfiguration("publish_workspace_floor")
+    workspace_floor_object_id = LaunchConfiguration("workspace_floor_object_id")
+    workspace_floor_top_z = LaunchConfiguration("workspace_floor_top_z")
+    workspace_floor_thickness = LaunchConfiguration("workspace_floor_thickness")
+    workspace_floor_allowed_links = LaunchConfiguration("workspace_floor_allowed_links")
+    workspace_floor_min_x = LaunchConfiguration("workspace_floor_min_x")
+    workspace_floor_max_x = LaunchConfiguration("workspace_floor_max_x")
+    workspace_floor_min_y = LaunchConfiguration("workspace_floor_min_y")
+    workspace_floor_max_y = LaunchConfiguration("workspace_floor_max_y")
 
     ur5e_launch_dir = PathJoinSubstitution([FindPackageShare("ur5e_moveit_config"), "launch"])
     bridge_launch_dir = PathJoinSubstitution([FindPackageShare("isaac_trajectory_bridge"), "launch"])
@@ -240,7 +250,13 @@ def _launch_setup(context):
             )
         ),
         LogInfo(msg=["Raw point cloud topic: ", raw_pointcloud_topic]),
-        LogInfo(msg=["MoveIt point cloud topic: ", moveit_pointcloud_topic]),
+        LogInfo(
+            msg=(
+                ["MoveIt point cloud topic: ", moveit_pointcloud_topic]
+                if _is_truthy(use_octomap.perform(context))
+                else "MoveIt occupancy map disabled: no point cloud is consumed."
+            )
+        ),
         LogInfo(msg=["Camera TF config: ", camera_config]),
         LogInfo(msg=f"MoveIt octomap_frame: '{target_frame_value}'"),
         IncludeLaunchDescription(
@@ -253,7 +269,7 @@ def _launch_setup(context):
                 "use_sim_time": use_sim_time,
                 "use_octomap": use_octomap,
                 "pointcloud_topic": moveit_pointcloud_topic,
-                "octomap_resolution": "0.01",
+                "octomap_resolution": octomap_resolution,
                 "max_update_rate": pointcloud_filter_rate,
                 "octomap_max_range": "2.0",
                 "filtered_cloud_topic": "/moveit/filtered_cloud",
@@ -406,6 +422,43 @@ def _launch_setup(context):
             LogInfo(msg="Point cloud filtering disabled. MoveIt will consume the configured pointcloud_topic directly."),
         )
 
+    if _is_truthy(publish_workspace_floor.perform(context)):
+        actions.append(
+            Node(
+                package="sim_moveit_bringup",
+                executable="workspace_bounds_publisher",
+                name="workspace_bounds_publisher",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "object_id": workspace_floor_object_id.perform(context),
+                        "frame_id": target_frame_value,
+                        "min_x": float(workspace_floor_min_x.perform(context)),
+                        "max_x": float(workspace_floor_max_x.perform(context)),
+                        "min_y": float(workspace_floor_min_y.perform(context)),
+                        "max_y": float(workspace_floor_max_y.perform(context)),
+                        "top_z": float(workspace_floor_top_z.perform(context)),
+                        "thickness_m": float(workspace_floor_thickness.perform(context)),
+                        "allowed_links": [
+                            link
+                            for link in workspace_floor_allowed_links.perform(context).split(",")
+                            if link.strip()
+                        ],
+                    }
+                ],
+            )
+        )
+    else:
+        actions.append(
+            LogInfo(
+                msg=(
+                    "Workspace floor slab disabled. Nothing represents the table "
+                    "unless use_octomap is true."
+                )
+            )
+        )
+
     return actions
 
 
@@ -428,8 +481,20 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "use_octomap",
-                default_value="true",
-                description="Enable MoveIt occupancy map updates from the configured point cloud.",
+                default_value="false",
+                description=(
+                    "Enable MoveIt occupancy map updates from the configured "
+                    "point cloud. OFF by default: every assembly part is a "
+                    "registry collision mesh and the only other thing the "
+                    "octomap contributed was the bench, which "
+                    "publish_workspace_floor now models exactly. What it cost "
+                    "in exchange was voxelising the part held in the gripper "
+                    "mid-carry -- goal-sampling failures and <octomap>-vs-"
+                    "attached-body aborts that no amount of clearing fixes, "
+                    "because the map refills faster than a trajectory runs. "
+                    "Turn back on only to see unmodelled clutter, and expect "
+                    "those failures back with it."
+                ),
             ),
             DeclareLaunchArgument(
                 "pointcloud_topic",
@@ -448,8 +513,17 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "filter_pointcloud",
-                default_value="true",
-                description="Launch the workspace point cloud filter and feed MoveIt the filtered cloud.",
+                default_value="false",
+                description=(
+                    "Launch the workspace point cloud filter and feed MoveIt the "
+                    "filtered cloud. OFF by default, following use_octomap: the "
+                    "filter existed to feed the occupancy map, so with the map "
+                    "off it is a crop-and-voxel pass whose only consumer is the "
+                    "RViz cloud display. Leaving it off means nothing in the "
+                    "cell subscribes to raw_pointcloud_topic, so the depth "
+                    "publisher can be switched off in Isaac too. Set true (with "
+                    "use_octomap:=true) to restore the perception path."
+                ),
             ),
             DeclareLaunchArgument(
                 "raw_pointcloud_topic",
@@ -462,6 +536,18 @@ def generate_launch_description():
                 description="Filtered point cloud topic published for MoveIt occupancy updates.",
             ),
             DeclareLaunchArgument(
+                "octomap_resolution",
+                default_value="0.025",
+                description=(
+                    "Octomap leaf size in metres. Was forced to 0.01, which over the "
+                    "crop box below is up to ~11M cells and made collision checking "
+                    "the dominant planning cost -- planning to the 'ready' joint pose "
+                    "was observed failing outright. Every assembly part is already a "
+                    "registry collision mesh, so the octomap only needs to catch the "
+                    "table and unmodelled clutter; 1cm fidelity bought nothing there."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "pointcloud_filter_rate",
                 default_value="10.0",
                 description=(
@@ -471,7 +557,14 @@ def generate_launch_description():
                     "argument controls both, since a faster republish with a "
                     "slower octomap consumer would just be wasted work. Was 2.0; "
                     "raised for faster scene catch-up after an object moves/is "
-                    "attached/is released."
+                    "attached/is released. Rate is also what keeps the cloud "
+                    "FRESH: MoveIt's self-filter masks robot links and attached "
+                    "bodies at the transform valid now, so a cloud that is old by "
+                    "the time it is inserted leaves ghost voxels along the path "
+                    "the gripper just swept. At 2.0 Hz the observed input_age_sec "
+                    "was 0.23-0.43 s, enough displacement mid-trajectory to write "
+                    "a carried part into the octomap and abort execution on a "
+                    "<octomap> vs attached-body contact."
                 ),
             ),
             DeclareLaunchArgument(
@@ -625,6 +718,91 @@ def generate_launch_description():
                 "reliable_output_qos",
                 default_value="true",
                 description="Publish the filtered cloud with RELIABLE QoS instead of BEST_EFFORT.",
+            ),
+            DeclareLaunchArgument(
+                "publish_workspace_floor",
+                default_value="true",
+                description=(
+                    "Publish a static floor slab into the planning scene. Nothing "
+                    "else models the work surface -- it is absent from the URDF "
+                    "and from model_registry.yaml -- so with use_octomap:=false "
+                    "this is the ONLY thing stopping the planner routing an elbow "
+                    "or a descent through the bench. Harmless with the octomap on: "
+                    "a clean box beats voxels for the one surface whose geometry "
+                    "is known exactly."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_object_id",
+                default_value="workspace_floor",
+                description="Collision object id for the floor slab.",
+            ),
+            # Footprint. Sized to the UR5e's ~0.85 m reach plus a small margin,
+            # NOT to the perception crop box it originally copied: the crop box
+            # is a camera-visibility region and no longer feeds anything now
+            # that filter_pointcloud defaults off. Outside the reach envelope
+            # "the planner might go below the table" is not a reachable failure,
+            # so slab there is only bulk -- it obscures the RViz view and adds
+            # collision-check surface for nothing.
+            DeclareLaunchArgument(
+                "workspace_floor_min_x",
+                default_value="-0.9",
+                description="Floor slab minimum X in the target frame.",
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_max_x",
+                default_value="0.9",
+                description="Floor slab maximum X in the target frame.",
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_min_y",
+                default_value="-0.9",
+                description="Floor slab minimum Y in the target frame.",
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_max_y",
+                default_value="0.9",
+                description="Floor slab maximum Y in the target frame.",
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_top_z",
+                default_value="-0.05",
+                description=(
+                    "Top face of the slab in the target frame. The bench top is "
+                    "world Z=0 (ur5e.srdf's world_joint parents base_link to "
+                    "world with no offset, so the robot's mount plane IS the "
+                    "surface), and the default sits BELOW it on purpose: base2 "
+                    "and every unpicked part rest ON the bench, so a slab flush "
+                    "at 0.0 is tangent to all of them and to base_link, and FCL "
+                    "reports the scene in collision before anything moves. "
+                    "Dropping the slab buys clearance for all of that at once "
+                    "without an ACM pair per registry object. The trade is real "
+                    "though: the planner will not object to a path that dips "
+                    "this far under the bench top, so treat the value as how "
+                    "much intrusion is acceptable, not as a free parameter."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_thickness",
+                default_value="0.1",
+                description=(
+                    "Slab thickness in metres, extending DOWN from "
+                    "workspace_floor_top_z. 0.1 roughly matches crop_min_z so the "
+                    "solid region ends where perception's did. Thickness only has "
+                    "to exceed the deepest a planner would try to cut through; it "
+                    "is not modelling a real bench."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "workspace_floor_allowed_links",
+                default_value="base_link,shoulder_link",
+                description=(
+                    "Comma-separated robot links permitted to touch the floor "
+                    "slab. base_link sits AT world origin, i.e. exactly tangent "
+                    "to the surface at the default top_z, and FCL treats tangency "
+                    "as a coin flip -- without this the robot starts every plan "
+                    "in collision."
+                ),
             ),
             DeclareLaunchArgument("crop_min_x", default_value="-1.0", description="Workspace crop minimum X in meters."),
             DeclareLaunchArgument("crop_max_x", default_value="2.0", description="Workspace crop maximum X in meters."),
