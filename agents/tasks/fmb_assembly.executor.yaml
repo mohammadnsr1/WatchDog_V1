@@ -143,9 +143,14 @@ steps:
 
   - step_id: reorient_approach_u_green
     object_id: u_green
-    action_hint: move to a standoff above the reorient frame, do not descend yet
+    action_hint: approach the reorient frame from above, stopping clear of contact
     target_frame: u_green_reorient
-    standoff_m: 0.05
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. from u_green_pick.plan.yaml.
+    target_offset:
+      position: {x: 0.0, y: -0.08000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
@@ -153,7 +158,7 @@ steps:
 
   - step_id: reorient_u_green
     object_id: u_green
-    action_hint: descend from the standoff into the reorient frame, then release
+    action_hint: descend into the reorient frame, then release
     target_frame: u_green_reorient
     grasp_width_m: 0.042
     grasp_center_offset:
@@ -183,9 +188,14 @@ steps:
 
   - step_id: place_approach_u_green
     object_id: u_green
-    action_hint: move to a standoff above the placement frame, do not descend yet
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_green_placement
-    standoff_m: 0.15
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. from u_green_pick.plan.yaml.
+    target_offset:
+      position: {x: 0.0, y: -0.15022, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
@@ -193,7 +203,7 @@ steps:
 
   - step_id: place_u_green
     object_id: u_green
-    action_hint: descend from the standoff into the placement frame, release, retreat
+    action_hint: descend into the placement frame, release, retreat
     target_frame: u_green_placement
     grasp_width_m: 0.042
     grasp_center_offset:
@@ -226,9 +236,14 @@ steps:
 
   - step_id: reorient_approach_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: move to a standoff above the reorient frame, do not descend yet
+    action_hint: approach the reorient frame from above, stopping clear of contact
     target_frame: inverted_u_brown_reorient
-    standoff_m: 0.20
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. derived: 0.20 m world-vertical in this frame's axes.
+    target_offset:
+      position: {x: 0.0, y: -0.20000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
@@ -236,7 +251,7 @@ steps:
 
   - step_id: reorient_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: descend from the standoff into the reorient frame, then release
+    action_hint: descend into the reorient frame, then release
     target_frame: inverted_u_brown_reorient
     grasp_width_m: 0.08
     grasp_center_offset:
@@ -266,9 +281,14 @@ steps:
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: move to a standoff above the placement frame, do not descend yet
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_brown_placement
-    standoff_m: 0.20
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. from inverted_u_brown_pick.plan.yaml.
+    target_offset:
+      position: {x: 0.0, y: -0.20000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
@@ -276,7 +296,7 @@ steps:
 
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: descend from the standoff into the placement frame, release, retreat
+    action_hint: descend into the placement frame, release, retreat
     target_frame: inverted_u_brown_placement
     grasp_width_m: 0.08
     grasp_center_offset:
@@ -309,9 +329,14 @@ steps:
 
   - step_id: place_approach_hex_blue
     object_id: hex_blue
-    action_hint: move to a standoff above the hole, do not descend yet
+    action_hint: approach the hole from above, stopping clear of contact
     target_frame: hex_blue_hole
-    standoff_m: 0.085
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. from hex_blue_pick.plan.yaml.
+    target_offset:
+      position: {x: 0.0, y: 0.08450, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
@@ -319,7 +344,7 @@ steps:
 
   - step_id: place_hex_blue
     object_id: hex_blue
-    action_hint: descend from the standoff into the hole, release, retreat
+    action_hint: descend into the hole, release, retreat
     target_frame: hex_blue_hole
     grasp_width_m: 0.03
     grasp_center_offset:
@@ -350,9 +375,14 @@ steps:
 
   - step_id: place_approach_hex_red
     object_id: hex_red
-    action_hint: move to a standoff above the hole, do not descend yet
+    action_hint: approach the hole from above, stopping clear of contact
     target_frame: hex_red_hole
-    standoff_m: 0.185
+    # Offset from the frame, expressed in the FRAME'S OWN axes (not
+    # world): these frames' local +Z does not point up, so a vertical
+    # standoff lands on local Y. from hex_red_pick.plan.yaml.
+    target_offset:
+      position: {x: 0.0, y: 0.18450, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
@@ -360,7 +390,7 @@ steps:
 
   - step_id: place_hex_red
     object_id: hex_red
-    action_hint: descend from the standoff into the hole, release, retreat
+    action_hint: descend into the hole, release, retreat
     target_frame: hex_red_hole
     grasp_width_m: 0.03
     grasp_center_offset:

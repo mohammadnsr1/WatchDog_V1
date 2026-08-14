@@ -605,6 +605,13 @@ if mcp is not None:
         grasp_center_offset_qy: float | None = None,
         grasp_center_offset_qz: float | None = None,
         grasp_center_offset_qw: float | None = None,
+        target_offset_x: float | None = None,
+        target_offset_y: float | None = None,
+        target_offset_z: float | None = None,
+        target_offset_qx: float | None = None,
+        target_offset_qy: float | None = None,
+        target_offset_qz: float | None = None,
+        target_offset_qw: float | None = None,
         clear_octomap_first: bool = False,
     ) -> dict[str, Any]:
         """Move the logical gripper grasp center to a target pose.
@@ -638,6 +645,18 @@ if mcp is not None:
         orientation loose (e.g. 0.05 rad) so the planner can absorb the small
         tilt the part has in the gripper and still find a collision-free goal.
 
+        target_offset_x/y/z (and optional target_offset_q*) apply a standoff
+        from the destination BEFORE the grasp centre is resolved, expressed in
+        the DESTINATION FRAME'S OWN axes. Use it for an approach stage: pass
+        the placement/insertion frame's pose in x..qw exactly as the pose
+        query returned it, and the standoff here -- do NOT pre-add it
+        yourself. These frames' local +Z generally does not point up, so an
+        offset added in world coordinates stages the approach sideways
+        instead of above the slot, and the resulting call is valid and plans
+        happily to the wrong place. Omit it for the seated pose itself. The
+        orientation defaults to identity, which is meaningful here: same
+        orientation, just standing off.
+
         clear_octomap_first clears MoveIt's occupancy map inside THIS call,
         immediately before planning. Use it whenever the move enters space the
         camera currently sees as occupied -- carrying a part away from where
@@ -661,6 +680,43 @@ if mcp is not None:
                 qw=qw,
             )
             width = _validate_width(gripper_width_m)
+
+            # A standoff from the destination, applied FIRST and expressed in
+            # the destination frame's OWN axes -- so an approach height stays
+            # "above the slot" however the fixture is rotated. Doing it here
+            # rather than in the caller is the point: these frames' local +Z
+            # generally does NOT point up, so adding the offset in world
+            # coordinates lands the approach sideways, and a caller that gets
+            # it wrong produces a perfectly valid call to the wrong place.
+            if any(
+                component is not None
+                for component in (
+                    target_offset_x,
+                    target_offset_y,
+                    target_offset_z,
+                    target_offset_qx,
+                    target_offset_qy,
+                    target_offset_qz,
+                    target_offset_qw,
+                )
+            ):
+                target_offset_pose = make_pose(
+                    position={
+                        "x": _validate_float("target_offset_x", 0.0 if target_offset_x is None else target_offset_x),
+                        "y": _validate_float("target_offset_y", 0.0 if target_offset_y is None else target_offset_y),
+                        "z": _validate_float("target_offset_z", 0.0 if target_offset_z is None else target_offset_z),
+                    },
+                    orientation={
+                        "x": _validate_float("target_offset_qx", 0.0 if target_offset_qx is None else target_offset_qx),
+                        "y": _validate_float("target_offset_qy", 0.0 if target_offset_qy is None else target_offset_qy),
+                        "z": _validate_float("target_offset_qz", 0.0 if target_offset_qz is None else target_offset_qz),
+                        # Identity IS meaningful here, unlike grasp_center_offset:
+                        # it means "same orientation, just standing off".
+                        "w": _validate_float("target_offset_qw", 1.0 if target_offset_qw is None else target_offset_qw),
+                    },
+                )
+                pose = compose_poses(pose, target_offset_pose)
+
             # When an offset is supplied, x..qw were the DESTINATION pose of the
             # OBJECT and the grasp centre is composed from it here -- the same
             # dual meaning execute_approach_and_preposition has. Without this

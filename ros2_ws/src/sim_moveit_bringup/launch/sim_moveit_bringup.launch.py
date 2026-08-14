@@ -537,14 +537,15 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "octomap_resolution",
-                default_value="0.025",
+                default_value="0.01",
                 description=(
-                    "Octomap leaf size in metres. Was forced to 0.01, which over the "
-                    "crop box below is up to ~11M cells and made collision checking "
-                    "the dominant planning cost -- planning to the 'ready' joint pose "
-                    "was observed failing outright. Every assembly part is already a "
-                    "registry collision mesh, so the octomap only needs to catch the "
-                    "table and unmodelled clutter; 1cm fidelity bought nothing there."
+                    "Octomap leaf size in metres. Inert while use_octomap is false "
+                    "and nothing publishes a cloud -- the work surface is modelled "
+                    "by the workspace_floor slab instead. Kept as an argument rather "
+                    "than hardcoded so it can be tuned if perception is turned back "
+                    "on: at 0.01 over the crop box below this is millions of cells, "
+                    "and collision checking against them was the dominant planning "
+                    "cost when the octomap WAS live."
                 ),
             ),
             DeclareLaunchArgument(
@@ -751,8 +752,15 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "workspace_floor_max_x",
-                default_value="0.9",
-                description="Floor slab maximum X in the target frame.",
+                default_value="1.5",
+                description=(
+                    "Floor slab maximum X in the target frame. Extended past the "
+                    "~0.85 m reach envelope the other three bounds follow, so the "
+                    "slab keeps covering the bench in front of the robot rather "
+                    "than ending mid-surface. Slab beyond reach costs only "
+                    "collision-check surface and RViz clutter, so widen or narrow "
+                    "this to taste."
+                ),
             ),
             DeclareLaunchArgument(
                 "workspace_floor_min_y",
@@ -761,7 +769,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "workspace_floor_max_y",
-                default_value="0.9",
+                default_value="0.2",
                 description="Floor slab maximum Y in the target frame.",
             ),
             DeclareLaunchArgument(
