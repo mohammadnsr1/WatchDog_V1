@@ -30,8 +30,7 @@ instruction_spec: |
   Order matters. Each part you seat becomes an obstacle for the ones after it,
   so do not reorder without reason.
 
-  Moving to a safe joint pose at the beginning, and again when planning seems
-  to be failing, might be a good choice.
+  Move to safe joint pose at the beginning of the task.
 
   u_green and inverted_u_brown cannot be picked in their final orientation:
   each must be picked flat, set down at its reorient frame, released,
@@ -41,14 +40,13 @@ instruction_spec: |
   Preconditions:
     - All four parts and base2 are present and localized within their
       registry tolerances.
-    - The gripper is empty.
 
   Effects (per part):
     - The part's final pose matches its placement frame within the part's
       registry position and orientation tolerances.
     - The part was grasped securely on the way there: measured width at
-      plateau matched the step's grasp_width_m within tolerance, and it
-      lifted at least the registry lift_height_min_m.
+      plateau matched the step's grasp_width_m within tolerance; no slippage in hand meaning the part
+      should not move more than registry tolerances relative to tcp.
     - Previously seated parts are undisturbed: none has moved beyond its
       registry position tolerance from its pre-step snapshot.
 
@@ -57,16 +55,16 @@ instruction_spec: |
       max_clamp_effort.
     - The arm never drives a part into base2 or into an already-seated part
       outside the intended seating contact.
+    - Only the parts involved in each step should be manipulated, and touched. the rest of the parts and objects should remain undisturbed. 
 
-  Working notes for this cell, learned from validating these steps:
+  Working notes:
 
     - Sync the scene BEFORE the first pick, and again after any release, so
       every part exists as a world collision object before you grasp it.
       Attaching a part removes it from the world first; if it was never synced
       in, that removal warns that the object does not exist and the part is
       attached from message geometry rather than from its registry mesh. The
-      planner then reasons about the held part with the wrong shape. A run
-      that skipped the initial sync is how the previous attempt got there.
+      planner then reasons about the held part with the wrong shape. 
 
     - A collision object named workspace_floor may appear in the scene. It is
       the bench, published by the bringup, not a part and not a fixture. Never
@@ -74,29 +72,7 @@ instruction_spec: |
       the planner refuses to route below the work surface. If it is missing
       the cell was launched without it, which is not something to work around.
 
-    - The occupancy map does not follow the parts. Two situations need it
-      cleared explicitly, and the Allowed Collision Matrix cannot substitute
-      because ACM pairs cover object-vs-object contact and perception voxels
-      are not exemptable at all:
-        * After grasping or re-grasping a part that had been standing on the
-          table, its own voxels remain where it used to be and the next move
-          is rejected as starting in collision. Attaching does not clear them.
-        * Before seating a part, the surrounding parts are represented twice
-          -- as synced collision objects and as voxels -- and the part must
-          enter the space those voxels occupy.
-      Clear it as part of the move itself: the move tools take a
-      clear_octomap_first flag that clears inside the same call, immediately
-      before planning. A separate clear in an earlier turn is useless here --
-      the map republishes continuously and has already refilled by the time
-      the next turn issues the move, which then fails as starting in
-      collision. That is exactly how the previous run stalled.
 
-    - Seating wants the opposite planning trade from a free-space move: keep
-      the position goal tight so the part enters its slot, but loosen the
-      orientation goal (around 0.05 rad) so the planner can absorb the small
-      tilt the part has in the gripper and still find a collision-free goal.
-      Do not combine that with the exact-IK option; exact IK makes the
-      tolerances inert.
 
     - After releasing a seated part, back the TCP straight out before moving
       on. Retreat from the TCP pose, not from a grasp-centre pose: the
@@ -363,12 +339,12 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from hex_blue_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: 0.08450, z: 0.0}
+      position: {x: 0.0, y: 0.1, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
 
   - step_id: place_hex_blue
     object_id: hex_blue
@@ -377,7 +353,14 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and a pin insertion is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
 
   # ---- hex_red: single pick, direct insertion -----------------------------
   - step_id: pick_hex_red
@@ -391,7 +374,7 @@ steps:
   - step_id: lift_hex_red
     object_id: hex_red
     action_hint: lift straight up from the grasp, no lateral motion
-    lift_height_m: 0.30
+    lift_height_m: 0.20
     grasp_width_m: 0.03
     # The part is already held: this is the SAME grasp relationship
     # established at the pick. The lift tool needs it to keep the grasp
@@ -409,7 +392,7 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from hex_red_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: 0.18450, z: 0.0}
+      position: {x: 0.0, y: 0.1, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
@@ -424,6 +407,14 @@ steps:
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    # Slow for the final descent: at low speed the commanded trajectory
+    # is tracked far more closely, and a pin insertion is where tracking error
+    # turns into a jam. The transits above stay at the cell default.
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
 
 
 object_ids: |
