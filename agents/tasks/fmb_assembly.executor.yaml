@@ -213,7 +213,7 @@ steps:
     grasp_width_m: 0.08
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.003}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: lift_inverted_u_brown
@@ -224,7 +224,7 @@ steps:
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.003}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_approach_inverted_u_brown
@@ -239,7 +239,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.003}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_inverted_u_brown
@@ -248,7 +248,7 @@ steps:
     target_frame: inverted_u_brown_reorient
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.003}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
@@ -317,7 +317,7 @@ steps:
     approach_distance_m: 0.0
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: lift_hex_blue
     object_id: hex_blue
@@ -328,7 +328,7 @@ steps:
     # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: place_approach_hex_blue
     object_id: hex_blue
@@ -343,7 +343,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
 
   - step_id: place_hex_blue
     object_id: hex_blue
@@ -352,7 +352,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a pin insertion is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -368,7 +368,7 @@ steps:
     approach_distance_m: 0.0
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: lift_hex_red
     object_id: hex_red
@@ -379,7 +379,7 @@ steps:
     # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: place_approach_hex_red
     object_id: hex_red
@@ -394,7 +394,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
 
   - step_id: place_hex_red
     object_id: hex_red
@@ -403,7 +403,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a pin insertion is where tracking error
     # turns into a jam. The transits above stay at the cell default.
