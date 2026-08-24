@@ -159,13 +159,16 @@ def test_approach_distance_sign_is_taken_as_given():
     assert pre2["position"]["z"] < grasp2["position"]["z"]
 
 
-def test_grasp_center_orientation_is_world_not_composed():
-    """grasp_center_offset.orientation is the DESIRED WORLD orientation.
+def test_grasp_center_orientation_is_composed_with_object():
+    """grasp_center_offset.orientation is OBJECT-RELATIVE and gets composed.
 
-    Regression guard for the other half of the convention change. With the
-    object NOT at identity, the old composed form returned a different
-    orientation; the shared helper must return the offset's orientation
-    verbatim.
+    Regression guard for the convention. The offset is the grasp centre's
+    rotation relative to the object, so the grasp inherits the part's roll,
+    pitch and yaw -- which is what lets a part re-picked after settling
+    off-square be gripped square to itself. It is NOT a world orientation
+    (an earlier revision read it that way and a settled part could not be
+    re-picked). With the object off-identity the two differ, which is what
+    this pins.
     """
     m = _import_motion_server()
     # object yawed 180 deg about Z
@@ -179,9 +182,29 @@ def test_grasp_center_orientation_is_world_not_composed():
     )
     grasp_center_pose = res[0]
     o = grasp_center_pose["orientation"]
-    assert (o["x"], o["y"], o["z"], o["w"]) == pytest.approx((1.0, 0.0, 0.0, 0.0))
+    # object (0,0,1,0) composed with offset (1,0,0,0) -> (0,1,0,0)
+    assert (o["x"], o["y"], o["z"], o["w"]) == pytest.approx((0.0, 1.0, 0.0, 0.0), abs=1e-9)
     # position still rotates through the object's orientation: +y -> -y
     assert grasp_center_pose["position"]["y"] == pytest.approx(0.2 - 0.04)
+
+
+def test_identity_object_leaves_authored_orientation_readable():
+    """At identity the composed value equals the authored one.
+
+    This is why {1,0,0,0} still reads as "top-down" for a part resting square,
+    which is most parts at the start of a task.
+    """
+    m = _import_motion_server()
+    res = m._compute_approach_geometry(
+        frame_id="world", x=0.5, y=0.2, z=0.1,
+        qx=0.0, qy=0.0, qz=0.0, qw=1.0,
+        gripper_width_m=0.04, approach_distance_m=-0.05,
+        grasp_center_offset_y=0.04,
+        grasp_center_offset_qx=1.0, grasp_center_offset_qy=0.0,
+        grasp_center_offset_qz=0.0, grasp_center_offset_qw=0.0,
+    )
+    o = res[0]["orientation"]
+    assert (o["x"], o["y"], o["z"], o["w"]) == pytest.approx((1.0, 0.0, 0.0, 0.0), abs=1e-9)
 
 
 def test_offset_without_orientation_is_rejected():

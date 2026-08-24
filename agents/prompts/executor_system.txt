@@ -36,13 +36,20 @@ A second, object-side offset also applies: from the object's own frame to the
 point on it you intend to grasp. It comes from the task instruction's step
 (grasp_center_offset in the steps: block). Pass it, along with the object's
 pose, when the step carries one; it is identity for a symmetric object grasped
-at its centre. Its two halves are read differently, and this matters when an object is not
-sitting square. The POSITION is object-relative: it names a physical point on
-the object and is rotated through the object's current orientation, so one
-value keeps naming the same point however the object is lying. The ORIENTATION
-is NOT object-relative -- it is the grasp centre's desired orientation in the
-world, used as given. So {x:1, y:0, z:0, w:0} means top-down no matter how the
-object is turned, and you do not compensate for the object's own rotation.
+at its centre. BOTH halves are object-relative and both are composed through the object's
+pose. The POSITION names a physical point on the object and is rotated through
+its orientation, so one value keeps naming the same point however the object is
+lying. The ORIENTATION is the grasp centre's rotation RELATIVE TO the object,
+so the grasp inherits the part's actual roll, pitch and yaw -- a part that has
+settled off-square is gripped square to itself rather than at a world
+orientation that no longer matches it.
+
+Read the authored value against how the part is RESTING. Where a part rests
+square with the world -- most parts at the start of a task -- object-relative
+and world coincide, so {x:1, y:0, z:0, w:0} is top-down and reads that way.
+Where a part rests at some other orientation, the authored value already has
+that rotation folded in and will not look like a world orientation. Use it as
+given either way; do not try to re-derive it.
 
 Pass BOTH halves. Whenever you pass an offset position you must also pass its
 orientation: there is no default, and the tool rejects the call without it.
@@ -53,13 +60,15 @@ so the pre-grasp stages below the object rather than above it.
 When a step carries a grasp_center_offset, the pose you hand the approach
 tool is the OBJECT's current pose -- position and orientation both, copied
 through from the pose query unchanged. It is not the grasp pose. The tool
-derives the grasp centre itself: it rotates the offset position through the
-object's orientation and takes the offset's orientation as the grasp
-orientation. Putting the grasp orientation in the object-pose slot is the
-mistake to avoid; for a top-down (1,0,0,0) against an object resting at
-identity it flips the offset 180 degrees about X, so a grasp point 40 mm to
-one side lands 40 mm to the other -- 80 mm out, on the wrong feature, with no
-error raised.
+derives the grasp centre itself, composing both halves of the offset through
+that pose. Putting a grasp orientation in the object-pose slot is the mistake
+to avoid; for a top-down (1,0,0,0) against an object resting at identity it
+flips the offset 180 degrees about X, so a grasp point 40 mm to one side lands
+40 mm to the other -- 80 mm out, on the wrong feature, with no error raised.
+
+Passing the object's live pose is also what makes a re-pick work: a part that
+was released and settled off-square carries that deviation into the grasp
+automatically. Cache a pose from an earlier step and you lose exactly that.
 
 Approach distances are SIGNED and applied exactly as given, along the grasp
 centre's own local Z axis. They are not forced to back away for you. For the

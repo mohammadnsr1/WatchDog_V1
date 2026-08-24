@@ -282,32 +282,28 @@ def _compose_grasp_center_from_object(
     steps: block, not the model registry. Any component left None defaults to
     identity, so a caller can supply only the axes that differ.
 
-    CONVENTION CHANGE: this previously returned
-    compose_poses(object_pose, offset_pose), composing orientation against the
-    object frame. It now delegates to
-    geometry.grasp_center_from_object_and_offset, where POSITION is
-    object-relative but ORIENTATION is the desired WORLD orientation taken
-    directly. That is the convention test/plan_assembly_step.py validates
-    against, so an offset proven there now means the same thing here. The two
-    agree exactly whenever the object's orientation is identity at grasp time
-    (every task in the registry when this changed); they differ for a
-    reorient/flip step, which is precisely the case the old form got wrong.
+    Delegates to geometry.grasp_center_from_object_and_offset, the single
+    implementation this and test/plan_assembly_step.py share, so an offset
+    proven there means the same thing here. BOTH halves are object-relative
+    and composed through the object's pose, so the grasp inherits the part's
+    actual roll/pitch/yaw -- which is what lets a part re-picked after
+    settling off-square be gripped square to itself.
     """
-    # Orientation has no safe default under this convention. It is the grasp
-    # centre's DESIRED WORLD orientation, so leaving it out silently means
-    # "align the grasp centre with the world axes" -- which is essentially
-    # never intended, and for the top-down grasps here inverts the approach
-    # axis, sending the pre-grasp BELOW the object instead of above it. (It
-    # used to be composed against the object, where identity harmlessly meant
-    # "inherit the object's orientation".) Fail loud instead.
+    # Orientation has no safe default. Identity here means "grasp centre
+    # aligned with the object's own frame", which for a part resting square
+    # points the gripper UP -- inverting the approach axis and sending the
+    # pre-grasp BELOW the object instead of above it. Nothing intends that,
+    # and it fails silently rather than erroring, so require it.
     if all(component is None for component in (oqx, oqy, oqz, oqw)):
         raise ValueError(
             "grasp_center_offset orientation (grasp_center_offset_qx/qy/qz/qw) is "
             "required when a grasp_center_offset position is supplied. It is the "
-            "grasp centre's DESIRED WORLD orientation, not an object-relative "
-            "rotation, so there is no meaningful default -- e.g. pass "
-            "qx=1, qy=0, qz=0, qw=0 for a top-down grasp. Source it from this "
-            "step's grasp_center_offset in the task instruction's steps: block."
+            "grasp centre's rotation RELATIVE TO the object and is composed "
+            "through the object's pose, so there is no meaningful default: "
+            "identity would align the grasp with the object's own frame and, "
+            "for a part resting square, point the gripper upward. For a part "
+            "resting square, qx=1, qy=0, qz=0, qw=0 is top-down. Source it from "
+            "this step's grasp_center_offset in the task instruction's steps: block."
         )
 
     offset_pose = make_pose(
@@ -923,6 +919,7 @@ if mcp is not None:
             comes from the RG2 calibration table, and is applied automatically
             from gripper_width_m.
 
+
         Returns
         -------
         dict with keys:
@@ -1106,6 +1103,7 @@ if mcp is not None:
         3. Robot moves the grasp center to the exact requested position
            (grasp TCP pose). Gripper remains open.
         4. Returns. Call grasp() on the gripper server to close the fingers.
+
 
         Returns
         -------

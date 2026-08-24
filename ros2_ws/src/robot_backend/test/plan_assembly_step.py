@@ -17,19 +17,13 @@ that loop directly, no agent in the middle:
      owner (scene_tf_sync_node, via /get_object_pose) -- this script does
      NOT open a second TF buffer.
   2. Resolve the grasp center in world frame from a grasp_center_offset you
-     supply as {position: OBJECT-frame point, orientation: DESIRED WORLD
-     orientation of the grasp center/TCP}. Position is genuinely
-     object-relative and gets rotated+translated through the object's live
-     TF orientation; orientation is taken directly, not composed with the
-     object's orientation -- see grasp_center_world_from_object_and_offset's
-     docstring for why this split is deliberate. NOTE: this is a narrower
-     convention than the executor.yaml steps: block has historically stored
-     (which composed orientation against the object frame too); the two are
-     numerically identical only when the object's live orientation was
-     identity at authoring time, which happens to be true for every
-     grasp_center_offset in the registry today. See the ASSUMPTIONS header
-     for what still needs to change in motion_mcp_server.py to make this
-     the actual system-wide convention rather than just this script's.
+     supply as {position: OBJECT-frame point, orientation: rotation RELATIVE
+     TO the object}. BOTH halves are composed through the object's live TF
+     pose, so the grasp inherits the part's actual roll/pitch/yaw and a part
+     that settled off-square is still gripped square to itself. Shared with the
+     live agent stack: motion_mcp_server composes through the same
+     utils.geometry.grasp_center_from_object_and_offset, so an offset
+     validated here means the same thing to the executor.
   3. Compute pre-grasp/pre-place and grasp/place TCP poses the same way
      motion_mcp_server._compute_approach_geometry does: tcp_target_from_grasp_center
      at the target center, and at the target center offset by
@@ -124,17 +118,18 @@ line by line (see the code for exact file:line references):
     background thread on that SAME node would race it. rg2_effort_sweep.py
     hits the identical constraint and solves it the identical way (its
     TFReader/EffortLogger each get their own background-spun node).
-  - grasp_center_offset.orientation semantics: CHANGED from the previous
-    version of this script (which composed offset.orientation against the
-    object's live TF orientation, matching executor.yaml's historical
-    convention) to reading it as the DESIRED WORLD orientation of the
-    grasp center/TCP directly. Rationale and exact math in
-    geometry.grasp_center_from_object_and_offset's docstring. NOW SHARED:
-    motion_mcp_server's _compose_grasp_center_from_object calls that same
-    helper, so an offset validated here means the same thing to the live
-    agent stack. (It previously composed orientation against the object
-    frame, which agreed only when the object sat at identity -- exactly
-    the reorient/flip case it got wrong.)
+  - grasp_center_offset.orientation semantics: OBJECT-RELATIVE, composed
+    through the object's live pose along with the position half. The grasp
+    therefore inherits the part's actual roll/pitch/yaw, which is what lets a
+    part re-picked after settling off-square be gripped square to itself. An
+    earlier revision read it as a DESIRED WORLD orientation, taken directly;
+    that made {1,0,0,0} literally mean top-down but left a settled part
+    ungrippable, since the grasp ignored how the part was actually lying.
+    Read authored values against the part's RESTING orientation: where a part
+    rests square with the world the two conventions agree and {1,0,0,0} still
+    reads as top-down, which covers most parts at the start of a task.
+    SHARED: motion_mcp_server calls the same helper, so this script and the
+    live agent stack cannot drift apart again.
   - Approach/pre-place offset direction: both this script's
     pregrasp_center_from_grasp_center and motion_mcp_server._compute_approach_geometry
     compose the offset in the target pose's own LOCAL frame via
@@ -180,11 +175,11 @@ steps:
     action: approach_and_preposition
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}   # OBJECT frame -- a point on the object
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}   # DESIRED WORLD orientation of the
-                                                        # grasp center/TCP -- NOT composed
-                                                        # against the object's orientation.
-                                                        # {1,0,0,0} = top-down regardless of
-                                                        # how the object is currently sitting.
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}   # rotation RELATIVE TO the object,
+                                                        # composed through its live pose.
+                                                        # {1,0,0,0} reads as top-down while
+                                                        # the part rests square with world;
+                                                        # a tilted part tilts the grasp too.
     stop_at_pregrasp: false
 
   - step_id: grasp
@@ -365,7 +360,8 @@ def grasp_center_world_from_object_and_offset(object_pose: dict, offset_spec: di
     Thin wrapper over robot_backend.utils.geometry's shared implementation --
     the same function motion_mcp_server now calls, so the convention cannot
     drift between what this script validates and what the agent executes.
-    See that docstring for why position and orientation are asymmetric.
+    Both halves are object-relative and both compose through the object's
+    pose; see that docstring for how to read an authored value.
     """
 
     return grasp_center_from_object_and_offset(
@@ -740,7 +736,7 @@ def run_step(
         offset_ori = step["grasp_center_offset"].get("orientation", IDENTITY_QUAT)
         print(f"    object '{object_id}' world pose      : {fmt_pose(object_pose)}")
         print(f"    grasp point (OBJECT-frame position)  : ({offset_pos['x']:+.4f}, {offset_pos['y']:+.4f}, {offset_pos['z']:+.4f})")
-        print(f"    grasp orientation (DESIRED WORLD)     : ({offset_ori['x']:+.4f}, {offset_ori['y']:+.4f}, {offset_ori['z']:+.4f}, {offset_ori['w']:+.4f})")
+        print(f"    grasp orientation (OBJECT-RELATIVE)   : ({offset_ori['x']:+.4f}, {offset_ori['y']:+.4f}, {offset_ori['z']:+.4f}, {offset_ori['w']:+.4f})")
         print(f"    grasp_center (world)             : {fmt_pose(grasp_center_world)}")
         print(f"    pre_grasp_center (world, {approach_distance_m:+.3f}m local Z): {fmt_pose(pre_grasp_center_world)}")
         print(f"    pre_grasp TCP                    : {fmt_pose(pre_grasp_tcp)}")
@@ -1086,7 +1082,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         "planning against a scene that does not match its assumptions.")
     p.add_argument("--object", type=str, default=None, help="ad hoc mode: object_id")
     p.add_argument("--offset-pos", type=str, default="0,0,0", help="ad hoc mode: x,y,z, a point on the object in the OBJECT frame")
-    p.add_argument("--offset-quat", type=str, default="0,0,0,1", help="ad hoc mode: qx,qy,qz,qw, the DESIRED WORLD orientation of the grasp center/TCP (not object-frame)")
+    p.add_argument("--offset-quat", type=str, default="0,0,0,1", help="ad hoc mode: qx,qy,qz,qw, the grasp centre rotation RELATIVE TO the object (composed through its pose)")
     p.add_argument("--width", type=float, default=None, help="ad hoc mode: gripper_width_m")
     p.add_argument("--approach-distance", type=float, default=-0.10,
                    help="ad hoc mode: approach_distance_m -- SIGNED, applied as given "

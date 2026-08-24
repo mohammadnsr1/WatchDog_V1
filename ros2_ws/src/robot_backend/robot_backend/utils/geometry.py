@@ -62,19 +62,30 @@ def grasp_center_from_object_and_offset(
 ) -> PoseDict:
     """Resolve a grasp_center_offset against an object pose.
 
-    POSITION and ORIENTATION are handled asymmetrically, deliberately.
+    Both halves are OBJECT-RELATIVE, and both are composed through the
+    object's pose:
 
-    POSITION is object-relative: it names a physical point on the object, so
-    it is rotated and translated through the object's orientation. That is
-    what makes one offset reusable after the object moves or is reoriented.
+        position    = object.position + R(object.orientation) * offset.position
+        orientation = object.orientation (x) offset.orientation
 
-    ORIENTATION is the grasp center's DESIRED WORLD orientation, taken
-    directly -- NOT composed with the object's orientation. The composed
-    alternative would force the author to hand-solve
+    POSITION names a physical point on the object, so rotating it through the
+    object's orientation is what keeps one value naming the same point however
+    the object is lying.
+
+    ORIENTATION is the grasp centre's rotation RELATIVE TO the object, so the
+    grasp inherits the part's actual roll, pitch and yaw. That is what lets a
+    part re-picked after it has settled off-square be gripped square to
+    itself, instead of at a fixed world orientation that no longer matches it.
+
+    Read the authored value against the object's RESTING orientation. Where a
+    part rests at identity -- which is most of them at the start of a task --
+    object-relative and world agree, so {1,0,0,0} is top-down and stays
+    readable as "top-down". Where a part rests at some other orientation (one
+    standing at a reorient frame, say), the authored value is that rotation
+    composed with the part's own, so it will NOT look like a world
+    orientation; derive it as
         offset.orientation = inverse(object.orientation) (x) desired_world
-    again every time the object's resting orientation changed, just to keep
-    meaning "top down". Read as a world orientation, {1,0,0,0} means top-down
-    no matter how the object happens to be sitting.
+    for the pose the part is expected to be in when the step runs.
 
     Corollary the caller owns: position and orientation are chosen
     independently here, so nothing checks that the named point is reachable
@@ -90,9 +101,15 @@ def grasp_center_from_object_and_offset(
         orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
     )
     composed_position = compose_poses(object_pose, position_only_offset)["position"]
+    orientation = normalize_quaternion(
+        multiply_quaternions(
+            normalize_quaternion(dict(object_pose["orientation"])),
+            normalize_quaternion(dict(offset_pose["orientation"])),
+        )
+    )
     return make_pose(
         position=composed_position,
-        orientation=offset_pose["orientation"],
+        orientation=orientation,
         frame_id=object_pose.get("frame_id"),
     )
 

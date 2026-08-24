@@ -8,12 +8,10 @@ exist because a claim and the physical truth can diverge.
 
 ## Authority
 
-You may observe, arm monitors, halt execution, and record verdicts. That is all.
+You may observe, arm monitors, and record verdicts. That is all.
 You cannot move the arm, actuate the gripper, attach or detach objects, or
 modify the planning scene. No tool you have does these things. Do not attempt to
 achieve them indirectly by halting to provoke executor behaviour.
-
-Halting stops execution. It never steers it. There is no resume.
 
 ## Evidence discipline
 

@@ -92,10 +92,17 @@ step_plan: |
 
 steps:
   # ---- u_green: pick flat, reorient upright, seat -------------------------
-  # The reorient and placement grasp orientations differ from the pick because
-  # the part is ATTACHED at those points: the object->gripper transform is
-  # fixed at grasp time, so the orientation is a consequence of where the part
-  # must end up, not a free choice. Values below are the validated ones.
+  # grasp_center_offset is OBJECT-RELATIVE in both halves: the tool composes
+  # it through the part's live pose, so the grasp inherits whatever roll,
+  # pitch and yaw the part actually has. That is what lets a re-pick work
+  # after the part has settled off-square.
+  #
+  # Read each value against how the part RESTS at that step. Where it rests
+  # square with world, {1,0,0,0} is top-down and reads that way. Where it
+  # rests rotated (standing at a reorient frame, seated in a slot) the value
+  # already has that rotation folded in and will NOT look like a world
+  # orientation -- it is inverse(resting) (x) desired_world. Every value here
+  # was re-derived that way and round-trips to the validated world grasp.
   - step_id: pick_u_green
     object_id: u_green
     grasp_width_m: 0.042
@@ -109,10 +116,8 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.042
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -130,7 +135,7 @@ steps:
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_u_green
     object_id: u_green
@@ -139,7 +144,7 @@ steps:
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -154,20 +159,18 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: lift_u_green_second
     object_id: u_green
     action_hint: lift straight up from the re-grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.042
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: place_approach_u_green
     object_id: u_green
@@ -182,7 +185,7 @@ steps:
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_u_green
     object_id: u_green
@@ -191,7 +194,7 @@ steps:
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and seating into the slot is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -216,10 +219,8 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.30
     grasp_width_m: 0.08
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -237,7 +238,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_inverted_u_brown
     object_id: inverted_u_brown
@@ -246,7 +247,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -261,20 +262,18 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: lift_inverted_u_brown_second
     object_id: inverted_u_brown
     action_hint: lift straight up from the re-grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.08
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
@@ -289,7 +288,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
 
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
@@ -298,7 +297,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and seating into the slot is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -323,10 +322,8 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.03
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -344,7 +341,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_hex_blue
     object_id: hex_blue
@@ -353,7 +350,7 @@ steps:
     grasp_width_m: 0.03
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a pin insertion is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -376,10 +373,8 @@ steps:
     action_hint: lift straight up from the grasp, no lateral motion
     lift_height_m: 0.20
     grasp_width_m: 0.03
-    # The part is already held: this is the SAME grasp relationship
-    # established at the pick. The lift tool needs it to keep the grasp
-    # centre on the grasp point and hold the orientation -- without it the
-    # object pose is taken as the grasp centre and the wrist flips.
+    # The part is already held: same grasp relationship as the pick. Without
+    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
