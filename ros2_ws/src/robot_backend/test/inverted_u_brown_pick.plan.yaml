@@ -30,7 +30,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}         
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}  
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     stop_at_pregrasp: false
 
   - step_id: grasp_inverted_u_brown
@@ -52,7 +52,7 @@ steps:
     target_id: inverted_u_brown_reorient
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0} 
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 
 
@@ -69,7 +69,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}         
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}  
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     stop_at_pregrasp: false
 
 
@@ -107,7 +107,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
       joint_tolerance: 0.0005
@@ -124,7 +124,7 @@ steps:
     target_id: inverted_u_brown_placement
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
       joint_tolerance: 0.0005

@@ -137,6 +137,7 @@ steps:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
+
   - step_id: reorient_u_green
     object_id: u_green
     action_hint: descend into the reorient frame, then release
@@ -144,7 +145,8 @@ steps:
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
+
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
     # turns into a jam. The transits above stay at the cell default.
@@ -159,7 +161,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: lift_u_green_second
     object_id: u_green
@@ -170,7 +172,7 @@ steps:
     # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_approach_u_green
     object_id: u_green
@@ -262,7 +264,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: lift_inverted_u_brown_second
     object_id: inverted_u_brown
@@ -273,7 +275,7 @@ steps:
     # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
@@ -288,7 +290,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
@@ -297,7 +299,7 @@ steps:
     grasp_width_m: 0.08
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and seating into the slot is where tracking error
     # turns into a jam. The transits above stay at the cell default.

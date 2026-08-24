@@ -71,7 +71,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_u_green
     action: move_grasp_center_to_pose
@@ -92,7 +92,7 @@ steps:
     target_id: u_green_reorient
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071} 
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: release_u_green
     action: release
@@ -108,7 +108,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     stop_at_pregrasp: false
 
   - step_id: regrasp_u_green
@@ -151,7 +151,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     # Placement has to land exactly, so plan against one exact IK solution in
     # joint space instead of a tolerance-sphere pose goal, and move slowly
     # enough that Isaac's joint drives actually track the commanded path.
@@ -174,7 +174,7 @@ steps:
     target_id: u_green_placement
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 0.7071, y: 0.7071, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
       joint_tolerance: 0.0005
