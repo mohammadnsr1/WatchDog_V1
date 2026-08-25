@@ -27,14 +27,18 @@ from typing import Any
 
 from .timebase import wall_ns
 
-# Candidate RGB image topics, highest priority first. Compressed variants come
-# first so they are preferred when both exist -- they cost far less memory.
+# Candidate RGB image topics, highest priority first. The RAW topic comes first
+# on purpose: captures are written as PNG, and encoding a PNG needs raw pixels.
+# A compressed (JPEG) frame would need a real codec to decode first, and this
+# cell has neither OpenCV nor Pillow -- it would land on disk as bytes nobody
+# can open. Raw costs far more ring-buffer memory per frame, which is the
+# deliberate trade: fewer frames retained, but every one of them viewable.
 # There is no depth *image* topic on this cell (only a point cloud, which is not
 # an image and is out of scope for this buffer). Override with a comma-separated
 # WATCHDOG_IMAGE_TOPICS to point at a different camera.
 _DEFAULT_IMAGE_TOPIC_CANDIDATES = (
-    "/camera/depth/rgb/compressed",
     "/camera/depth/rgb",
+    "/camera/depth/rgb/compressed",
 )
 
 

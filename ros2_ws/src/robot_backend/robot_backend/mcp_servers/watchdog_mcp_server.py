@@ -34,6 +34,7 @@ from robot_backend.events.schema import (
 )
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
+from robot_backend.utils.png_encode import encode_png
 from robot_backend.watchdog.image_buffer import ImageBufferManager, ImageRingBuffer
 from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
 from robot_backend.watchdog.ready import ReadyClient
@@ -114,21 +115,27 @@ def _load_task_steps() -> dict[str, dict[str, Any]]:
     return by_step_id
 
 
-def _frame_extension(encoding: str) -> str:
-    """Best-effort file extension for a captured frame's encoding.
+def _frame_to_png(frame: Any) -> bytes:
+    """Return PNG bytes for a buffered frame, converting if needed.
 
-    Compressed frames name their codec in the encoding/format string
-    ("rgb8; jpeg compressed", "png"); raw frames carry a pixel encoding
-    ("rgb8", "bgr8") and are written as .raw since they are not a container
-    format. The bytes are always the message payload verbatim -- the extension
-    is a hint for an analyst, not a re-encode.
+    Everything written to disk is PNG so an analyst (or the operator) can just
+    open it. Frames arrive either already PNG-encoded, or as a raw pixel buffer
+    that gets encoded here. A JPEG frame cannot be converted without a codec
+    this cell does not ship, so it raises rather than writing bytes with a .png
+    name that no viewer will open -- see image_buffer's topic preference, which
+    exists to keep that case from arising.
     """
-    enc = (encoding or "").lower()
+    data = frame.data
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return data
+    enc = (frame.encoding or "").lower()
     if "jpeg" in enc or "jpg" in enc:
-        return ".jpg"
-    if "png" in enc:
-        return ".png"
-    return ".raw"
+        raise ValueError(
+            f"frame on {frame.topic!r} is JPEG-compressed ({frame.encoding!r}) and "
+            "cannot be converted to PNG without an image codec. Buffer the raw "
+            "image topic instead (WATCHDOG_IMAGE_TOPICS)."
+        )
+    return encode_png(data, frame.width, frame.height, frame.encoding)
 
 
 def _write_capture_frames(
@@ -155,19 +162,31 @@ def _write_capture_frames(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     written: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     for idx, frame in enumerate(frames):
-        ext = _frame_extension(frame.encoding)
-        filename = f"{idx:04d}_{frame.wall_ns}{ext}"
-        (out_dir / filename).write_bytes(frame.data)
+        try:
+            png_bytes = _frame_to_png(frame)
+        except Exception as exc:
+            # Never write an unviewable file just to keep the count up.
+            skipped.append({"wall_ns": frame.wall_ns, "topic": frame.topic,
+                            "encoding": frame.encoding, "reason": str(exc)})
+            continue
+        filename = f"{idx:04d}_{frame.wall_ns}.png"
+        (out_dir / filename).write_bytes(png_bytes)
         written.append({
             "file": filename,
             "wall_ns": frame.wall_ns,
             "topic": frame.topic,
-            "encoding": frame.encoding,
+            "source_encoding": frame.encoding,
             "width": frame.width,
             "height": frame.height,
-            "nbytes": frame.nbytes,
+            "nbytes": len(png_bytes),
         })
+    if not written:
+        raise RuntimeError(
+            "no frame could be written as PNG: "
+            + "; ".join(s["reason"] for s in skipped[:3])
+        )
 
     covered_start = written[0]["wall_ns"]
     covered_end = written[-1]["wall_ns"]
@@ -178,7 +197,9 @@ def _write_capture_frames(
         "label": label,
         "step_id": step_id,
         "frame_count": len(written),
+        "format": "png",
         "frames": written,
+        "skipped": skipped,
     }
     (out_dir / "capture.json").write_text(
         json.dumps(capture_meta, indent=2), encoding="utf-8"
@@ -186,6 +207,8 @@ def _write_capture_frames(
     return {
         "output_dir": str(out_dir),
         "frame_count": len(written),
+        "format": "png",
+        "skipped_count": len(skipped),
         "covered_start_wall_ns": covered_start,
         "covered_end_wall_ns": covered_end,
     }
