@@ -112,11 +112,14 @@ steps:
 
   - step_id: lift_u_green
     object_id: u_green
-    action_hint: lift straight up from the grasp, no lateral motion
-    lift_height_m: 0.20
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.30
     grasp_width_m: 0.042
-    # The part is already held: same grasp relationship as the pick. Without
-    # it the object pose is taken as the grasp centre and the wrist flips.
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
@@ -164,8 +167,13 @@ steps:
 
   - step_id: lift_u_green_second
     object_id: u_green
-    action_hint: lift straight up from the re-grasp, no lateral motion
-    lift_height_m: 0.20
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.30
     grasp_width_m: 0.042
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -217,8 +225,13 @@ steps:
 
   - step_id: lift_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: lift straight up from the grasp, no lateral motion
-    lift_height_m: 0.30
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.30
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -267,8 +280,13 @@ steps:
 
   - step_id: lift_inverted_u_brown_second
     object_id: inverted_u_brown
-    action_hint: lift straight up from the re-grasp, no lateral motion
-    lift_height_m: 0.20
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.20
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -320,8 +338,13 @@ steps:
 
   - step_id: lift_hex_blue
     object_id: hex_blue
-    action_hint: lift straight up from the grasp, no lateral motion
-    lift_height_m: 0.20
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.20
     grasp_width_m: 0.03
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -371,8 +394,13 @@ steps:
 
   - step_id: lift_hex_red
     object_id: hex_red
-    action_hint: lift straight up from the grasp, no lateral motion
-    lift_height_m: 0.20
+    action_hint: back the gripper out along the approach axis, lifting the part clear
+    # Along the GRASP CENTRE's own local Z -- the approach axis -- so the
+    # lift always retraces the way the approach came in, whatever the part's
+    # orientation. A world-Z or object-frame offset only lifts straight up
+    # while the part rests square; for a part standing at a reorient frame
+    # it shoves it sideways across the bench instead.
+    approach_distance_m: -0.20
     grasp_width_m: 0.03
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.

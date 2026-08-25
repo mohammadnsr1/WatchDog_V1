@@ -668,6 +668,24 @@ if mcp is not None:
         orientation defaults to identity, which is meaningful here: same
         orientation, just standing off.
 
+        approach_distance_m offsets the resolved grasp centre along its OWN
+        local Z -- the same axis, and the same sign convention, as the approach
+        tool's argument of that name. Use it for a LIFT: it backs the gripper
+        out along exactly the axis the approach came in on, because the grasp
+        orientation is unchanged. That is what makes a lift reliable regardless
+        of how the part is sitting.
+
+        The sign is the SAME as the pick's, not its opposite: on both tools a
+        negative value means "back away along local Z". A top-down pick uses
+        about -0.10 to stage above the part; the matching lift uses about -0.20
+        to back further out along that same axis. A positive value drives INTO
+        the part on either tool.
+
+        Offsetting in world Z instead, or via target_offset (which is in the
+        OBJECT's axes), only lifts straight up while the part happens to rest
+        square; for a part standing at a reorient frame it drags it sideways
+        across the bench.
+
         clear_octomap_first clears MoveIt's occupancy map inside THIS call,
         immediately before planning. Use it whenever the move enters space the
         camera currently sees as occupied -- carrying a part away from where
@@ -755,6 +773,23 @@ if mcp is not None:
                     grasp_center_offset_qy,
                     grasp_center_offset_qz,
                     grasp_center_offset_qw,
+                )
+
+            # Offset along the GRASP CENTRE's own local Z, after the grasp centre
+            # is resolved. That axis IS the approach axis, so this is how a lift
+            # is guaranteed to back out exactly the way the approach came in --
+            # same orientation, opposite sign. Offsetting in world Z, or along
+            # the OBJECT's local Z, only agrees while the part happens to rest
+            # square; for a part standing at a reorient frame it drags the part
+            # sideways across the bench instead of lifting it.
+            if approach_distance_m is not None:
+                dist = _validate_float("approach_distance_m", approach_distance_m)
+                pose = compose_poses(
+                    pose,
+                    make_pose(
+                        position={"x": 0.0, "y": 0.0, "z": dist},
+                        orientation={"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                    ),
                 )
 
             backend = _ensure_backend()
