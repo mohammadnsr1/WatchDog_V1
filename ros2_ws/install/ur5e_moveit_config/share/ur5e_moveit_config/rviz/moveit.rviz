@@ -5,8 +5,10 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /TF1
         - /TF1/Frames1
         - /MotionPlanning1
+        - /MotionPlanning1/Scene Geometry1
         - /MotionPlanning1/Scene Robot1
         - /MotionPlanning1/Planning Request1
         - /MotionPlanning1/Planning Metrics1
@@ -53,11 +55,31 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        World:
+          Value: true
+        base2:
+          Value: true
         base_link:
           Value: false
         camera_depth_optical_frame:
           Value: true
         forearm_link:
+          Value: false
+        hex_blue:
+          Value: true
+        hex_blue_hole:
+          Value: true
+        hex_red:
+          Value: true
+        hex_red_hole:
+          Value: true
+        inverted_u_brown:
+          Value: true
+        inverted_u_brown_placement:
+          Value: true
+        inverted_u_brown_reorient:
+          Value: true
+        left_contact_frame:
           Value: false
         onrobot_rg2_base_link:
           Value: false
@@ -73,9 +95,17 @@ Visualization Manager:
           Value: false
         onrobot_rg2_right_outer_knuckle:
           Value: false
+        right_contact_frame:
+          Value: false
         shoulder_link:
           Value: false
         tcp:
+          Value: true
+        u_green:
+          Value: true
+        u_green_placement:
+          Value: true
+        u_green_reorient:
           Value: true
         upper_arm_link:
           Value: false
@@ -89,11 +119,38 @@ Visualization Manager:
           Value: false
       Marker Scale: 1
       Name: TF
-      Show Arrows: true
+      Show Arrows: false
       Show Axes: true
       Show Names: true
       Tree:
         world:
+          World:
+            base2:
+              {}
+            hex_blue:
+              {}
+            hex_blue_hole:
+              {}
+            hex_red:
+              {}
+            hex_red_hole:
+              {}
+            inverted_u_brown:
+              {}
+            inverted_u_brown_placement:
+              {}
+            inverted_u_brown_reorient:
+              {}
+            left_contact_frame:
+              {}
+            right_contact_frame:
+              {}
+            u_green:
+              {}
+            u_green_placement:
+              {}
+            u_green_reorient:
+              {}
           base_link:
             shoulder_link:
               upper_arm_link:
@@ -598,16 +655,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.8683388233184814
+      Distance: 2.2804365158081055
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.006268884055316448
-        Y: 0.1953154057264328
-        Z: 0.3848879039287567
+        X: 0.2910255789756775
+        Y: 0.04050006717443466
+        Z: 0.6753005385398865
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false

@@ -38,8 +38,7 @@ instruction_spec: |
   hex_blue and hex_red are picked once and inserted directly.
 
   Preconditions:
-    - All four parts and base2 are present and localized within their
-      registry tolerances.
+    - All four parts and base2 are present.
 
   Effects (per part):
     - The part's final pose matches its placement frame within the part's
