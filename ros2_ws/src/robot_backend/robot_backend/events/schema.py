@@ -153,6 +153,34 @@ class VerdictPayload(BaseModel):
     explanation: str
 
 
+class RunVerdictPayload(BaseModel):
+    """WatchDog conformance verdict scoped to the whole run, not one step.
+
+    Emitted by record_run_verdict for the end-of-run rollup a clean run
+    produces instead of a verdict per step. Deliberately a separate payload
+    rather than a sentinel step_id on the frozen VerdictPayload: a run-scoped
+    verdict has no step_id, and faking one would put it in the same namespace
+    as real step verdicts where no consumer could tell them apart.
+
+    Every clause_results entry carries its own step_id, because clause_id is
+    "<section>.<field>" (see contracts/loader.py's _make_clause) and is
+    therefore identical across all four parts -- without per-entry step_id a
+    combined rollup cannot say which part a clause result belongs to.
+
+    steps_covered is a real field rather than free text in explanation so
+    coverage can be checked by set comparison against the task's steps: block.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    verdict: str
+    claimed_outcome: str | None
+    clause_results: list[dict[str, Any]]
+    steps_covered: list[str]
+    explanation: str
+    run_scope: bool = True
+
+
 class PhasePayload(BaseModel):
     """Executor declares a named mid-step phase has been reached.
 
@@ -246,6 +274,7 @@ class EventEnvelope(BaseModel):
         "monitor_disarmed",
         "halt",
         "verdict",
+        "run_verdict",
         "phase",
         "watchdog_ready",
         "frames_captured",
@@ -268,7 +297,7 @@ _EXECUTOR_EVENT_TYPES = frozenset(
 _WATCHDOG_EVENT_TYPES = frozenset(
     {
         "monitor_fire", "monitor_armed", "monitor_disarmed", "halt", "verdict",
-        "watchdog_ready", "frames_captured",
+        "run_verdict", "watchdog_ready", "frames_captured",
     }
 )
 
@@ -285,6 +314,7 @@ EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
     "monitor_disarmed": MonitorDisarmedPayload,
     "halt": HaltPayload,
     "verdict": VerdictPayload,
+    "run_verdict": RunVerdictPayload,
     "phase": PhasePayload,
     "watchdog_ready": WatchDogReadyPayload,
     "frames_captured": FramesCapturedPayload,
@@ -347,6 +377,7 @@ def make_event(
         "monitor_disarmed",
         "halt",
         "verdict",
+        "run_verdict",
         "phase",
         "watchdog_ready",
     ],
@@ -360,6 +391,7 @@ def make_event(
         | MonitorDisarmedPayload
         | HaltPayload
         | VerdictPayload
+        | RunVerdictPayload
         | PhasePayload
         | WatchDogReadyPayload
     ),

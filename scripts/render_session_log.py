@@ -224,7 +224,11 @@ def _clause_lines(clause_results: list[Any]) -> list[str]:
         cmp_ = cr.get("comparison")
         thr = cr.get("threshold")
         passed = cr.get("pass")
-        line = f"  clause {label}: observed={obs} {cmp_} {thr} -> pass={passed}"
+        # step_id is present only on run-scoped rollup entries, where clause_id
+        # alone repeats across parts and cannot identify the step.
+        step = cr.get("step_id")
+        scope = f"[{step}] " if step else ""
+        line = f"  clause {scope}{label}: observed={obs} {cmp_} {thr} -> pass={passed}"
         note = cr.get("note")
         if note:
             line += f"  note={note}"
@@ -237,6 +241,24 @@ def _summ_record_verdict(arguments: dict[str, Any], result: dict[str, Any]) -> s
         outcome = arguments.get("verdict", result.get("verdict"))
         header = f"verdict={outcome} step_id={arguments.get('step_id')}"
         lines = [header]
+        lines.extend(_clause_lines(arguments.get("clause_results") or []))
+        return "\n".join(lines)
+
+    return _err_or(result, _ok)
+
+
+def _summ_record_run_verdict(arguments: dict[str, Any], result: dict[str, Any]) -> str:
+    """Summarize the whole-run rollup a clean run records instead of per-step
+    verdicts. Labelled RUN-SCOPED so it is never mistaken in a transcript for
+    a step verdict that happens to be missing its step_id."""
+
+    def _ok() -> str:
+        outcome = arguments.get("verdict", result.get("verdict"))
+        covered = arguments.get("steps_covered") or result.get("steps_covered") or []
+        header = f"RUN-SCOPED verdict={outcome} steps_covered={len(covered)}"
+        lines = [header]
+        if covered:
+            lines.append(f"  steps: {', '.join(str(c) for c in covered)}")
         lines.extend(_clause_lines(arguments.get("clause_results") or []))
         return "\n".join(lines)
 
@@ -363,6 +385,8 @@ _SUMMARIZERS: dict[str, Any] = {
     "get_contract": _summ_get_contract,
     "record_verdict": _summ_record_verdict,
     "verdict": _summ_record_verdict,
+    "record_run_verdict": _summ_record_run_verdict,
+    "run_verdict": _summ_record_run_verdict,
     "begin_step": _summ_begin_step,
     "end_step": _summ_end_step,
     "query_snapshot": _summ_query_snapshot,

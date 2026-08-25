@@ -425,7 +425,10 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                         tc.arguments,
                     )
 
-                    if tc.name == "record_verdict":
+                    # Both count: a clean run records no per-step verdict and
+                    # exactly one run-scoped rollup, and a verdict_count of 0
+                    # there would read as "the watchdog recorded nothing".
+                    if tc.name in ("record_verdict", "record_run_verdict"):
                         verdict_count += 1
 
                     if tc.name == WAIT_FOR_EVENT_TOOL:

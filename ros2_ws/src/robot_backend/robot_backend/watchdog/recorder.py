@@ -36,8 +36,8 @@ TF_SAMPLE_HZ = 20.0
 # would waste a turn on something it just did.
 _SELF_EMITTED_EVENT_TYPES = frozenset(
     {
-        "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict", "halt",
-        "frames_captured",
+        "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict",
+        "run_verdict", "halt", "frames_captured",
     }
 )
 

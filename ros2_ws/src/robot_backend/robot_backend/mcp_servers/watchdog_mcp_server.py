@@ -28,6 +28,7 @@ from robot_backend.events.bus import EventBus
 from robot_backend.events.schema import (
     FramesCapturedPayload,
     KNOWN_EVENT_TYPES,
+    RunVerdictPayload,
     VerdictPayload,
     available_event_type_definitions,
     make_event,
@@ -286,6 +287,29 @@ def _validate_clause_results(clause_results: list[dict[str, Any]]) -> None:
             raise ValueError(
                 f"clause_results[{i}] has a malformed clause_id {clause_id!r}; "
                 f'expected "<section>.<field>", e.g. "effects.object_lift_height_m".'
+            )
+
+
+def _validate_run_clause_results(clause_results: list[dict[str, Any]]) -> None:
+    """Shape-check clause_results for record_run_verdict.
+
+    The step-scoped check plus one addition: every entry must also carry a
+    non-empty step_id naming the step it was evaluated under. clause_id is
+    "<section>.<field>" (contracts/loader.py's _make_clause) with no object
+    and no step in it, so the same clause_id appears once per part in a
+    whole-run rollup. Without a per-entry step_id the rollup would validate
+    clean while being unreadable -- four identical effects.* entries with no
+    way to tell which part each concerned.
+    """
+    _validate_clause_results(clause_results)
+    for i, entry in enumerate(clause_results):
+        step_id = entry.get("step_id")
+        if not isinstance(step_id, str) or not step_id:
+            raise ValueError(
+                f"clause_results[{i}] has no usable step_id ({step_id!r}). A "
+                f"run-scoped verdict combines several steps, and clause_id "
+                f"alone cannot say which step an entry came from -- every "
+                f"entry must name its own step_id."
             )
 
 
@@ -1017,10 +1041,15 @@ if mcp is not None:
         it does not check the id against the actual contract, which would
         require this server to know which object the step concerned.
 
-        One verdict is expected per step_id, recorded at end_step. This is
-        detected, not prevented: a repeated step_id still publishes (a retried
-        step may legitimately produce a second verdict) but the return carries
-        duplicate_step_id: true and a warning is logged.
+        Called on a finding, not on a schedule: an adjudicated monitor fire,
+        or an end_step evidence check that fails a clause with nothing having
+        fired. A run that produces no findings records nothing here and calls
+        record_run_verdict once at the end instead.
+
+        A repeated step_id is therefore normal -- a step with two fires
+        produces two verdicts. It still publishes, and the return carries
+        duplicate_step_id: true with a warning logged, so a genuinely
+        unintended repeat stays visible.
         """
         command = "record_verdict"
         try:
@@ -1043,8 +1072,8 @@ if mcp is not None:
             if is_duplicate:
                 ctx.node.get_logger().warning(
                     f"record_verdict: a second verdict was recorded for "
-                    f"step_id={step_id!r}. One verdict per step is expected; "
-                    f"this may be legitimate for a retried step, but check."
+                    f"step_id={step_id!r}. Legitimate for a step with two "
+                    f"separate findings, or for a retried step, but check."
                 )
             return _ok(
                 command,
@@ -1053,6 +1082,76 @@ if mcp is not None:
             )
         except Exception as exc:
             return _error(command, exc, step_id=step_id, verdict=verdict)
+
+    @mcp.tool()
+    def record_run_verdict(
+        verdict: str,
+        clause_results: list[dict[str, Any]],
+        explanation: str,
+        steps_covered: list[str],
+        claimed_outcome: str | None = None,
+    ) -> dict[str, Any]:
+        """Publish one conformance verdict scoped to the whole run.
+
+        For the run that produced no findings: no monitor fire was adjudicated
+        as a physical departure, and no end_step evidence check failed a
+        clause. Instead of a verdict per clean step, evaluate every step's
+        effects together and record them here, once, at the true end of the
+        run. A run that already recorded a finding through record_verdict
+        needs no call here -- those recordings are that run's record, and a
+        rollup alongside them would double-count.
+
+        clause_results carries the same entries record_verdict takes, with one
+        addition: every entry must also name its own step_id. clause_id is
+        "<section>.<field>" and is identical across all four parts, so without
+        it the rollup cannot say which part a result belongs to.
+
+        steps_covered lists every step_id this verdict accounts for. It is a
+        real argument rather than a sentence in explanation so coverage can be
+        checked by set comparison against the task's steps: block, the same way
+        clause_id makes clause coverage checkable.
+
+        claimed_outcome is optional here and, when given, should summarize the
+        executor's claims across the run rather than any single step's.
+        """
+        command = "record_run_verdict"
+        try:
+            if verdict not in _VALID_VERDICTS:
+                raise ValueError(f"verdict must be one of {sorted(_VALID_VERDICTS)}.")
+            if not steps_covered or not all(
+                isinstance(s, str) and s for s in steps_covered
+            ):
+                raise ValueError(
+                    "steps_covered must be a non-empty list of step_id strings "
+                    "naming every step this run-scoped verdict accounts for."
+                )
+            _validate_run_clause_results(clause_results)
+            uncovered = sorted(
+                {e["step_id"] for e in clause_results} - set(steps_covered)
+            )
+            if uncovered:
+                raise ValueError(
+                    f"clause_results name step_ids absent from steps_covered: "
+                    f"{uncovered}. steps_covered must account for every step a "
+                    f"clause result was evaluated under."
+                )
+            ctx = _ensure_watchdog()
+            payload = RunVerdictPayload(
+                verdict=verdict,
+                claimed_outcome=claimed_outcome,
+                clause_results=clause_results,
+                steps_covered=steps_covered,
+                explanation=explanation,
+            )
+            event = make_event("run_verdict", payload)
+            ctx.event_bus.publish(event)
+            return _ok(
+                command,
+                event=event.model_dump(mode="json"),
+                steps_covered=steps_covered,
+            )
+        except Exception as exc:
+            return _error(command, exc, verdict=verdict)
 
 
 def main() -> None:

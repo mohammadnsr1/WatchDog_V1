@@ -22,9 +22,16 @@ orientation. An earlier revision read orientation as a desired WORLD value
 taken verbatim; that made `{1,0,0,0}` literally mean top-down but left a
 settled part ungrippable.
 
-Both halves are now required; omitting the orientation raises. It used to
-default to identity, which under this convention means "align to world axes"
-and inverted the approach axis — pre-grasp staged 14 cm *below* the table.
+Both halves are now required; omitting the orientation raises. Identity is not
+a safe default: it aligns the grasp with the object's own frame, which for a
+part resting square points the gripper UP and inverts the approach axis.
+
+**One offset per held span.** Because the offset IS the object→gripper
+transform, and that transform is frozen between a grasp and its release, a
+single value must hold for every step in that span (pick → lift → approach →
+place). If a step mid-span wants a different orientation, something is wrong:
+a rigid grasp cannot change without a release. This is a cheap invariant to
+check and it caught two real authoring errors.
 
 **Both are resolved by one shared helper**, `utils/geometry.grasp_center_from_object_and_offset`,
 called by `motion_mcp_server._compose_grasp_center_from_object` and by the plan
@@ -66,8 +73,17 @@ pair plans fine and puts the part somewhere else.
 |---|---|---|
 | `target_offset_x/y/z/q*` | `move_grasp_center_to_pose` | composed in frame axes, in-tool |
 | `max_velocity/acceleration_scaling_factor`, `allowed_planning_time` | `move_grasp_center_to_pose` | were hardcoded; needed for slow seating |
+| `approach_distance_m` | `move_grasp_center_to_pose` | **lifts**: offsets the resolved grasp centre along its own local Z |
 | `clear_octomap_first` | both move tools | a separate clear refills before the plan runs |
 | `retreat_tcp`, `clear_octomap` | new tools | |
+
+**Lifts go along the approach axis, not world Z.** `approach_distance_m` on the
+move tool offsets the *grasp centre* along its own local Z — the same axis the
+approach came in on, since the grasp orientation is unchanged. Sign convention
+is the SAME as the pick's (negative = back away); it is not the pick's
+opposite. A `target_offset` lift is in the OBJECT's axes and only goes up while
+the part rests square — for a part standing at a reorient frame it shoves it
+200 mm sideways across the bench, which is the "dragging" symptom.
 
 Planner: fallback chain 4→2, budget 10 s×10 → 5 s×4, `TimeoutError` folded into
 the chain, and `START_STATE_IN_COLLISION` now appends the colliding bodies from
@@ -84,6 +100,24 @@ the chain, and `START_STATE_IN_COLLISION` now appends the colliding bodies from
   (`x[-0.9,1.5] y[-0.9,0.9]`, top at z=-0.05). The octomap-clearing guidance in
   the task/prompt is therefore dormant, not wrong — it applies if perception
   returns.
+
+## 4b. Images
+
+- Captures are **PNG only**. `utils/png_encode.py` is a dependency-free encoder
+  (stdlib `zlib`/`struct`) — the MCP venv has neither OpenCV nor Pillow. Raw
+  frames used to be written as `.raw`, i.e. unopenable.
+- BGR sources are channel-swapped so they are not colour-inverted. A frame that
+  cannot become a real PNG (JPEG) is **skipped and counted**, never written
+  under a `.png` name that will not open.
+- `image_buffer` now prefers the **raw** camera topic over compressed, because
+  PNG encoding needs raw pixels. Raw costs more ring-buffer memory, so fewer
+  frames are retained.
+- Rosbag is untouched — still a rosbag.
+- Only the **watchdog** has a capture tool (`capture_frames`). An executor-side
+  `capture_image` was built and then deliberately removed: the harness is
+  text-only (`providers.py` stringifies every tool result), so the agent could
+  save a PNG but never see it. Giving it back requires emitting real image
+  content blocks in `providers.py` — a change to the eval harness.
 
 ## 5. Environment gotchas
 
@@ -105,11 +139,23 @@ longer exists), 1 rg2 width round-trip at 0.0, 2 repo-wide lint.
 
 ## 7. Open items
 
-- `lift_height_m`, `target_frame`, `action_hint` are still **prose** — nothing
-  enforces them, so the agent can substitute values (it once used `-0.08` for an
-  authored `-0.10`). `standoff_m` had the same problem and became `target_offset_*`.
+- **hex resting orientation is unresolved** and everything hex hangs on it. The
+  authored pick offset `(0.7071,0,0,0.7071)` is only a top-down grasp if the
+  pins rest at `-90,0,180`; at identity or `0,0,180` it is a side grasp, the
+  lift drags 200 mm sideways, and the pick/place offsets are inconsistent
+  across the span. Get `tf2_echo world hex_blue` before running the hex steps.
+- **The agent skips the reorient approach step.** `reorient_approach_*` and
+  `reorient_*` share `target_frame`, `object_id` and `grasp_center_offset`,
+  differing only by `target_offset` — so they read as two moves to the same
+  place. Check the transcript for whether it announced both and merged the
+  motion, or never announced the approach at all; the fix differs.
+- `target_frame`, `action_hint` are still **prose** — nothing enforces them.
+  `standoff_m` and `lift_height_m` had the same problem and became
+  `target_offset_*` and `approach_distance_m` respectively.
 - Speed knobs are only on `move_grasp_center_to_pose`; the other movers hardcode.
 - The executor **cannot call `get_contract`** (watchdog-only server, reads
   `WATCHDOG_TASK_PATH`) though `executor_system.txt` step 2 tells it to.
 - `loop.max_turns: 60` against a 24-step task.
-- Prompt updates are the user's stated next task.
+- The IDE-side MCP servers (`~/.cursor/mcp.json`, `~/.claude.json`) were
+  disabled — they leaked one orphaned ROS node set per reconnect. Backups are
+  timestamped alongside each file. `run_agent.py`'s own servers are unaffected.

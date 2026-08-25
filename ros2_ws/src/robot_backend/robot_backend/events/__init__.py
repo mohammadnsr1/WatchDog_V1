@@ -24,6 +24,7 @@ from .schema import (
     MonitorFirePayload,
     SkillEndPayload,
     SkillStartPayload,
+    RunVerdictPayload,
     VerdictPayload,
     make_event,
 )
@@ -43,5 +44,6 @@ __all__ = [
     "MonitorDisarmedPayload",
     "HaltPayload",
     "VerdictPayload",
+    "RunVerdictPayload",
     "make_event",
 ]
