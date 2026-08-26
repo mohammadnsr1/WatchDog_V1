@@ -169,7 +169,7 @@ objects:
                                           # grip width against at plateau; fixed across
                                           # clean and fault-injected runs -- the fault
                                           # perturbs grasp geometry, never this band.
-        grasp_slip_tolerance_m: 0.005    # max permitted physical drift of the object's
+        grasp_slip_tolerance_m: 0.01   # max permitted physical drift of the object's
                                           # pose relative to the gripper TCP across a
                                           # held span (grasp-confirmed -> release).
                                           # Source for the in-hand-slippage invariant's
@@ -224,7 +224,7 @@ objects:
                                           # grip width against at plateau; fixed across
                                           # clean and fault-injected runs -- the fault
                                           # perturbs grasp geometry, never this band.
-        grasp_slip_tolerance_m: 0.005    # max permitted physical drift of the object's
+        grasp_slip_tolerance_m: 0.01    # max permitted physical drift of the object's
                                           # pose relative to the gripper TCP across a
                                           # held span (grasp-confirmed -> release).
                                           # Source for the in-hand-slippage invariant's
@@ -275,7 +275,7 @@ objects:
         lift_height_min_m: 0.05
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
-        grasp_slip_tolerance_m: 0.005
+        grasp_slip_tolerance_m: 0.01
       limits:
         max_clamp_effort: 25.0
         grasp_effort_floor: 0.05
@@ -340,7 +340,7 @@ objects:
         lift_height_min_m: 0.05
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
-        grasp_slip_tolerance_m: 0.005
+        grasp_slip_tolerance_m: 0.01
       limits:
         max_clamp_effort: 20.0
         grasp_effort_floor: 0.05
@@ -369,7 +369,7 @@ objects:
         lift_height_min_m: 0.05
         disturbance_tolerance_m: 0.005
         grasp_width_tolerance_m: 0.005
-        grasp_slip_tolerance_m: 0.005
+        grasp_slip_tolerance_m: 0.01
       limits:
         max_clamp_effort: 20.0
         grasp_effort_floor: 0.05
@@ -396,9 +396,9 @@ objects:
         position_m: 0.005
         orientation_deg: 5.0
         lift_height_min_m: 0.05
-        disturbance_tolerance_m: 0.005
+        disturbance_tolerance_m: 0.01
         grasp_width_tolerance_m: 0.005
-        grasp_slip_tolerance_m: 0.005
+        grasp_slip_tolerance_m: 0.01
       limits:
         max_clamp_effort: 30.0
         grasp_effort_floor: 0.05

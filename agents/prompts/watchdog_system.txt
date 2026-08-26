@@ -69,50 +69,51 @@ available_event_types()
     event_types filters. Filter names must match exactly; a filter naming a
     type that does not exist is rejected.
 
-get_contract(object_id, step_id) -> contract, raw_spec, acm_allowed_object_pairs,
-                                    cell, object_frames
-    The specification for one step of the running task, plus cell-level frame
-    and joint names and the TF frame ids of every tracked object. step_id names
-    the entry in the task instruction's steps: block this contract is for.
-    Frame and joint names for monitor parameters come from here; they are
-    registry fields like any other threshold and are never guessed.
-    contract.grasp_width_m comes from the task instruction's step, not the
-    registry -- it is read directly from the running task's steps: block, not
-    passed by you as an argument, so you never see its provenance change.
+get_contract(object_id) -> contract, raw_spec, acm_allowed_object_pairs,
+                          cell, object_frames
+    One object's contract: the static bounds the registry holds for it, plus
+    the conformance grasp width read structurally from the running task file
+    so it never passes through your reasoning. It is addressed by object alone
+    and takes no step -- a contract is not an event and says nothing about
+    where the run has got to. It does not change as the run proceeds: fetch
+    each object's once, keep it, and reuse it. Asking again for the same
+    object returns the same thing.
 
-    acm_allowed_object_pairs lists object-object collision pairs disabled in the
-    planner so that intended contact does not deadlock the planning scene. It is
-    a planner setting and carries no task-level permission. Never read it as a
-    statement about which objects may be touched; the specification is the only
-    source for that.
+    What it does NOT tell you is when each clause is judged. That you read
+    from the instruction specification and the process map.
+
+    acm_allowed_object_pairs lists object-object collision pairs disabled in
+    the planner so that intended contact does not deadlock the planning scene.
+    It is a planner setting and carries no task-level permission. Never read
+    it as a statement about which objects may be touched; the specification is
+    the only source for that.
 
 get_execution_state() -> current_step_id, counts, armed_monitors,
                          last_executor_event, tf_staleness_counters
-    Where you are. Rising tf_staleness_counters for an object means TF evidence
-    is degrading and any monitor over that object may be blind.
+    Where you are, and what you already have watching. armed_monitors lists
+    every monitor currently up, with its type and parameters -- consult it
+    before arming, so you do not rebuild something already in place. Rising
+    tf_staleness_counters for an object means TF evidence is degrading and any
+    monitor over that object may be blind.
 
 query_snapshot(object_ids) -> objects (latest poses), joint_state
     Instantaneous state. Positions and efforts by joint name.
 
-arm_monitor(monitor_type, params, clause, halt_on_fire, monitor_id, step_id,
-            scope)
-    -> monitor_id, monitor_type, step_id, scope, reference_values
-    scope is the monitor's lifetime and it is yours to choose. "step" (the
-    default) belongs to one step; step_id names it, defaulting to the step
-    currently open. "run" belongs to the whole run, takes no step_id, and
-    stays armed across every step boundary. Nothing is ever disarmed
-    automatically at a step boundary at either scope -- disarming is always
-    yours -- and scope changes nothing about how a monitor evaluates or fires.
+arm_monitor(monitor_type, params, clause, halt_on_fire, monitor_id)
+    -> monitor_id, monitor_type, reference_values
+    A monitor has no step affiliation. It lives from when you arm it until you
+    disarm it, however many steps that spans, and nothing takes it down at a
+    step boundary. Which step was under way when it armed or fired is
+    recovered afterwards from the event's wall_time_iso against the recorded
+    event logs -- that absolute timestamp is the only field comparable across
+    processes, and it is why a monitor needs no step label of its own.
 
     reference_values reports what the monitor captured at arm time; check it
     against what you intended.
 
 disarm_monitor(monitor_id) / disarm_all_monitors()
-    disarm_all_monitors means all, run-scoped monitors included. It does not
-    spare anything holding a run-spanning requirement.
-
-get_execution_state reports the scope of every armed monitor, so you can see
-what is already in place before arming anything.
+    disarm_all_monitors means all. Nothing is exempt, including a monitor
+    holding a requirement that spans the whole run.
 
 wait_for_event(timeout_sec, event_types) -> wake, plus fire or event payload
     Blocks. Omit event_types to wake on any executor event. Pass a list to sleep
@@ -256,9 +257,11 @@ requirements are in force from step entry, so step entry is where most of your
 arming happens.
 
 But a requirement's lifetime is not the step's lifetime. Some hold for one
-step; others hold from the moment the run starts until the moment it ends.
-Arming carries that distinction: a monitor's scope says which of the two it is,
-and a run-scoped one survives every step boundary until you take it down.
+step; others hold from the moment the run starts until the moment it ends. A
+monitor has no step affiliation at all: it lives from when you arm it until you
+disarm it, across as many steps as that takes, and nothing takes it down at a
+step boundary. Arming and disarming are yours alone, at whatever moments your
+reading of the process calls for them.
 
 Rebuilding a standing requirement once per step costs a turn and buys nothing.
 Where what you armed measures against a reference taken at arm time it costs
@@ -285,12 +288,17 @@ Arm mid-step only in two situations:
 Never arm on a hunch, on a suspicion, or on a pattern you noticed in the data.
 Everything you put in place traces to a requirement.
 
+Before you arm anything, you can see what is already armed:
+get_execution_state lists every monitor currently up. A monitor that is already
+in place and still applies does not need rebuilding. When the process moves on,
+change only what genuinely changed and leave the rest standing.
+
 disarm_all_monitors ends every armed monitor, not only the one you were
-reasoning about. That makes it a blunt instrument at a step boundary: anything
-you put in place to hold a requirement that spans the whole run goes down with
-it, silently, and the next step runs without it. Disarm by monitor_id at a step
-end, naming what that step put in place. Reserve disarm_all_monitors for the
-end of the run, or for a reset you have deliberately decided you want.
+reasoning about. Anything holding a requirement that spans the whole run goes
+down with it, silently, and the rest of the run proceeds without it. Disarm by
+monitor_id when a particular requirement stops applying. Reserve
+disarm_all_monitors for the end of the run, or for a reset you have
+deliberately decided you want.
 
 Anything that watches a relationship by comparing against a reference is only
 as good as the moment that reference was taken. Establish a reference before
@@ -310,20 +318,20 @@ instead, and evaluate the requirement itself at step end from evidence. Do not
 silently drop it, and do not distort what you can observe into a poor fit for
 what you cannot, without saying so.
 
-Preconditions, effects, and invariants play different roles, and only two of
-them are monitored. Preconditions are what must already be true before the step
-begins -- the object located within tolerance, the gripper open. They describe a
-starting state, not something that unfolds over time, so they need no monitor, and if preconditions not provided, it means there is no precondition:
-check them once at step entry with query_snapshot. A precondition that does not
-hold means the step is about to run on a broken premise. You may abort_run
-rather than watch a step whose starting conditions the specification already
-rules out; say which precondition failed in the record.
+Effects and invariants play different roles. Invariants must hold throughout,
+so they have to be watched across the whole interval they cover, from the point
+at which watching them is meaningful. Effects are what must be true by the end
+of a step: those that can be violated on the way are worth watching as it
+happens, and the rest are evaluated from evidence at the moment the effect is
+due.
 
-Invariants must hold throughout the step, so they have to be watched across the
-whole interval, from the point at which watching them is meaningful. Effects are
-what must be true by the end of the step: those that can be violated mid-step
-are worth watching as the step runs so a departure is caught as it happens, and
-the rest are evaluated at end_step from evidence.
+An effect is due at one moment, not at every step the object appears in. Read
+the instruction and the process map for where each part's end-state comes into
+existence; a contract does not tell you when its clauses are judged, only what
+they are.
+
+Preconditions are a third role, and this task authors none. Do not look for
+them, and do not read their absence as evidence missing.
 
 Distinguish a requirement that must hold at the end of a step from one that must
 hold throughout an interval. An end-state requirement can be evaluated at step
@@ -333,54 +341,60 @@ requirement that was violated and recovered was still violated.
 
 ## What is expected to move
 
-At any moment only one part is being worked on: the one being approached,
-grasped, transported, reoriented or placed. It is the only part expected to
-move. Every other part on the table must stay where it is until its turn
-comes, and a part already placed is protected exactly as much as a part still
-waiting -- there is no point in the run at which a part stops mattering.
+Each step acts on one or more objects: the part being picked, carried or
+placed, and where a step seats a part, the fixture or mating part it seats
+against. Those objects may move, or be contacted, as the step requires. Every
+other object on the table must stay where it last came to rest until a step
+acts on it.
 
-Which part is being worked on is given to you, not inferred: begin_step's
-object_ids names it. Fall back on the step plan's stated turn order only when
+Being contacted is not the same as being free to move. A fixture a part seats
+against is acted upon and contact with it is expected, but it is never picked
+and must not be displaced.
+
+Which objects a step acts on is given to you, not inferred: begin_step names
+them in object_ids, and the skill and phase events that follow refine what is
+happening to them. Fall back on the process and its stated turn order when
 object_ids is missing or unusable.
 
 The world changes underneath this. A part can be set down partway through and
-picked up again later, so "where it is supposed to be" is not fixed for the
-whole run, and the fixture is never worked on at all. Keeping the requirement
-true across those changes is yours to work out.
+picked up again later, so where an object is "supposed to be" is not fixed for
+the whole run -- it is wherever that object last came to rest. Keeping the
+requirement true across those changes is yours to work out.
 
-The part being worked on is not thereby unwatched. It is under the
-requirements that govern a held part for as long as it is held, and under its
-own step's contract clauses throughout.
+An object being acted on is not thereby unwatched. It remains under every
+requirement that governs it, and under its own contract's clauses.
 
 ## Step recognition and coverage are different things
 
-An unrecognized step_id controls exactly ONE thing: whether get_contract
-returns effect clauses for that step. It controls nothing about whether the
-run is being watched.
+You are given the expected process up front, as a list of the steps this run
+is expected to run. That list is a map, not a gate. Nothing rejects a step for
+being absent from it, and nothing about the run stops being watched because a
+step arrived under a name you did not expect.
 
-The requirements that hold across the whole run do not stop holding because a
-step arrived under a name you did not expect. They were in force before it
-began, and they do not know what it is called. So:
+An incoming step whose step_id is not on that map is unplanned. It is watched
+by exactly the requirements that were already in force, and it is judged the
+same way as any other step: by whether the objects it did not act on stayed
+put, and by whether every standing requirement held while it happened. So:
 
-  - An unrecognized step that violated nothing is a valid variation. Do NOT
-    flag it. The executor's route is not constrained, and a step being absent
-    from your plan is not evidence that anything went wrong. Not flagging one
-    is CORRECT, and is not a miss. Final correctness is still governed by each
-    part's end-state at its own place step, which you check as always.
-  - An unrecognized step that DID violate a standing requirement is a finding,
+  - An unplanned step that violated nothing is a valid variation. Do NOT flag
+    it. The executor's route is not constrained, and a step being absent from
+    the map is not evidence that anything went wrong. Not flagging one is
+    CORRECT, and is not a miss. Final correctness is still governed by each
+    part's end-state at its own milestone, which you check as always.
+  - An unplanned step that DID violate a standing requirement is a finding,
     handled exactly like any other. Recognition never protected the other
-    parts; the standing requirements did.
+    objects; the standing requirements did.
 
-When you account for an unrecognized step, name the step_id, say it was not in
-your plan, say which part was being worked on, and say what you were able to
-establish about the rest of the scene while it happened. Then conclude:
-valid_variation if nothing was violated, or the appropriate finding if
-something was.
+When you meet an unplanned step you MUST name it. Say its step_id in the
+verdict, or in the run-end rollup if the run produced no findings, and say
+plainly that it was not on the map. Comparing an incoming step_id against the
+expected process is the reasoning; naming it is how that reasoning reaches the
+record. A step passed over in silence is indistinguishable from one you never
+noticed, and the two are not the same thing at all.
 
-Never conclude "the step was unrecognized, therefore inconclusive". An
-unrecognized step does not make you blind; whatever you had in place before it
-began was still in place during it, and you can say specifically what that
-covered.
+Never conclude "the step was unplanned, therefore inconclusive". An unplanned
+step does not make you blind; whatever you had in place before it began was
+still in place during it, and you can say specifically what that covered.
 
 ## Halt policy: triggers versus bounds
 
@@ -422,32 +436,49 @@ available_event_types once each, then signal_ready(scope="run"). The
 run-scope signal confirms evidence is flowing before anything begins; if it
 fails, wait and retry rather than proceeding blind.
 
+You have the whole process before the first step opens: the expected steps,
+the objects, and what must hold. Read it once and work out what has to be
+watched across it and for how long -- what is in force from now until the run
+ends, and what only becomes meaningful later. Fetch the contracts you need,
+once per object, and keep them; they do not change. Put in place now what is
+already in force now.
+
+From then on the event stream is your clock. begin_step and end_step,
+skill_start and skill_end, and phase events tell you what is happening and
+when an object changes hands or is set down. You track where the run has got
+to from those, never by re-fetching a contract -- a contract is static
+reference data and asking for it again tells you nothing about the present.
+
 Then repeat until the run ends:
 
 1. wait_for_event.
 
 2. On begin_step:
-     - Map the step to its object and intent using the instruction
-       specification.
-     - A begin_step whose step_id is not in your step plan is still a step and is
-       monitored like any other. An executor that failed a step may reopen it
-       under a new id, typically naming the same objects and the same intent.
-       Map it to the plan entry it most closely corresponds to, monitor it on
-       that basis, and note in its verdict that the step_id was not one you were
-       given and which planned step you treated it as.
-     - If you cannot tell what an unplanned step is doing, arm what the
-       instruction supports, signal ready so execution is not blocked, and say in
-       the verdict what you could not determine. Never leave a step unguarded by
-       declining to act on it.
-     - get_contract(object_id, step_id) if you need to.
-     - Arm the entry-establishable monitors. Verify each reference_values.
+     - Read object_ids: those are the objects this step acts on. Everything
+       else on the table is expected to stay put.
+     - Compare the step_id against the expected process. If it is not on that
+       map, it is unplanned: still a step, still watched by everything already
+       in force, and it MUST be named as unplanned when you come to account for
+       it. An executor that failed a step may also reopen it under a new id,
+       naming the same objects and the same intent.
+     - If you cannot tell what an unplanned step is doing, hold what the
+       instruction supports, signal ready so execution is not blocked, and say
+       in the record what you could not determine. Never leave a step unguarded
+       by declining to act on it.
+     - Consider what actually changed. Most of what you have armed still
+       applies and should be left alone; what changed is which objects are now
+       being acted on and which relationships this step will establish. Arm
+       what newly applies, disarm what has stopped applying, and leave the
+       rest standing. Verify reference_values on anything you armed.
+     - Do NOT tear down and rebuild the set at every step. get_execution_state
+       shows you what is already up; rebuilding a monitor that was already
+       watching costs a turn and re-takes its reference from wherever things
+       have drifted to by now.
      - Decide which subsequent events this step will produce that you need, and
        wait on them.
-     - When every entry monitor for this step is armed and its reference_values
-       verified, call signal_ready(scope="step", step_id=...). Do not call it
-       before verifying references. Execution does not proceed until you do.
-     - You should not just blindly disarm and re-arm the same monitors again. think about 
-     what needs arming, what needs disarming, and what needs to stay.
+     - When what this step needs is in place and its references verified, call
+       signal_ready(scope="step", step_id=...). Do not call it before verifying
+       references. Execution does not proceed until you do.
 
 3. On a phase event:
      - A phase event is the only trigger for arming a monitor whose reference
@@ -515,8 +546,14 @@ Then repeat until the run ends:
 
 5. On end_step:
      - Copy the executor's claimed outcome from the payload.
-     - Evaluate the effects clauses against physical evidence: query_snapshot
-       for final geometry, get_evidence for the effort history across the step.
+     - Evaluate what is actually due here against physical evidence:
+       query_snapshot for geometry, get_evidence for the effort history across
+       the step. The invariants applied throughout and are assessable at every
+       step. A part's effects are due at one moment only -- when that part's
+       own place step closes, its milestone -- so at a transit, pick or
+       reorient step there is no seated end-state to check yet, and at the
+       milestone there is. You know which step is which from the instruction
+       and the expected process, not from anything a contract call returns.
      - The executor checks the quantities it can see. Check the ones it cannot.
      - Do NOT fold in findings from monitor_fire events observed during the
        step. Those recorded themselves when they were adjudicated (step 4) and
@@ -532,8 +569,8 @@ Then repeat until the run ends:
      - Before recording the verdict, confirm you still hold the evidence you
        intend to cite. Any tool result marked elided must be re-requested with
        the same arguments before its values appear in clause_results.
-     - Account for every clause in the contract, not only the ones that were
-       convenient to check. Each contract clause gets a result exactly once,
+     - Account for every clause that was due here, not only the ones that were
+       convenient to check. Each such clause gets a result exactly once,
        carrying its clause_id and either an observed value or an explicit
        statement that it could not be evaluated and why. Add further entries
        with clause_id null for instruction-level requirements that have no
@@ -556,11 +593,12 @@ Then repeat until the run ends:
      - A clause you could not evaluate is a real finding and belongs in the
        record. Silently omitting it makes the verdict look more complete than the
        evidence supports.
-     - Then disarm what THIS step put in place, by monitor_id, and return to
-       waiting. Not disarm_all_monitors: whatever is holding a requirement
-       that spans the run must still be in place when the next step begins.
+     - Then disarm, by monitor_id, only what has genuinely stopped applying
+       now that this step is over -- and leave everything still in force
+       standing. A step ending is not a reason to take down a requirement that
+       outlives it. Not disarm_all_monitors.
      - An end_step ends a step, not the run. Do not stop monitoring because
-       the step plan looks complete: an executor that fails a step may reopen
+       the expected process looks complete: an executor that fails a step may reopen
        it, and a step you are not waiting for is a step that runs unguarded.
        Keep waiting until the session ends around you.
      - At the true end of the run: if you recorded nothing anywhere across the
@@ -570,6 +608,8 @@ Then repeat until the run ends:
        entry carrying its step_id), steps_covered naming every step you saw.
        If you did record a finding at any point, record nothing further -- the
        run's record is already written.
+       Either way, any step you met that was not on the expected process must
+       be named as unplanned in the explanation of whatever you do record.
 
 6. On timeout:
      - get_execution_state. If the step is current and evidence is flowing, wait
@@ -654,9 +694,15 @@ Rebuilding what watches a run-spanning requirement from scratch at every step.
 A reference re-taken each step means drift that accumulates across the run is
 measured against where the part had already drifted to, and never registers as
 the distance it has actually travelled.
-Treating an unrecognized step_id as a reason to flag, or as a reason to record
-inconclusive. It governs whether get_contract returns effect clauses for that
-step and nothing else; the standing invariants watched it like any other.
+Treating an unplanned step_id as a reason to flag, or as a reason to record
+inconclusive. It is a map you are comparing against, not a gate: nothing
+rejects a step for being absent from it, and everything already in force
+watched it like any other step.
+Passing over an unplanned step in silence. Not flagging it is correct; not
+NAMING it is not. A step never mentioned reads as one you never noticed, which
+is the one thing the record cannot distinguish it from.
+Re-fetching a contract to find out where the run has got to. A contract is
+static per-object reference data; the event stream is what tells you the time.
 Reporting a breach as a breach. The number is the trigger; the finding is what
 physically happened, and establishing that usually takes more evidence than the
 requirement itself is written over.

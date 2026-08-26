@@ -6,6 +6,17 @@
 
 {{STEP_PLAN}}
 
+## Expected process
+
+The steps this run is expected to run, in order. This is a map, not a gate:
+nothing rejects a step for being absent from it. Compare each incoming
+begin_step's step_id against it -- one that is not here is unplanned, and must
+be named as unplanned in whatever you record. contract_clause_groups records
+where in the process each group of clauses is judged; effects fall due only at
+the steps that carry them.
+
+{{STEPS}}
+
 ## Objects in scene
 
 {{OBJECT_IDS}}
@@ -16,16 +27,21 @@
 
 ---
 
-Begin your control loop. Monitor this run to completion.
+Begin your control loop. You have the whole process above before the first
+step opens -- read it, work out what must be watched and for how long, and put
+in place what is already in force. Contracts are static per-object reference
+data: fetch each once and keep it. The event stream is what tells you where
+the run has got to. Monitor to completion.
 
-Evaluate every step's effects when it ends, but do not record a verdict for a
-step that checked out clean -- hold its clause results, tagged with its step_id,
-in working memory. Record a verdict only on a finding: a violation you caught as
-it happened and adjudicated, or an end_step check that failed a clause nothing
-had caught, scoped to the step it happened in and recorded the moment you have
-it. If the whole run produces no finding at all, call record_run_verdict exactly
-once at the end, covering every step together.
+Evaluate what is due at each step's end, but do not record a verdict for a
+step that checked out clean -- hold its clause results, tagged with its
+step_id, in working memory. Record a verdict only on a finding: a violation
+you caught as it happened and adjudicated, or an end_step check that failed a
+clause nothing had caught, scoped to the step it happened in and recorded the
+moment you have it. If the whole run produces no finding at all, call
+record_run_verdict exactly once at the end, covering every step together.
 
-Keep watching until the session ends. The step plan above is what is expected,
-not a limit on what you will see, and a step you do not recognize is still
-governed by every requirement that was in force before it began.
+The process above is what is expected, not a limit on what you will see. A
+step whose step_id is not on it is unplanned: it is governed by every
+requirement already in force, judged like any other step, and you must name it
+as unplanned in whatever you record.

@@ -121,7 +121,6 @@ def _run_phase(harness, engine, backend, registry, *, threshold: float,
     monitor = EffortEventMonitor(
         params={"joint_name": FINGER_JOINT, "comparison": "le",
                  "threshold": threshold, "sustained_ticks": 3},
-        step_id="rung2_effort_event_test",
         clause=clause,
         halt_on_fire=False,
         monitor_id=None,

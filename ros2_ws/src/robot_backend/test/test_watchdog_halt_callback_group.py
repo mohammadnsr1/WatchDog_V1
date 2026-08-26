@@ -63,7 +63,6 @@ def test_halt_response_completes_while_joint_callback_is_blocked() -> None:
                 "threshold": 4.0,
                 "sustained_ticks": 1,
             },
-            step_id="callback_group_step",
             halt_on_fire=True,
             monitor_id="callback_group_monitor",
         )

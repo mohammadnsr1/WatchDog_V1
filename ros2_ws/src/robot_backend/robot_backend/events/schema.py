@@ -94,9 +94,6 @@ class MonitorArmedPayload(BaseModel):
 
     monitor_id: str
     monitor_type: str
-    # None for a run-scoped monitor: one holding a requirement that spans the
-    # whole run belongs to no single step, and naming one would misattribute it.
-    step_id: str | None
     params: dict[str, Any]
     clause: dict[str, Any] | None
     halt_on_fire: bool
@@ -109,9 +106,6 @@ class MonitorFirePayload(BaseModel):
 
     monitor_id: str
     monitor_type: str
-    # None for a run-scoped monitor: one holding a requirement that spans the
-    # whole run belongs to no single step, and naming one would misattribute it.
-    step_id: str | None
     trigger_wall_ns: int
     triggering_value: float
     threshold: float
@@ -131,9 +125,6 @@ class MonitorDisarmedPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     monitor_id: str
-    # None for a run-scoped monitor: one holding a requirement that spans the
-    # whole run belongs to no single step, and naming one would misattribute it.
-    step_id: str | None
     reason: str
 
 
@@ -142,10 +133,14 @@ class HaltPayload(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # None when the halting monitor was run-scoped -- see MonitorFirePayload.
-    step_id: str | None
     monitor_id: str
     detail: str
+    # The step under way when the halt landed, from the recorder's own
+    # begin_step/end_step tracking -- never from the halting monitor, which has
+    # no step affiliation. None when no step was open, or when the halt came
+    # from a monitor fire: such a halt is located in time by the event's
+    # wall_time_iso, the same key every other monitor event uses.
+    step_id: str | None = None
 
 
 class VerdictPayload(BaseModel):

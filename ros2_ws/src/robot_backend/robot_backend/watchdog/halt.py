@@ -29,7 +29,18 @@ class HaltClient:
         self._GoalInfo: Any | None = None
         self._lock = threading.Lock()
 
-    def halt(self, step_id: str | None, monitor_id: str, detail: str) -> dict[str, Any]:
+    def halt(
+        self, monitor_id: str, detail: str, step_id: str | None = None
+    ) -> dict[str, Any]:
+        """Cancel active MoveGroup goals.
+
+        step_id is optional provenance for the published halt event and comes
+        from the recorder's current step when the caller has one. A halt
+        raised by a monitor fire passes none: monitors carry no step
+        affiliation, and the halt is located in time by its wall_time_iso like
+        every other monitor event. Nothing in the cancel itself reads it --
+        the request cancels all active goals regardless.
+        """
         ok = False
         cancel_detail = "cancel not attempted"
         # None until a response is actually received: 0 must mean "answered,
@@ -79,7 +90,7 @@ class HaltClient:
                 elapsed_sec = time.monotonic() - call_started
             cancel_detail = str(exc)
         finally:
-            self._publish_halt(step_id, monitor_id, detail)
+            self._publish_halt(monitor_id, detail, step_id)
         return {
             "ok": bool(ok),
             "detail": cancel_detail,
@@ -111,7 +122,7 @@ class HaltClient:
             self._CancelGoal = CancelGoal
             self._GoalInfo = GoalInfo
 
-    def _publish_halt(self, step_id: str | None, monitor_id: str, detail: str) -> None:
+    def _publish_halt(self, monitor_id: str, detail: str, step_id: str | None) -> None:
         try:
             if self.event_bus is not None:
                 self.event_bus.publish(make_event(

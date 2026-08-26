@@ -32,9 +32,9 @@ class FakeHalt:
         self.order = order
         self.calls = []
 
-    def halt(self, step_id, monitor_id, detail):
+    def halt(self, monitor_id, detail, step_id=None):
         self.order.append("halt")
-        self.calls.append((step_id, monitor_id, detail))
+        self.calls.append((monitor_id, detail, step_id))
         return {"ok": True, "detail": "cancelled", "goals_cancelled": 1}
 
 
@@ -55,7 +55,6 @@ def test_engine_fire_queues_wakes_and_auto_disarms():
             "threshold": 0.2,
             "sustained_ticks": 1,
         },
-        step_id="step",
         halt_on_fire=True,
         monitor_id="m1",
     )
@@ -69,7 +68,11 @@ def test_engine_fire_queues_wakes_and_auto_disarms():
     assert fires[0]["action_taken"] == "halt"
     assert wake.was_set
     assert engine.snapshot() == []
-    assert halt.calls[0][0:2] == ("step", "m1")
+    # (monitor_id, detail, step_id) -- a monitor-raised halt carries no step
+    # label: monitors have no step affiliation, and the halt is located in
+    # time by its wall_time_iso like every other monitor event.
+    assert halt.calls[0][0] == "m1"
+    assert halt.calls[0][2] is None
     assert order.index("halt") < order.index("wake")
     assert [event.event_type for event in bus.events] == [
         "monitor_armed",
@@ -88,7 +91,6 @@ def test_engine_internal_error_disarms_monitor():
 
     monitor = BadMonitor(
         {"joint_name": "finger_joint", "comparison": "gt", "threshold": 0.2, "sustained_ticks": 1},
-        step_id="step",
         monitor_id="bad",
     )
     engine.arm(monitor)

@@ -177,7 +177,6 @@ def main() -> int:
 
         monitor = StationarityMonitor(
             params={"object_id": RED, "epsilon_m": epsilon_m},
-            step_id=STEP_ID,
             recorder=rec,
             clause=clause.model_dump(mode="json"),
             halt_on_fire=True,          # <-- Rung 3

@@ -131,7 +131,6 @@ def main() -> int:
         clause_dict = clause.model_dump(mode="json")
         monitor = StationarityMonitor(
             params={"object_id": TARGET_OBJECT, "epsilon_m": epsilon_m},
-            step_id=STEP_ID,
             recorder=harness.recorder,
             clause=clause_dict,
             halt_on_fire=False,

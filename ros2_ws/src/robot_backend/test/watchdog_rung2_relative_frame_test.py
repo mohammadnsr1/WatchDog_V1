@@ -162,7 +162,6 @@ def main() -> int:
         monitor = RelativeFrameMonitor(
             params={"parent_frame": PARENT_FRAME, "child_frame": child_frame,
                      "max_delta_m": max_delta_m},
-            step_id="rung2_relative_frame_test",
             recorder=harness.recorder,
             clause=clause_dict,
             halt_on_fire=False,

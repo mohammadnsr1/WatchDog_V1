@@ -116,6 +116,59 @@ def _load_task_steps() -> dict[str, dict[str, Any]]:
     return by_step_id
 
 
+def _load_task_objects() -> dict[str, dict[str, Any]]:
+    """Collapse the task's steps: block into one spec per object_id.
+
+    A contract is static per-object reference data: every threshold in it is a
+    registry bound for that object, and grasp_width_m is that object's
+    conformance width. None of it changes as the run moves from step to step,
+    so there is one contract per object and it is addressed by object_id.
+
+    Two fields are folded out of the object's steps:
+
+    grasp_width_m is asserted to be identical across every step that names the
+    object. It describes the object's graspable geometry, not the step, so a
+    disagreement between two steps is an authoring error and raises here
+    rather than silently letting whichever step was asked first decide the
+    conformance bound.
+
+    contract_clause_groups is the union across the object's steps. Union, not
+    intersection: a group any step authored is a group that applies to this
+    object somewhere in the process, and the contract is the object's whole
+    specification rather than any one step's slice of it. Where in the process
+    each group is judged is the agent's to read from the process map and the
+    instruction, not something the shape of this return can say any more.
+    """
+    by_step_id = _load_task_steps()
+    by_object: dict[str, dict[str, Any]] = {}
+    for step_id, entry in by_step_id.items():
+        object_id = entry.get("object_id")
+        if not object_id:
+            continue
+        spec = by_object.setdefault(
+            object_id, {"object_id": object_id, "step_id": f"<object:{object_id}>"}
+        )
+        width = entry.get("grasp_width_m")
+        if width is not None:
+            seen = spec.get("grasp_width_m")
+            if seen is not None and float(seen) != float(width):
+                raise ValueError(
+                    f"object_id {object_id!r} is authored with conflicting "
+                    f"grasp_width_m across its steps ({seen} and {width}, the "
+                    f"latter at step_id {step_id!r}). grasp_width_m describes "
+                    f"the object, not the step, so it must agree everywhere "
+                    f"the object appears."
+                )
+            spec["grasp_width_m"] = width
+        groups = entry.get("contract_clause_groups")
+        if groups:
+            spec.setdefault("contract_clause_groups", [])
+            for g in groups:
+                if g not in spec["contract_clause_groups"]:
+                    spec["contract_clause_groups"].append(g)
+    return by_object
+
+
 def _frame_to_png(frame: Any) -> bytes:
     """Return PNG bytes for a buffered frame, converting if needed.
 
@@ -242,20 +295,16 @@ class WatchDogContext:
     image_buffer: ImageRingBuffer
     image_manager: ImageBufferManager
     # Lazily populated on first get_contract call from WATCHDOG_TASK_PATH's
-    # steps: block, keyed by step_id -- see _load_task_steps.
-    task_steps: dict[str, dict[str, Any]] | None = None
+    # steps: block, collapsed to one spec per object_id -- see
+    # _load_task_objects. Contracts are addressed by object, not by step: the
+    # steps: block remains the watchdog's map of the expected process, but it
+    # is no longer a lookup key for loading a contract.
+    task_objects: dict[str, dict[str, Any]] | None = None
 
 
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
 _VALID_VERDICTS = {"conformant", "non_conformant", "valid_variation", "inconclusive"}
-# A monitor's scope is its lifetime, not its subject. "step" belongs to one
-# step and is the caller's to disarm when that step ends; "run" belongs to the
-# whole run and carries no step_id, because a requirement in force from run
-# start to run end has no step to name. Nothing in the engine branches on
-# either -- scope exists so the agent can say which it meant, and so the
-# timeline records it.
-_VALID_MONITOR_SCOPES = {"step", "run"}
 # Per-process record of step_ids a verdict has already been published for.
 # Detection, not prevention -- a second verdict for a retried step may be
 # legitimate, and silently dropping it would be worse than recording it as
@@ -470,32 +519,12 @@ def _build_monitor(
     clause: dict[str, Any] | None,
     halt_on_fire: bool,
     monitor_id: str | None,
-    step_id: str | None,
-    scope: str,
 ) -> Any:
     cls = MONITOR_TYPES.get(monitor_type)
     if cls is None:
         raise ValueError(
             "monitor_type must be one of relative_frame, stationarity, region, effort_event."
         )
-    if scope not in _VALID_MONITOR_SCOPES:
-        raise ValueError(f"scope must be one of {sorted(_VALID_MONITOR_SCOPES)}.")
-    if scope == "run":
-        if step_id is not None:
-            raise ValueError(
-                'a run-scoped monitor takes no step_id: it belongs to the whole '
-                "run, not to the step that happened to be open when you armed "
-                "it. Drop step_id, or arm it with scope=\"step\"."
-            )
-        resolved_step = None
-    else:
-        resolved_step = step_id or ctx.recorder.current_step()
-        if not resolved_step:
-            raise ValueError(
-                "step_id must be provided when no current step is active. If "
-                'this monitor holds a requirement that spans the run, arm it '
-                'with scope="run" instead of naming a step for it.'
-            )
     kwargs = {
         "clause": clause,
         "halt_on_fire": halt_on_fire,
@@ -503,8 +532,8 @@ def _build_monitor(
         "armed_wall_ns": wall_ns(),
     }
     if monitor_type in {"relative_frame", "stationarity"}:
-        return cls(params=params, step_id=resolved_step, recorder=ctx.recorder, **kwargs)
-    return cls(params=params, step_id=resolved_step, **kwargs)
+        return cls(params=params, recorder=ctx.recorder, **kwargs)
+    return cls(params=params, **kwargs)
 
 
 def _drain_wait(
@@ -527,31 +556,33 @@ def _drain_wait(
 if mcp is not None:
 
     @mcp.tool()
-    def get_contract(object_id: str, step_id: str) -> dict[str, Any]:
-        """Return a pick contract and declared registry provenance for one
-        step of the running task.
+    def get_contract(object_id: str) -> dict[str, Any]:
+        """Return one object's contract, plus cell and frame reference data.
 
-        step_id identifies the entry in the task instruction's steps: block
-        (see agents/tasks/*.yaml) this contract is for. grasp_width_m is read
-        from that step, not from the registry or from any argument you pass
-        here -- it is loaded from the task file itself (WATCHDOG_TASK_PATH),
-        so the conformance bound never passes through your reasoning. Fails
-        if step_id is not in the running task's steps: block, or if its
-        object_id does not match the object_id argument.
+        This is static per-object reference data. Every threshold in it is a
+        registry bound for that object and grasp_width_m is that object's
+        conformance width, read structurally from the running task file
+        (WATCHDOG_TASK_PATH) rather than passed by you, so the bound never
+        travels through your reasoning. None of it changes as the run
+        proceeds. Fetch each object's contract once and reuse it; calling
+        again for the same object returns the same thing and buys nothing.
+
+        It is addressed by object_id alone. There is no step argument: a
+        contract is not a per-step event, and asking for one says nothing
+        about where the run has got to. What the contract does not tell you is
+        WHEN each clause is judged -- that you read from the process and the
+        instruction specification.
 
         cell carries cell-level (not per-object) joint and frame names --
-        cell.gripper.effort_joint_name for effort_event's joint_name
-        parameter, cell.gripper.tcp_frame for a gripper-side relative_frame
-        parameter, cell.base_frame for MoveIt's planning frame. There is no
-        grasp-centre TF frame; it does not exist and none should be invented
-        -- the grasp centre is computed from commanded grasp width via the
-        RG2 calibration table, not published to TF. Any monitor needing a
-        gripper-side frame uses cell.gripper.tcp_frame.
+        cell.gripper.effort_joint_name, cell.gripper.tcp_frame, and
+        cell.base_frame for MoveIt's planning frame. There is no grasp-centre
+        TF frame; it does not exist and none should be invented -- the grasp
+        centre is computed from commanded grasp width via the RG2 calibration
+        table, not published to TF.
 
         object_frames carries the TF frame id (tf_frame) and MoveIt lookup
         frame (lookup_frame) the recorder already tracks for every enabled
-        registry object, keyed by object_id -- the object-side half of a
-        relative_frame monitor's parent_frame/child_frame pair.
+        registry object, keyed by object_id.
 
         acm_allowed_object_pairs lists object-object pairs whose collision
         checking is disabled in MoveIt's Allowed Collision Matrix so that
@@ -565,25 +596,20 @@ if mcp is not None:
         command = "get_contract"
         try:
             ctx = _ensure_watchdog()
-            if ctx.task_steps is None:
-                ctx.task_steps = _load_task_steps()
-            step_spec = ctx.task_steps.get(step_id)
-            if step_spec is None:
+            if ctx.task_objects is None:
+                ctx.task_objects = _load_task_objects()
+            object_spec = ctx.task_objects.get(object_id)
+            if object_spec is None:
                 raise ValueError(
-                    f"step_id {step_id!r} not found in the running task's steps: "
-                    f"block. Known step_ids: {list(ctx.task_steps.keys())}"
+                    f"object_id {object_id!r} is not named by any step in the "
+                    f"running task. Objects with a contract: "
+                    f"{sorted(ctx.task_objects)}"
                 )
-            if step_spec.get("object_id") != object_id:
-                raise ValueError(
-                    f"step_id {step_id!r} is for object_id "
-                    f"{step_spec.get('object_id')!r}, not {object_id!r}."
-                )
-            contract = load_pick_contract(object_id, step_spec)
+            contract = load_pick_contract(object_id, object_spec)
             acm_pairs = ctx.registry.get("acm_allowed_object_pairs", [])
             return _ok(
                 command,
                 object_id=object_id,
-                step_id=step_id,
                 contract=contract.model_dump(mode="json"),
                 raw_spec=_object_spec(ctx, object_id),
                 acm_allowed_object_pairs=acm_pairs if isinstance(acm_pairs, list) else [],
@@ -591,7 +617,7 @@ if mcp is not None:
                 object_frames=ctx.recorder.object_frames,
             )
         except Exception as exc:
-            return _error(command, exc, object_id=object_id, step_id=step_id)
+            return _error(command, exc, object_id=object_id)
 
     @mcp.tool()
     def get_execution_state() -> dict[str, Any]:
@@ -642,40 +668,32 @@ if mcp is not None:
         clause: dict[str, Any] | None = None,
         halt_on_fire: bool = False,
         monitor_id: str | None = None,
-        step_id: str | None = None,
-        scope: str = "step",
     ) -> dict[str, Any]:
         """Arm one deterministic monitor primitive.
 
-        scope is the monitor's lifetime, and it is yours to choose:
+        A monitor has no step affiliation. It lives from the moment you arm it
+        until the moment you disarm it, however many steps that spans, and
+        nothing takes it down at a step boundary. Arming and disarming are
+        yours alone, at whatever moments your reading of the process calls for.
 
-          "step" (default)  The monitor belongs to one step. step_id names it,
-                            defaulting to the step currently open. Disarm it
-                            when that step ends.
-          "run"             The monitor belongs to the whole run. It takes no
-                            step_id, and it stays armed across every step
-                            boundary until you disarm it. Use it for a
-                            requirement that is in force from run start to run
-                            end rather than for the duration of one step.
+        Which step was under way when a monitor armed or fired is recovered
+        afterwards from the event's wall_time_iso against the recorded event
+        logs. That absolute timestamp is the only field comparable across
+        processes, so it is the correlation key, and it is why a monitor needs
+        no step label of its own.
 
-        Scope changes nothing about how a monitor evaluates or fires; it
-        records what the monitor is for. No monitor of either scope is ever
-        disarmed automatically at a step boundary -- disarming is always yours.
-        What scope buys you is not having to re-arm a standing requirement once
-        per step, and not having its reference re-taken every time you do:
-        a monitor that measures against a reference captured at arm time
-        re-captures it on every re-arm, from wherever things have drifted to by
-        then, so a requirement rebuilt each step can be violated by degrees
-        across a run without ever registering it.
-
-        disarm_all_monitors disarms run-scoped monitors too. It means all.
+        A monitor that is already armed and still applies does not need
+        rebuilding. Re-arming it costs a turn, and where it measures against a
+        reference captured at arm time, re-arming re-takes that reference from
+        wherever things have drifted to by then -- so a requirement rebuilt
+        repeatedly can be violated by degrees without any single rebuild
+        registering it. get_execution_state lists everything currently armed.
         """
         command = "arm_monitor"
         try:
             ctx = _ensure_watchdog()
             monitor = _build_monitor(
-                ctx, monitor_type, params, clause, halt_on_fire, monitor_id,
-                step_id, scope,
+                ctx, monitor_type, params, clause, halt_on_fire, monitor_id
             )
             result = ctx.engine.arm(monitor)
             return _ok(command, **result)
@@ -697,11 +715,11 @@ if mcp is not None:
 
     @mcp.tool()
     def disarm_all_monitors() -> dict[str, Any]:
-        """Disarm every armed monitor, run-scoped ones included.
+        """Disarm every armed monitor.
 
-        It means all. A run-scoped monitor is not protected from this call --
-        if you are holding a requirement that spans the run, this takes it down
-        with everything else and the rest of the run proceeds without it.
+        It means all, including any monitor holding a requirement that spans
+        the whole run. Nothing is exempt, and the rest of the run proceeds
+        without whatever this takes down.
         """
         command = "disarm_all_monitors"
         try:
@@ -982,8 +1000,9 @@ if mcp is not None:
         command = "halt_execution"
         try:
             ctx = _ensure_watchdog()
-            step_id = ctx.recorder.current_step() or "agent_manual"
-            result = ctx.halt_client.halt(step_id, "agent_manual", detail)
+            result = ctx.halt_client.halt(
+                "agent_manual", detail, step_id=ctx.recorder.current_step()
+            )
             return _ok(command, result=result)
         except Exception as exc:
             return _error(command, exc)

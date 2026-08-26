@@ -152,7 +152,6 @@ def main() -> int:
         monitor = RegionMonitor(
             params={"object_id": GREEN, "center": center,
                      "half_extents": half_extents, "mode": "stay_outside"},
-            step_id="rung2_region_test",
             clause=clause,
             halt_on_fire=False,
             monitor_id=None,

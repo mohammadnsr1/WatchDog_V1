@@ -47,7 +47,6 @@ class MonitorEngine:
             MonitorArmedPayload(
                 monitor_id=monitor.monitor_id,
                 monitor_type=monitor.monitor_type,
-                step_id=monitor.step_id,
                 params=monitor.params,
                 clause=monitor.clause,
                 halt_on_fire=monitor.halt_on_fire,
@@ -56,8 +55,6 @@ class MonitorEngine:
         return {
             "monitor_id": monitor.monitor_id,
             "monitor_type": monitor.monitor_type,
-            "step_id": monitor.step_id,
-            "scope": monitor.scope,
             "reference_values": dict(monitor.reference_values),
         }
 
@@ -96,8 +93,6 @@ class MonitorEngine:
             {
                 "monitor_id": monitor.monitor_id,
                 "monitor_type": monitor.monitor_type,
-                "step_id": monitor.step_id,
-                "scope": monitor.scope,
                 "params": dict(monitor.params),
                 "clause": monitor.clause,
                 "halt_on_fire": monitor.halt_on_fire,
@@ -126,7 +121,6 @@ class MonitorEngine:
         if monitor.halt_on_fire and self.halt_client is not None:
             try:
                 halt_result = self.halt_client.halt(
-                    monitor.step_id,
                     monitor.monitor_id,
                     f"monitor {monitor.monitor_id} fired",
                 )
@@ -146,7 +140,6 @@ class MonitorEngine:
         payload = MonitorFirePayload(
             monitor_id=monitor.monitor_id,
             monitor_type=monitor.monitor_type,
-            step_id=monitor.step_id,
             trigger_wall_ns=trigger_stamp,
             triggering_value=triggering_value,
             threshold=float(monitor.threshold),
@@ -170,7 +163,6 @@ class MonitorEngine:
             "monitor_disarmed",
             MonitorDisarmedPayload(
                 monitor_id=monitor.monitor_id,
-                step_id=monitor.step_id,
                 reason=reason,
             ),
         ))

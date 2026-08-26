@@ -118,7 +118,7 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.20
+    approach_distance_m: -0.30
     axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.042
     grasp_center_offset:
@@ -175,7 +175,7 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.20
+    approach_distance_m: -0.30
     axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.042
     # The part is already held: same grasp relationship as the pick. Without
@@ -235,7 +235,7 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.20
+    approach_distance_m: -0.30
     axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without
@@ -292,7 +292,7 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.20
+    approach_distance_m: -0.30
     axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without

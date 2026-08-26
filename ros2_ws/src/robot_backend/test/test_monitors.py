@@ -37,7 +37,6 @@ def test_relative_frame_monitor_fires_on_delta():
     recorder = FakeRecorder()
     monitor = RelativeFrameMonitor(
         {"parent_frame": "world", "child_frame": "tcp", "max_delta_m": 0.05},
-        step_id="step",
         recorder=recorder,
     )
     assert monitor.evaluate(recorder) is None
@@ -48,7 +47,7 @@ def test_relative_frame_monitor_fires_on_delta():
 def test_stationarity_monitor_fires_on_displacement():
     recorder = FakeRecorder()
     monitor = StationarityMonitor(
-        {"object_id": "cube", "epsilon_m": 0.01}, step_id="step", recorder=recorder
+        {"object_id": "cube", "epsilon_m": 0.01}, recorder=recorder
     )
     recorder.poses["cube"] = {
         "wall_ns": 11,
@@ -72,7 +71,6 @@ def test_region_monitor_modes():
             "half_extents": {"x": 0.1, "y": 0.1, "z": 0.1},
             "mode": "stay_inside",
         },
-        step_id="step",
     )
     assert stay_inside.evaluate(inside) is None
     assert stay_inside.evaluate(outside) == pytest.approx(0.1)
@@ -84,7 +82,6 @@ def test_region_monitor_modes():
             "half_extents": {"x": 0.1, "y": 0.1, "z": 0.1},
             "mode": "stay_outside",
         },
-        step_id="step",
     )
     assert stay_outside.evaluate(outside) is None
     assert stay_outside.evaluate(inside) == pytest.approx(-0.1)
@@ -101,7 +98,6 @@ def test_effort_event_monitor_debounce_and_reset():
             "threshold": 0.5,
             "sustained_ticks": 3,
         },
-        step_id="step",
     )
     assert monitor.evaluate(joint_state(0.6)) is None
     assert monitor.evaluate(joint_state(0.7)) is None
@@ -119,7 +115,6 @@ def test_effort_event_monitor_conformant_never_fires():
             "threshold": 4.0,
             "sustained_ticks": 3,
         },
-        step_id="step",
     )
     assert monitor.evaluate(joint_state(0.0)) is None
     assert monitor.evaluate(joint_state(2.0)) is None
@@ -133,11 +128,9 @@ def test_param_validation_errors_are_precise():
     with pytest.raises(ValueError, match="epsilon_m must be > 0"):
         StationarityMonitor(
             {"object_id": "cube", "epsilon_m": 0},
-            step_id="step",
             recorder=FakeRecorder(),
         )
     with pytest.raises(ValueError, match="comparison must be one of"):
         EffortEventMonitor(
             {"joint_name": "finger_joint", "comparison": "eq", "threshold": 1.0},
-            step_id="step",
         )
