@@ -118,7 +118,8 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.30
+    approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.042
     grasp_center_offset:
       position: {x: 0.049, y: -0.040, z: 0.0}
@@ -128,6 +129,7 @@ steps:
     object_id: u_green
     action_hint: approach the reorient frame from above, stopping clear of contact
     target_frame: u_green_reorient
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_green_pick.plan.yaml.
@@ -173,7 +175,8 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.30
+    approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.042
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -185,6 +188,7 @@ steps:
     object_id: u_green
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_green_placement
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_green_pick.plan.yaml.
@@ -231,7 +235,8 @@ steps:
     # orientation. A world-Z or object-frame offset only lifts straight up
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
-    approach_distance_m: -0.30
+    approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -243,6 +248,7 @@ steps:
     object_id: inverted_u_brown
     action_hint: approach the reorient frame from above, stopping clear of contact
     target_frame: inverted_u_brown_reorient
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. derived: 0.20 m world-vertical in this frame's axes.
@@ -287,6 +293,7 @@ steps:
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
     approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.08
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -298,6 +305,7 @@ steps:
     object_id: inverted_u_brown
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_brown_placement
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from inverted_u_brown_pick.plan.yaml.
@@ -345,6 +353,7 @@ steps:
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
     approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.03
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -356,6 +365,7 @@ steps:
     object_id: hex_blue
     action_hint: approach the hole from above, stopping clear of contact
     target_frame: hex_blue_hole
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from hex_blue_pick.plan.yaml.
@@ -401,6 +411,7 @@ steps:
     # while the part rests square; for a part standing at a reorient frame
     # it shoves it sideways across the bench instead.
     approach_distance_m: -0.20
+    axis_note: the offset is along the grasp centre's own local Z, the approach axis, so the lift retraces the way the approach came in whatever the part's orientation. A world-Z or object-frame offset lifts straight up only while the part rests square; for a part standing at a reorient frame its own Z lies roughly horizontal and such an offset drags it sideways across the bench.
     grasp_width_m: 0.03
     # The part is already held: same grasp relationship as the pick. Without
     # it the object pose is taken as the grasp centre and the wrist flips.
@@ -412,6 +423,7 @@ steps:
     object_id: hex_red
     action_hint: approach the hole from above, stopping clear of contact
     target_frame: hex_red_hole
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from hex_red_pick.plan.yaml.

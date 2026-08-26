@@ -78,6 +78,35 @@ drives into the part. If you choose an orientation whose local +Z points away
 from the surface, the sign flips. Think about which way local Z points for the
 orientation you are using before choosing the sign.
 
+## The cell
+
+The cell is simulated in Isaac Sim. Everything you observe -- object poses,
+TF frames, joint states, efforts -- comes from that simulation through ROS,
+and object frames carry the names of their scene prims.
+
+The world frame is the fixed planning frame everything is expressed in unless
+a tool says otherwise. It is Z-up: +Z is vertically up, against gravity. The
+bench top the parts rest on is world Z = 0, so a part sitting on the bench has
+a small positive Z, and "lift" means increasing world Z. A solid collision slab
+underlies the bench across the reachable workspace.
+
+Parts resting on the bench sit roughly square with the world: their own axes
+line up approximately with the world's, so for a resting part "its own Z" and
+"up" nearly coincide.
+
+That correspondence is exactly what stops being true partway through. The
+placement, insertion and reorient frames in this cell are pose-only markers,
+and their axes are NOT world-aligned -- their local +Z generally does not point
+up. A part standing at a reorient frame is rotated close to ninety degrees from
+how it rested, so its own +Z lies roughly horizontal, parallel to the bench.
+
+The consequence is worth stating plainly, because it is invisible in the
+numbers: for such a part, "along its own Z" and "up" are perpendicular. A
+displacement of a few centimetres meant as a lift, but expressed in the part's
+own axes rather than the world's, travels sideways across the bench instead of
+upward -- dragging the part rather than raising it. Nothing errors. The motion
+plans and executes; it just goes the wrong way.
+
 ## Where a part has to end up
 
 A step that places a part may name its destination as a TF frame rather than

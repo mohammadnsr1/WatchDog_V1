@@ -43,6 +43,11 @@ instruction_spec: |
       until it is its turn. A part already placed and a part still waiting
       are equally protected; only the part currently being manipulated is
       expected to move.
+      The comparison is against where the part last came to rest of its own
+      accord -- where it started the run, or where it was deliberately set
+      down -- and it holds from that moment until the part is worked on
+      again. A part that is nudged a little, and a little again, has been
+      disturbed by the total, not by the largest single nudge.
 
   Preconditions (checked before the first pick of each part):
     - The part is present and where it is expected to be.
