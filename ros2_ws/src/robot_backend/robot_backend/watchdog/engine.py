@@ -57,6 +57,7 @@ class MonitorEngine:
             "monitor_id": monitor.monitor_id,
             "monitor_type": monitor.monitor_type,
             "step_id": monitor.step_id,
+            "scope": monitor.scope,
             "reference_values": dict(monitor.reference_values),
         }
 
@@ -96,6 +97,7 @@ class MonitorEngine:
                 "monitor_id": monitor.monitor_id,
                 "monitor_type": monitor.monitor_type,
                 "step_id": monitor.step_id,
+                "scope": monitor.scope,
                 "params": dict(monitor.params),
                 "clause": monitor.clause,
                 "halt_on_fire": monitor.halt_on_fire,

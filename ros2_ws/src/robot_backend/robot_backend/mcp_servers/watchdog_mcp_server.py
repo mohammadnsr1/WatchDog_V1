@@ -249,6 +249,13 @@ class WatchDogContext:
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
 _VALID_VERDICTS = {"conformant", "non_conformant", "valid_variation", "inconclusive"}
+# A monitor's scope is its lifetime, not its subject. "step" belongs to one
+# step and is the caller's to disarm when that step ends; "run" belongs to the
+# whole run and carries no step_id, because a requirement in force from run
+# start to run end has no step to name. Nothing in the engine branches on
+# either -- scope exists so the agent can say which it meant, and so the
+# timeline records it.
+_VALID_MONITOR_SCOPES = {"step", "run"}
 # Per-process record of step_ids a verdict has already been published for.
 # Detection, not prevention -- a second verdict for a retried step may be
 # legitimate, and silently dropping it would be worse than recording it as
@@ -464,15 +471,31 @@ def _build_monitor(
     halt_on_fire: bool,
     monitor_id: str | None,
     step_id: str | None,
+    scope: str,
 ) -> Any:
     cls = MONITOR_TYPES.get(monitor_type)
     if cls is None:
         raise ValueError(
             "monitor_type must be one of relative_frame, stationarity, region, effort_event."
         )
-    resolved_step = step_id or ctx.recorder.current_step()
-    if not resolved_step:
-        raise ValueError("step_id must be provided when no current step is active.")
+    if scope not in _VALID_MONITOR_SCOPES:
+        raise ValueError(f"scope must be one of {sorted(_VALID_MONITOR_SCOPES)}.")
+    if scope == "run":
+        if step_id is not None:
+            raise ValueError(
+                'a run-scoped monitor takes no step_id: it belongs to the whole '
+                "run, not to the step that happened to be open when you armed "
+                "it. Drop step_id, or arm it with scope=\"step\"."
+            )
+        resolved_step = None
+    else:
+        resolved_step = step_id or ctx.recorder.current_step()
+        if not resolved_step:
+            raise ValueError(
+                "step_id must be provided when no current step is active. If "
+                'this monitor holds a requirement that spans the run, arm it '
+                'with scope="run" instead of naming a step for it.'
+            )
     kwargs = {
         "clause": clause,
         "halt_on_fire": halt_on_fire,
@@ -620,13 +643,39 @@ if mcp is not None:
         halt_on_fire: bool = False,
         monitor_id: str | None = None,
         step_id: str | None = None,
+        scope: str = "step",
     ) -> dict[str, Any]:
-        """Arm one deterministic monitor primitive."""
+        """Arm one deterministic monitor primitive.
+
+        scope is the monitor's lifetime, and it is yours to choose:
+
+          "step" (default)  The monitor belongs to one step. step_id names it,
+                            defaulting to the step currently open. Disarm it
+                            when that step ends.
+          "run"             The monitor belongs to the whole run. It takes no
+                            step_id, and it stays armed across every step
+                            boundary until you disarm it. Use it for a
+                            requirement that is in force from run start to run
+                            end rather than for the duration of one step.
+
+        Scope changes nothing about how a monitor evaluates or fires; it
+        records what the monitor is for. No monitor of either scope is ever
+        disarmed automatically at a step boundary -- disarming is always yours.
+        What scope buys you is not having to re-arm a standing requirement once
+        per step, and not having its reference re-taken every time you do:
+        a monitor that measures against a reference captured at arm time
+        re-captures it on every re-arm, from wherever things have drifted to by
+        then, so a requirement rebuilt each step can be violated by degrees
+        across a run without ever registering it.
+
+        disarm_all_monitors disarms run-scoped monitors too. It means all.
+        """
         command = "arm_monitor"
         try:
             ctx = _ensure_watchdog()
             monitor = _build_monitor(
-                ctx, monitor_type, params, clause, halt_on_fire, monitor_id, step_id
+                ctx, monitor_type, params, clause, halt_on_fire, monitor_id,
+                step_id, scope,
             )
             result = ctx.engine.arm(monitor)
             return _ok(command, **result)
@@ -648,7 +697,12 @@ if mcp is not None:
 
     @mcp.tool()
     def disarm_all_monitors() -> dict[str, Any]:
-        """Disarm every armed monitor."""
+        """Disarm every armed monitor, run-scoped ones included.
+
+        It means all. A run-scoped monitor is not protected from this call --
+        if you are holding a requirement that spans the run, this takes it down
+        with everything else and the rest of the run proceeds without it.
+        """
         command = "disarm_all_monitors"
         try:
             ctx = _ensure_watchdog()

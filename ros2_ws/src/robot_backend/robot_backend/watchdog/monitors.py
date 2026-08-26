@@ -99,7 +99,7 @@ class MonitorPrimitive:
         self,
         monitor_type: str,
         params: dict[str, Any],
-        step_id: str,
+        step_id: str | None,
         clause: dict[str, Any] | None = None,
         halt_on_fire: bool = False,
         monitor_id: str | None = None,
@@ -107,11 +107,20 @@ class MonitorPrimitive:
     ) -> None:
         if not isinstance(params, dict):
             raise ValueError("params must be a dict.")
-        if not isinstance(step_id, str) or not step_id.strip():
-            raise ValueError("step_id must be a non-empty string.")
+        # step_id is provenance, not control: nothing in the engine branches on
+        # it, filters by it, or disarms by it. It is carried into the armed,
+        # fired, disarmed and halt event payloads so the timeline can say which
+        # step a monitor belonged to, and that is its whole job. None means the
+        # monitor belongs to the run rather than to any one step -- a
+        # requirement that holds from run start to run end has no step to name,
+        # and inventing one would misreport it on the timeline.
+        if step_id is not None and (not isinstance(step_id, str) or not step_id.strip()):
+            raise ValueError(
+                "step_id must be a non-empty string, or None for a run-scoped monitor."
+            )
         self.monitor_id = monitor_id or f"mon_{uuid.uuid4().hex[:12]}"
         self.monitor_type = monitor_type
-        self.step_id = step_id.strip()
+        self.step_id = step_id.strip() if step_id is not None else None
         self.clause = clause
         self.halt_on_fire = bool(halt_on_fire)
         self.armed_wall_ns = int(armed_wall_ns or 0)
@@ -119,6 +128,15 @@ class MonitorPrimitive:
         self.threshold = float("nan")
         self.comparison = ""
         self.reference_values: dict[str, Any] = {}
+
+    @property
+    def scope(self) -> str:
+        """"run" if this monitor belongs to the whole run, else "step".
+
+        Derived from step_id rather than stored alongside it, so the two can
+        never disagree about what this monitor is.
+        """
+        return "run" if self.step_id is None else "step"
 
     def evaluate(self, sample: Any) -> float | None:
         """Return triggering value when violated, else None."""
@@ -170,7 +188,7 @@ class RelativeFrameMonitor(MonitorPrimitive):
          "notes": "Permitted departure from the armed reference distance."},
     ]
 
-    def __init__(self, params: dict[str, Any], step_id: str, recorder: Any, **kwargs: Any) -> None:
+    def __init__(self, params: dict[str, Any], step_id: str | None, recorder: Any, **kwargs: Any) -> None:
         super().__init__("relative_frame", params, step_id, **kwargs)
         self.parent_frame = _required_str(params, "parent_frame")
         self.child_frame = _required_str(params, "child_frame")
@@ -222,7 +240,7 @@ class StationarityMonitor(MonitorPrimitive):
          "notes": "Permitted displacement from the armed reference position."},
     ]
 
-    def __init__(self, params: dict[str, Any], step_id: str, recorder: Any, **kwargs: Any) -> None:
+    def __init__(self, params: dict[str, Any], step_id: str | None, recorder: Any, **kwargs: Any) -> None:
         super().__init__("stationarity", params, step_id, **kwargs)
         self.object_id = _required_str(params, "object_id")
         self.epsilon_m = _as_positive_float(params.get("epsilon_m"), "epsilon_m")
@@ -275,7 +293,7 @@ class RegionMonitor(MonitorPrimitive):
          "values": ["stay_inside", "stay_outside"]},
     ]
 
-    def __init__(self, params: dict[str, Any], step_id: str, **kwargs: Any) -> None:
+    def __init__(self, params: dict[str, Any], step_id: str | None, **kwargs: Any) -> None:
         super().__init__("region", params, step_id, **kwargs)
         self.object_id = _required_str(params, "object_id")
         self.center = _xyz(params.get("center"), "center")
@@ -350,7 +368,7 @@ class EffortEventMonitor(MonitorPrimitive):
                   "a contract clause states otherwise."},
     ]
 
-    def __init__(self, params: dict[str, Any], step_id: str, **kwargs: Any) -> None:
+    def __init__(self, params: dict[str, Any], step_id: str | None, **kwargs: Any) -> None:
         super().__init__("effort_event", params, step_id, **kwargs)
         self.joint_name = _required_str(params, "joint_name")
         self.comparison = params.get("comparison")

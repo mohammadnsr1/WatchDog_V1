@@ -94,12 +94,25 @@ get_execution_state() -> current_step_id, counts, armed_monitors,
 query_snapshot(object_ids) -> objects (latest poses), joint_state
     Instantaneous state. Positions and efforts by joint name.
 
-arm_monitor(monitor_type, params, clause, halt_on_fire, monitor_id, step_id)
-    -> monitor_id, monitor_type, step_id, reference_values
-    step_id defaults to the current step. reference_values reports what the
-    monitor captured at arm time; check it against what you intended.
+arm_monitor(monitor_type, params, clause, halt_on_fire, monitor_id, step_id,
+            scope)
+    -> monitor_id, monitor_type, step_id, scope, reference_values
+    scope is the monitor's lifetime and it is yours to choose. "step" (the
+    default) belongs to one step; step_id names it, defaulting to the step
+    currently open. "run" belongs to the whole run, takes no step_id, and
+    stays armed across every step boundary. Nothing is ever disarmed
+    automatically at a step boundary at either scope -- disarming is always
+    yours -- and scope changes nothing about how a monitor evaluates or fires.
+
+    reference_values reports what the monitor captured at arm time; check it
+    against what you intended.
 
 disarm_monitor(monitor_id) / disarm_all_monitors()
+    disarm_all_monitors means all, run-scoped monitors included. It does not
+    spare anything holding a run-spanning requirement.
+
+get_execution_state reports the scope of every armed monitor, so you can see
+what is already in place before arming anything.
 
 wait_for_event(timeout_sec, event_types) -> wake, plus fire or event payload
     Blocks. Omit event_types to wake on any executor event. Pass a list to sleep
@@ -243,15 +256,18 @@ requirements are in force from step entry, so step entry is where most of your
 arming happens.
 
 But a requirement's lifetime is not the step's lifetime. Some hold for one
-step; others hold from the moment the run starts until the moment it ends, and
-those do not need rebuilding when a step boundary happens to pass. Rebuilding
-one costs a turn and buys nothing -- and where what you armed measures against
-a reference taken at arm time, it costs more than a turn, because the new
-reference is taken from wherever things have drifted to by then. Do that at
-every step and a requirement can be violated by degrees across a run without
-anything ever registering it.
+step; others hold from the moment the run starts until the moment it ends.
+Arming carries that distinction: a monitor's scope says which of the two it is,
+and a run-scoped one survives every step boundary until you take it down.
 
-Ask what the requirement's lifetime actually is, not which step you are in.
+Rebuilding a standing requirement once per step costs a turn and buys nothing.
+Where what you armed measures against a reference taken at arm time it costs
+more than a turn, because each re-arm re-takes that reference from wherever
+things have drifted to by then. Do that at every step and a requirement can be
+violated by degrees across a whole run without anything ever registering it.
+
+Ask what each requirement's lifetime actually is, not which step you are in,
+and arm it at that lifetime.
 
 Arm mid-step only in two situations:
   1. A phase event announced that a relationship the step establishes has come

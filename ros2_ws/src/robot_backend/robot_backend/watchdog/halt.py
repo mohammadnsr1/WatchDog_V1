@@ -29,7 +29,7 @@ class HaltClient:
         self._GoalInfo: Any | None = None
         self._lock = threading.Lock()
 
-    def halt(self, step_id: str, monitor_id: str, detail: str) -> dict[str, Any]:
+    def halt(self, step_id: str | None, monitor_id: str, detail: str) -> dict[str, Any]:
         ok = False
         cancel_detail = "cancel not attempted"
         # None until a response is actually received: 0 must mean "answered,
@@ -111,7 +111,7 @@ class HaltClient:
             self._CancelGoal = CancelGoal
             self._GoalInfo = GoalInfo
 
-    def _publish_halt(self, step_id: str, monitor_id: str, detail: str) -> None:
+    def _publish_halt(self, step_id: str | None, monitor_id: str, detail: str) -> None:
         try:
             if self.event_bus is not None:
                 self.event_bus.publish(make_event(

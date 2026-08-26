@@ -94,7 +94,9 @@ class MonitorArmedPayload(BaseModel):
 
     monitor_id: str
     monitor_type: str
-    step_id: str
+    # None for a run-scoped monitor: one holding a requirement that spans the
+    # whole run belongs to no single step, and naming one would misattribute it.
+    step_id: str | None
     params: dict[str, Any]
     clause: dict[str, Any] | None
     halt_on_fire: bool
@@ -107,7 +109,9 @@ class MonitorFirePayload(BaseModel):
 
     monitor_id: str
     monitor_type: str
-    step_id: str
+    # None for a run-scoped monitor: one holding a requirement that spans the
+    # whole run belongs to no single step, and naming one would misattribute it.
+    step_id: str | None
     trigger_wall_ns: int
     triggering_value: float
     threshold: float
@@ -127,7 +131,9 @@ class MonitorDisarmedPayload(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     monitor_id: str
-    step_id: str
+    # None for a run-scoped monitor: one holding a requirement that spans the
+    # whole run belongs to no single step, and naming one would misattribute it.
+    step_id: str | None
     reason: str
 
 
@@ -136,7 +142,8 @@ class HaltPayload(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    step_id: str
+    # None when the halting monitor was run-scoped -- see MonitorFirePayload.
+    step_id: str | None
     monitor_id: str
     detail: str
 
