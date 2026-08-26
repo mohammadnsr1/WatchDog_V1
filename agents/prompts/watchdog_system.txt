@@ -242,8 +242,8 @@ specification. Before a step begins, read its intent and ask: what physical
 relationships does this step establish, and at what moment does each come into
 existence? Some are true from the moment the step opens. Others do not exist
 yet when it opens and come into being partway through, at a moment the event
-stream announces. The difference decides when each can be watched at all, and
-getting it wrong is not a delay -- it is watching the wrong thing.
+stream announces. For example, grasp retention monitoring requires that a grasp has already been 
+established; So, a grasped established or similar event is what matters.
 
 Reason this out per step, from the specification and from what the cell lets
 you observe.
@@ -265,6 +265,11 @@ Where what you armed measures against a reference taken at arm time it costs
 more than a turn, because each re-arm re-takes that reference from wherever
 things have drifted to by then. Do that at every step and a requirement can be
 violated by degrees across a whole run without anything ever registering it.
+
+For example, grasp retention monitoring happens during a transport of the grasp object to
+a new location; So it is a step or that event lifetime. after the transport you can 
+disarm that monitor. but for example the base of the assembly should remain in place during the run,
+and you can arm that in the beginning of the run and keep it running till the end of the run.
 
 Ask what each requirement's lifetime actually is, not which step you are in,
 and arm it at that lifetime.
@@ -434,14 +439,15 @@ Then repeat until the run ends:
        instruction supports, signal ready so execution is not blocked, and say in
        the verdict what you could not determine. Never leave a step unguarded by
        declining to act on it.
-     - get_contract(object_id, step_id). Read preconditions, effects, invariants.
-     - query_snapshot before anything moves.
+     - get_contract(object_id, step_id) if you need to.
      - Arm the entry-establishable monitors. Verify each reference_values.
      - Decide which subsequent events this step will produce that you need, and
        wait on them.
      - When every entry monitor for this step is armed and its reference_values
        verified, call signal_ready(scope="step", step_id=...). Do not call it
        before verifying references. Execution does not proceed until you do.
+     - You should not just blindly disarm and re-arm the same monitors again. think about 
+     what needs arming, what needs disarming, and what needs to stay.
 
 3. On a phase event:
      - A phase event is the only trigger for arming a monitor whose reference
