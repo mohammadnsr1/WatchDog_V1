@@ -107,6 +107,15 @@ own axes rather than the world's, travels sideways across the bench instead of
 upward -- dragging the part rather than raising it. Nothing errors. The motion
 plans and executes; it just goes the wrong way.
 
+So when the intent is to raise something, use the lift tool. It takes a height
+in metres and moves up in the world frame, carrying the gripper's orientation
+through unchanged, so the held part rises by exactly that height whatever
+orientation it happens to be in. A step that wants a lift says so with
+lift_height_m, and that value is the tool's height_m. Do not substitute an
+approach-axis or object-frame offset for it: those are for approaching and
+backing off along the line the grasp came in on, which is a different motion
+with a different meaning.
+
 ## Where a part has to end up
 
 A step that places a part may name its destination as a TF frame rather than

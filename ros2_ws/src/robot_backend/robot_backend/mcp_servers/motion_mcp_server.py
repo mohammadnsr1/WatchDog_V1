@@ -64,10 +64,10 @@ _DEFAULT_ALLOWED_PLANNING_TIME = 5.0
 # would have staged the pre-grasp 5cm inside the part.
 _DEFAULT_APPROACH_DISTANCE_M = -0.05
 _DEFAULT_NUM_PLANNING_ATTEMPTS = 4
-_DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.5
+_DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.3
 _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 0.5
-_DEFAULT_POSITION_TOLERANCE_M = 0.001
-_DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.01
+_DEFAULT_POSITION_TOLERANCE_M = 0.0001
+_DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.001
 _MIN_QUATERNION_NORM = 1e-8
 
 mcp = FastMCP("robot_backend_motion") if FastMCP is not None else None
@@ -623,6 +623,7 @@ if mcp is not None:
         max_velocity_scaling_factor: float | None = None,
         max_acceleration_scaling_factor: float | None = None,
         allowed_planning_time: float | None = None,
+        approach_distance_m: float | None = None,
         clear_octomap_first: bool = False,
     ) -> dict[str, Any]:
         """Move the logical gripper grasp center to a target pose.
@@ -1315,6 +1316,86 @@ if mcp is not None:
             )
         except Exception as exc:
             return _error(command, exc, distance_m=distance_m)
+
+
+    @mcp.tool()
+    @emit_skill_events
+    def lift(
+        height_m: float,
+        frame_id: str,
+        x: float,
+        y: float,
+        z: float,
+        qx: float,
+        qy: float,
+        qz: float,
+        qw: float,
+    ) -> dict[str, Any]:
+        """Raise the TCP straight up in world Z, keeping its orientation.
+
+        This is the tool for lifting something. height_m is how far UP to go,
+        in metres, in the world frame. Positive lifts. There is no sign
+        convention to work out and no axis to choose: up is up, whatever the
+        gripper is holding and however that part happens to be oriented.
+
+        Use this instead of an approach-axis or object-frame offset whenever
+        the intent is "raise it". Those offsets travel along the grasp
+        centre's own local Z, or the object's own axes, which point up ONLY
+        while the part is resting square with the world. A part standing at a
+        reorient frame is rotated roughly ninety degrees from that, so its own
+        Z lies flat and an offset along it drags the part sideways across the
+        bench instead of raising it. The motion plans and executes; nothing
+        errors; the part simply goes the wrong way. Lifting in world Z cannot
+        express that mistake.
+
+        x..qw are the TCP pose to lift FROM -- normally the TCP pose the
+        preceding motion reported. This is deliberately TCP-to-TCP, like
+        retreat_tcp: grasp-centre targets convert to TCP through the gripper
+        opening, so routing a lift that way makes the result depend on jaw
+        width, which has nothing to do with how far up the part should go.
+        Orientation is carried through unchanged, so the grasp stays rigid
+        across the lift and the held part rises exactly height_m.
+        """
+
+        command = "lift"
+        try:
+            base_tcp = _build_pose_dict(
+                frame_id=frame_id, x=x, y=y, z=z, qx=qx, qy=qy, qz=qz, qw=qw
+            )
+            height = _validate_float("height_m", height_m)
+            # A world-frame translation, NOT compose_poses: composing would
+            # apply the offset in the TCP's own axes, which is the very thing
+            # this tool exists to avoid.
+            lifted_tcp_pose = make_pose(
+                position={
+                    "x": base_tcp["position"]["x"],
+                    "y": base_tcp["position"]["y"],
+                    "z": base_tcp["position"]["z"] + height,
+                },
+                orientation=dict(base_tcp["orientation"]),
+                frame_id=base_tcp.get("frame_id", frame_id),
+            )
+            backend = _ensure_backend()
+            result = backend.motion.move_to_pose(
+                lifted_tcp_pose,
+                position_tolerance_m=_DEFAULT_POSITION_TOLERANCE_M,
+                orientation_tolerance_rad=_DEFAULT_ORIENTATION_TOLERANCE_RAD,
+                allowed_planning_time=_DEFAULT_ALLOWED_PLANNING_TIME,
+                num_planning_attempts=_DEFAULT_NUM_PLANNING_ATTEMPTS,
+                max_velocity_scaling_factor=_DEFAULT_MAX_VELOCITY_SCALING_FACTOR,
+                max_acceleration_scaling_factor=(
+                    _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR
+                ),
+            )
+            return _ok(
+                command,
+                from_tcp_pose=base_tcp,
+                height_m=height,
+                lifted_tcp_pose=lifted_tcp_pose,
+                result=result,
+            )
+        except Exception as exc:
+            return _error(command, exc, height_m=height_m)
 
 
     @mcp.tool()

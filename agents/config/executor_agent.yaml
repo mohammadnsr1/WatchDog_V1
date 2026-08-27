@@ -18,7 +18,7 @@ context_keep_recent_turns: 5       # never elide within this many turns
 # which stays at medium deliberately. Do not raise this without re-running
 # the eval suite; it is a latency/behavior tradeoff decided for this study,
 # not a default to drift back toward "medium" out of habit.
-reasoning_effort: low
+reasoning_effort: medium
 thinking_budget_tokens: 4096
 
 system_prompt: prompts/executor_system.txt
