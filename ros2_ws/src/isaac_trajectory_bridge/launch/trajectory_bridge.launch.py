@@ -75,7 +75,9 @@ def generate_launch_description() -> LaunchDescription:
                         "joint_command_topic": "/joint_command",
                         "joint_state_topic": "/joint_states",
                         "action_name": "/arm_controller/follow_joint_trajectory",
-                        "publish_rate_hz": 50.0,
+                        # Matches physxScene:timeStepsPerSecond in the Isaac
+                        # stage; a mismatch beats against the physics loop.
+                        "publish_rate_hz": 60.0,
                         "goal_tolerance": 0.03,
                         "goal_time_tolerance_sec": 2.0,
                         "require_joint_state_before_execute": True,

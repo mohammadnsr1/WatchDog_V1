@@ -33,7 +33,12 @@ class FollowJointTrajectoryBridge(Node):
         self.declare_parameter(
             "action_name", "/arm_controller/follow_joint_trajectory"
         )
-        self.declare_parameter("publish_rate_hz", 50.0)
+        # Match the simulator's physics rate (physxScene:timeStepsPerSecond).
+        # At 50 Hz into a 60 Hz physics loop the command stream and the solver
+        # beat against each other at 10 Hz: periodically a step reuses the
+        # previous target and then jumps, which reads as jitter.
+        self.declare_parameter("publish_rate_hz", 60.0)
+        self.declare_parameter("clock_stall_timeout_sec", 5.0)
         self.declare_parameter("goal_tolerance", 0.03)
         self.declare_parameter("goal_time_tolerance_sec", 2.0)
         self.declare_parameter("require_joint_state_before_execute", True)
@@ -55,6 +60,12 @@ class FollowJointTrajectoryBridge(Node):
         self.publish_rate_hz = max(
             1.0,
             self.get_parameter("publish_rate_hz").get_parameter_value().double_value,
+        )
+        self.clock_stall_timeout_sec = max(
+            0.5,
+            self.get_parameter("clock_stall_timeout_sec")
+            .get_parameter_value()
+            .double_value,
         )
         self.goal_tolerance = (
             self.get_parameter("goal_tolerance").get_parameter_value().double_value
@@ -239,8 +250,15 @@ class FollowJointTrajectoryBridge(Node):
 
         final_time_sec = self._point_time_sec(reordered_points[-1])
         timeout_margin = self._goal_time_tolerance_for_goal(goal_handle.request)
-        start_monotonic = time.monotonic()
+        # Execution is paced by the ROS clock, which under use_sim_time is
+        # Isaac's /clock. MoveIt profiles time_from_start against that same
+        # clock, so interpolating against wall time replays the trajectory at
+        # the simulator's real-time factor (measured 0.80 under load: a 6 s
+        # plan ran in 4.8 s of sim time, i.e. every velocity and acceleration
+        # 1.24x what was planned).
+        start_time = self.get_clock().now()
         period_sec = 1.0 / self.publish_rate_hz
+        next_deadline_sec = 0.0
 
         self.get_logger().info(
             f"Executing trajectory with {len(reordered_points)} points over "
@@ -248,7 +266,7 @@ class FollowJointTrajectoryBridge(Node):
         )
 
         while rclpy.ok():
-            elapsed_sec = time.monotonic() - start_monotonic
+            elapsed_sec = self._elapsed_sec(start_time)
 
             if goal_handle.is_cancel_requested:
                 self.get_logger().info("Trajectory execution canceled.")
@@ -303,7 +321,29 @@ class FollowJointTrajectoryBridge(Node):
                         message,
                     )
 
-            time.sleep(period_sec)
+            # The ROS clock under Isaac only advances one physics step at a
+            # time, so a deadline accumulator drifts inside a step and then
+            # fires twice in a row to catch up -- two commands stamped in the
+            # same step, the first of which the drive never sees. Resync the
+            # deadline to the clock instead of bursting; at publish_rate_hz ==
+            # the physics rate this makes the loop tick-locked, one command per
+            # step, which is the most the simulator can act on.
+            next_deadline_sec += period_sec
+            elapsed_now = self._elapsed_sec(start_time)
+            if elapsed_now > next_deadline_sec:
+                next_deadline_sec = elapsed_now + period_sec * 0.5
+            if not self._wait_until_elapsed(start_time, next_deadline_sec):
+                message = (
+                    "Simulation clock stalled for %.1f s of wall time during "
+                    "execution (sim time %.3f s of %.3f s). Is the simulator "
+                    "paused?"
+                ) % (self.clock_stall_timeout_sec, elapsed_sec, final_time_sec)
+                self.get_logger().error(message)
+                goal_handle.abort()
+                return self._result(
+                    FollowJointTrajectory.Result.GOAL_TOLERANCE_VIOLATED,
+                    message,
+                )
 
         goal_handle.abort()
         return self._result(
@@ -566,6 +606,34 @@ class FollowJointTrajectoryBridge(Node):
     @staticmethod
     def _duration_to_sec(duration_msg) -> float:
         return float(duration_msg.sec) + float(duration_msg.nanosec) * 1e-9
+
+    def _elapsed_sec(self, start_time) -> float:
+        """Seconds of ROS-clock time since ``start_time`` (sim time when
+        use_sim_time is set)."""
+        return (self.get_clock().now() - start_time).nanoseconds * 1e-9
+
+    def _wait_until_elapsed(self, start_time, deadline_sec: float) -> bool:
+        """Block until the ROS clock reaches ``deadline_sec`` past start.
+
+        Sleeps on wall time in short slices so a paused or stalled simulator
+        cannot hang the goal forever. Returns False if the ROS clock failed to
+        advance for ``clock_stall_timeout_sec`` of wall time.
+        """
+        last_elapsed = self._elapsed_sec(start_time)
+        last_progress_wall = time.monotonic()
+        while rclpy.ok():
+            elapsed = self._elapsed_sec(start_time)
+            if elapsed >= deadline_sec:
+                return True
+            if elapsed > last_elapsed:
+                last_elapsed = elapsed
+                last_progress_wall = time.monotonic()
+            elif time.monotonic() - last_progress_wall > self.clock_stall_timeout_sec:
+                return False
+            # Slice well under one physics step so we do not overshoot the
+            # deadline, but not so fine that we burn a core spinning.
+            time.sleep(min(0.002, max(0.0005, (deadline_sec - elapsed) * 0.5)))
+        return True
 
     @staticmethod
     def _result(error_code: int, error_string: str) -> FollowJointTrajectory.Result:

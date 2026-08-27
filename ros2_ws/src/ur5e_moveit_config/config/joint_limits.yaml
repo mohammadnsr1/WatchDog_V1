@@ -30,7 +30,16 @@ joint_limits:
     max_acceleration: 3.0
   elbow_joint:
     has_position_limits: true
-    min_position: -3.141592653589793
+    # ELBOW-UP ONLY. A negative elbow is what let MoveIt reach the parts by
+    # swinging upper_arm_link through the Vention frame -- the frame is not in
+    # the planning scene (only the flat workspace_floor slab, top z=-0.05), so
+    # nothing else forbids it. Isaac then had to resolve the interpenetration:
+    # RTF collapsed 0.95 -> 0.19 and the goal died GOAL_TOLERANCE_VIOLATED.
+    # Seeding IK from an elbow-up state does NOT hold -- KDL is numerical and
+    # jumped to elbow=-82 deg anyway. A bound does hold: MoveIt applies these
+    # to the JointModel, so KDL's search and OMPL's sampling both respect it.
+    # 0.0 (fully straight) stays legal because the far parts need the reach.
+    min_position: 0.0
     max_position: 3.141592653589793
     has_velocity_limits: true
     max_velocity: 3.141592653589793
