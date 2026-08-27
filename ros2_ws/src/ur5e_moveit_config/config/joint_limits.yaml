@@ -12,14 +12,27 @@ link_padding:
   onrobot_rg2_right_outer_knuckle: 0.0
 
 joint_limits:
+  # +-180 deg instead of +-360. At +-360 every joint has a 720 deg span, so each
+  # pose has several IK solutions differing by whole revolutions. KDL returned
+  # ones in extreme branches (placement_approach: wrist_3=353.6 deg, 0.1 rad off
+  # the stop; brown pick: shoulder_lift=313.5 deg) and OMPL then had to cross most
+  # of a revolution on several joints at once -- start and goal both verified
+  # collision-free, yet all 3 planners found no path. Halving each span removes the
+  # duplicate branches and keeps every physically distinct pose reachable.
   shoulder_pan_joint:
     has_position_limits: true
-    min_position: -6.283185307179586
-    max_position: 6.283185307179586
+    min_position: -3.141592653589793
+    max_position: 3.141592653589793
     has_velocity_limits: true
     max_velocity: 3.141592653589793
     has_acceleration_limits: true
     max_acceleration: 3.0
+  # shoulder_lift stays at +-360; only shoulder_pan is clamped. Measured: sweeping
+  # the grasp orientation from top-down toward hex_blue's side grasp, IK holds to
+  # t=0.6 where the solution sits at shoulder_lift=+168.1 deg -- hard against a +-180
+  # clamp -- and returns NO_IK from t=0.7 on. Clamping this joint is what made that
+  # side grasp unreachable. Wrapping here is tolerable: it pitches the arm rather
+  # than sweeping it around the base the way a wrapped shoulder_pan does.
   shoulder_lift_joint:
     has_position_limits: true
     min_position: -6.283185307179586
@@ -45,6 +58,13 @@ joint_limits:
     max_velocity: 3.141592653589793
     has_acceleration_limits: true
     max_acceleration: 3.0
+  # WRISTS stay at +-360 while the shoulders are clamped to +-180. The wrapping
+  # that defeated OMPL was in the SHOULDERS: a wrapped shoulder_pan/lift swings the
+  # whole arm through a huge arc, so the planner must cross most of a revolution of
+  # real motion. A wrapped wrist only spins the tool in place -- cheap to plan, and
+  # REQUIRED here: clamping the wrists to +-180 left hex_blue's side grasp with no
+  # IK solution at ANY distance (0.67-0.84 m all NO_IK), while the same position
+  # top-down solved fine. Orientation, not reach, was the binding constraint.
   wrist_1_joint:
     has_position_limits: true
     min_position: -6.283185307179586

@@ -253,7 +253,7 @@ steps:
     grasp_width_m: 0.08
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: lift_inverted_u_brown_second
@@ -276,7 +276,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_inverted_u_brown
@@ -285,7 +285,7 @@ steps:
     target_frame: inverted_u_brown_placement
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and seating into the slot is where tracking error
@@ -357,7 +357,7 @@ steps:
   - step_id: lift_hex_red
     object_id: hex_red
     action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
-    lift_height_m: 0.2
+    lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
 
