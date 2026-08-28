@@ -151,30 +151,12 @@ steps:
     grasp_width_m: 0.042
     contract_clause_groups: [invariants]
 
-  - step_id: lift_u_green
-    object_id: u_green
-    grasp_width_m: 0.042
-    contract_clause_groups: [invariants]
-
-  - step_id: reorient_approach_u_green
-    object_id: u_green
-    grasp_width_m: 0.042
-    contract_clause_groups: [invariants]
-
-  # Ends with a release: u_green is set down at its reorient frame and becomes
-  # inactive until repick_u_green. Its stationarity monitor re-arms here, on the
-  # new resting pose.
   - step_id: reorient_u_green
     object_id: u_green
     grasp_width_m: 0.042
     contract_clause_groups: [invariants]
 
   - step_id: repick_u_green
-    object_id: u_green
-    grasp_width_m: 0.042
-    contract_clause_groups: [invariants]
-
-  - step_id: lift_u_green_second
     object_id: u_green
     grasp_width_m: 0.042
     contract_clause_groups: [invariants]
@@ -195,11 +177,6 @@ steps:
     grasp_width_m: 0.08
     contract_clause_groups: [invariants]
 
-  - step_id: lift_inverted_u_brown
-    object_id: inverted_u_brown
-    grasp_width_m: 0.08
-    contract_clause_groups: [invariants]
-
   - step_id: reorient_approach_inverted_u_brown
     object_id: inverted_u_brown
     grasp_width_m: 0.08
@@ -211,11 +188,6 @@ steps:
     contract_clause_groups: [invariants]
 
   - step_id: repick_inverted_u_brown
-    object_id: inverted_u_brown
-    grasp_width_m: 0.08
-    contract_clause_groups: [invariants]
-
-  - step_id: lift_inverted_u_brown_second
     object_id: inverted_u_brown
     grasp_width_m: 0.08
     contract_clause_groups: [invariants]
@@ -236,11 +208,6 @@ steps:
     grasp_width_m: 0.03
     contract_clause_groups: [invariants]
 
-  - step_id: lift_hex_blue
-    object_id: hex_blue
-    grasp_width_m: 0.03
-    contract_clause_groups: [invariants]
-
   - step_id: place_approach_hex_blue
     object_id: hex_blue
     grasp_width_m: 0.03
@@ -253,11 +220,6 @@ steps:
 
   # --- hex_red: same shape as hex_blue ---
   - step_id: pick_hex_red
-    object_id: hex_red
-    grasp_width_m: 0.03
-    contract_clause_groups: [invariants]
-
-  - step_id: lift_hex_red
     object_id: hex_red
     grasp_width_m: 0.03
     contract_clause_groups: [invariants]

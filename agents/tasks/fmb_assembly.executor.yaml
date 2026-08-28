@@ -102,36 +102,37 @@ steps:
   # already has that rotation folded in and will NOT look like a world
   # orientation -- it is inverse(resting) (x) desired_world. Every value here
   # was re-derived that way and round-trips to the validated world grasp.
+  # Grasp and lift are ONE step: the lift shares the grasp's monitor set
+  # (part stays in the gripper, clamp effort stays under the registry cap),
+  # so splitting them bought a second gate wait for no additional arming.
   - step_id: pick_u_green
     object_id: u_green
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.042
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.049, y: -0.060, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
-
-  - step_id: lift_u_green
-    object_id: u_green
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
 
-  - step_id: reorient_approach_u_green
-    object_id: u_green
-    action_hint: approach the reorient frame from above, stopping clear of contact
-    target_frame: u_green_reorient
-    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
-    # Offset from the frame, expressed in the FRAME'S OWN axes (not
-    # world): these frames' local +Z does not point up, so a vertical
-    # standoff lands on local Y. from u_green_pick.plan.yaml.
-    target_offset:
-      position: {x: 0.0, y: -0.08000, z: 0.0}
-      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    grasp_width_m: 0.042
-    grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+
+  # - step_id: reorient_approach_u_green
+  #   object_id: u_green
+  #   action_hint: approach the reorient frame from above, stopping clear of contact
+  #   target_frame: u_green_reorient
+  #   axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
+  #   # Offset from the frame, expressed in the FRAME'S OWN axes (not
+  #   # world): these frames' local +Z does not point up, so a vertical
+  #   # standoff lands on local Y. from u_green_pick.plan.yaml.
+  #   target_offset:
+  #     position: {x: 0.0, y: -0.08000, z: 0.0}
+  #     orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+  #   grasp_width_m: 0.042
+  #   grasp_center_offset:
+  #     position: {x: 0.049, y: -0.040, z: 0.0}
+  #     orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 
   - step_id: reorient_u_green
@@ -140,30 +141,29 @@ steps:
     target_frame: u_green_reorient
     grasp_width_m: 0.042
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.049, y: -0.060, z: 0.0}
       orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
 
-    # Slow for the final descent: at low speed the commanded trajectory
-    # is tracked far more closely, and a set-down is where tracking error
-    # turns into a jam. The transits above stay at the cell default.
-    motion:
-      max_velocity_scaling_factor: 0.2
-      max_acceleration_scaling_factor: 0.2
-      allowed_planning_time: 10.0
+  #   # Slow for the final descent: at low speed the commanded trajectory
+  #   # is tracked far more closely, and a set-down is where tracking error
+  #   # turns into a jam. The transits above stay at the cell default.
+  #   motion:
+  #     max_velocity_scaling_factor: 0.2
+  #     max_acceleration_scaling_factor: 0.2
+  #     allowed_planning_time: 10.0
 
+  # Grasp and lift are ONE step -- see pick_hex_blue.
   - step_id: repick_u_green
     object_id: u_green
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.042
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.049, y: -0.060, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
-
-  - step_id: lift_u_green_second
-    object_id: u_green
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
+
 
 
   - step_id: place_approach_u_green
@@ -175,11 +175,11 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_green_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: -0.15022, z: 0.0}
+      position: {x: 0.0, y: -0.15, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.042
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.049, y: -0.060, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
   - step_id: place_u_green
@@ -188,7 +188,7 @@ steps:
     target_frame: u_green_placement
     grasp_width_m: 0.042
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.049, y: -0.060, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and seating into the slot is where tracking error
@@ -201,19 +201,18 @@ steps:
   # ---- inverted_u_brown: pick flat, reorient upright, seat ----------------
   # The re-pick grasps 10mm further along the part than the first pick
   # (y: -0.06 vs -0.05): once upright, the original point no longer clears.
+  # Grasp and lift are ONE step -- see pick_hex_blue.
   - step_id: pick_inverted_u_brown
     object_id: inverted_u_brown
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.08
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.003}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
-
-  - step_id: lift_inverted_u_brown
-    object_id: inverted_u_brown
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
+
 
 
   - step_id: reorient_approach_inverted_u_brown
@@ -229,7 +228,7 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.003}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_inverted_u_brown
@@ -238,7 +237,7 @@ steps:
     target_frame: inverted_u_brown_reorient
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.003}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
@@ -248,19 +247,18 @@ steps:
       max_acceleration_scaling_factor: 0.2
       allowed_planning_time: 10.0
 
+  # Grasp and lift are ONE step -- see pick_hex_blue.
   - step_id: repick_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.08
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
+    grasp_width_m: 0.04
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
-
-  - step_id: lift_inverted_u_brown_second
-    object_id: inverted_u_brown
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
+
 
 
   - step_id: place_approach_inverted_u_brown
@@ -274,7 +272,7 @@ steps:
     target_offset:
       position: {x: 0.0, y: -0.20000, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    grasp_width_m: 0.08
+    grasp_width_m: 0.04
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
@@ -283,7 +281,7 @@ steps:
     object_id: inverted_u_brown
     action_hint: descend into the placement frame, release, retreat
     target_frame: inverted_u_brown_placement
-    grasp_width_m: 0.08
+    grasp_width_m: 0.04
     grasp_center_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
@@ -298,17 +296,17 @@ steps:
   # ---- hex_blue: single pick, direct insertion ----------------------------
   # A hex pin, long axis 140mm. approach_distance_m is 0: the pin is picked
   # where it lies, with no separate standoff stage before the grasp.
+  # Grasp and lift are ONE step: the lift shares the grasp's monitor set
+  # (part stays in the gripper, clamp effort stays under the registry cap),
+  # so splitting them bought a second gate wait for no additional arming.
   - step_id: pick_hex_blue
     object_id: hex_blue
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.03
     approach_distance_m: 0.0
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
-
-  - step_id: lift_hex_blue
-    object_id: hex_blue
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
     lift_height_m: 0.2
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
@@ -346,17 +344,15 @@ steps:
       allowed_planning_time: 20.0
 
   # ---- hex_red: single pick, direct insertion -----------------------------
+  # Grasp and lift are ONE step -- see pick_hex_blue.
   - step_id: pick_hex_red
     object_id: hex_red
+    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.03
     approach_distance_m: 0.0
     grasp_center_offset:
       position: {x: 0.0, y: 0.04, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: 0.7071}
-
-  - step_id: lift_hex_red
-    object_id: hex_red
-    action_hint: raise the held part straight up with the lift tool, passing the TCP pose the preceding motion reported and lift_height_m as height_m
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
