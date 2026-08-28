@@ -39,6 +39,7 @@ from robot_backend.utils.geometry import compose_poses
 from robot_backend.utils.geometry import grasp_center_from_object_and_offset, make_pose, rotate_vector
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
 from robot_backend.utils.rg2_geometry import tcp_target_from_grasp_center
+from robot_backend.mcp_servers import role_context
 
 
 try:
@@ -71,6 +72,9 @@ _DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.001
 _MIN_QUATERNION_NORM = 1e-8
 
 mcp = FastMCP("robot_backend_motion") if FastMCP is not None else None
+# Must precede the tool definitions below: it patches mcp.tool() so every tool
+# registered afterwards records its call to mcp_calls_<role>.jsonl.
+role_context.install_call_logging(mcp, "motion")
 _NODE: Node | None = None
 _BACKEND = None
 
@@ -449,6 +453,28 @@ def _compute_approach_geometry(
 
 
 if mcp is not None:
+
+    @mcp.tool()
+    def get_rendered_task() -> dict[str, Any]:
+        """Return the EXECUTOR's system prompt and rendered task. Call first.
+
+        Reads EXECUTOR_TASK_PATH only. This tool is hosted here, on a server
+        the executor session loads and the watchdog session does not, so the
+        watchdog has no tool capable of resolving the executor's task file --
+        which matters because the executor's file may deliberately carry extra
+        or faulty steps the watchdog must not be told about in advance.
+
+        Returns system_prompt and task as separate fields: load system_prompt
+        as your standing instructions and task as your opening task, before
+        calling any other tool.
+        """
+
+        command = "get_rendered_task"
+        try:
+            return role_context.build_rendered_task(role_context.EXECUTOR_ROLE)
+        except Exception as exc:
+            return _error(command, exc)
+
 
     @mcp.tool()
     @emit_skill_events

@@ -1,0 +1,25 @@
+{
+  "_comment": "WATCHDOG session permissions. Watchdog tools only -- no motion/gripper/scene entries, so a config mistake that leaked a command server into this session would still prompt before the arm could be moved.",
+  "permissions": {
+    "allow": [
+      "mcp__robot-backend-watchdog__abort_run",
+      "mcp__robot-backend-watchdog__arm_monitor",
+      "mcp__robot-backend-watchdog__available_event_types",
+      "mcp__robot-backend-watchdog__available_monitor_definitions",
+      "mcp__robot-backend-watchdog__capture_frames",
+      "mcp__robot-backend-watchdog__disarm_all_monitors",
+      "mcp__robot-backend-watchdog__disarm_monitor",
+      "mcp__robot-backend-watchdog__get_contract",
+      "mcp__robot-backend-watchdog__get_events",
+      "mcp__robot-backend-watchdog__get_evidence",
+      "mcp__robot-backend-watchdog__get_execution_state",
+      "mcp__robot-backend-watchdog__get_rendered_task",
+      "mcp__robot-backend-watchdog__halt_execution",
+      "mcp__robot-backend-watchdog__query_snapshot",
+      "mcp__robot-backend-watchdog__record_run_verdict",
+      "mcp__robot-backend-watchdog__record_verdict",
+      "mcp__robot-backend-watchdog__signal_ready",
+      "mcp__robot-backend-watchdog__wait_for_event"
+    ]
+  }
+}

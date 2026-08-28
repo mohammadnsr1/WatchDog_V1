@@ -39,6 +39,7 @@ from robot_backend.skills.gripper_skills import open_gripper_skill
 from robot_backend.skills.gripper_skills import release_skill
 from robot_backend.skills.gripper_skills import set_gripper_width_skill
 from robot_backend.utils.rg2_geometry import DEFAULT_RG2_CALIBRATION
+from robot_backend.mcp_servers import role_context
 
 
 try:
@@ -55,6 +56,9 @@ _DEFAULT_REGISTRY_PATH = (
 )
 
 mcp = FastMCP("robot_backend_gripper") if FastMCP is not None else None
+# Must precede the tool definitions below: it patches mcp.tool() so every tool
+# registered afterwards records its call to mcp_calls_<role>.jsonl.
+role_context.install_call_logging(mcp, "gripper")
 _NODE: Node | None = None
 _BACKEND = None
 _REGISTRY: dict[str, Any] | None = None

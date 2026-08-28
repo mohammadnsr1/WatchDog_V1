@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -35,7 +34,12 @@ import yaml
 from agent_harness.config import load_config
 from agent_harness.mcp_client import MCPClientPool
 
-_PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+# Rendering moved to agent_harness.task_render so the MCP servers can call it
+# too (Claude Code sessions render via get_rendered_task, with no run_agent.py
+# in the loop). Re-exported under their original names -- these remain part of
+# this module's surface for anything that imports them from here.
+from agent_harness.task_render import format_steps as _format_steps
+from agent_harness.task_render import render_task
 
 
 def _resolve_and_export_session(agents_dir: Path):
@@ -130,80 +134,6 @@ def _export_task_path(agent_role: str, task_path: str) -> None:
         )
     os.environ[env_name] = resolved
     print(f"task: {resolved} (exported {env_name} for MCP servers)")
-
-
-def _format_steps(steps: list) -> str:
-    """Render the task's steps: block as readable text for the EXECUTOR
-    prompt only (see render_task/watchdog_task.txt: the watchdog template has
-    no {{STEPS}} placeholder, so this text never reaches it).
-
-    The executor is instructed (executor_system.txt) to pass each step's
-    grasp_width_m / grasp_center_offset to the motion and gripper tools
-    itself; it can only do that if the numbers are actually in its rendered
-    prompt, not just present as structured YAML the harness parses. Before
-    this, the agent could see the steps: block only as raw prose text buried
-    in step_plan (if at all) -- this is why width was passed only
-    intermittently on real runs.
-    """
-    if not steps:
-        return "(no structured steps in this task file)"
-    lines: list[str] = []
-    for entry in steps:
-        if not isinstance(entry, dict):
-            continue
-        lines.append(f"- step_id: {entry.get('step_id', '?')}")
-        lines.append(f"  object_id: {entry.get('object_id', '?')}")
-        # Render EVERY remaining field rather than an allowlist. An allowlist
-        # silently drops whatever a task author adds -- approach_distance_m and
-        # target_frame were being dropped this way, so the agent never saw the
-        # authored values and substituted its own.
-        for key, value in entry.items():
-            if key in ("step_id", "object_id", "grasp_center_offset"):
-                continue
-            lines.append(f"  {key}: {value}")
-        offset = entry.get("grasp_center_offset")
-        if isinstance(offset, dict):
-            pos = offset.get("position", {})
-            ori = offset.get("orientation", {})
-            lines.append(
-                f"  grasp_center_offset: position={pos} orientation={ori}"
-            )
-    return "\n".join(lines)
-
-
-def render_task(template_text: str, task: dict) -> str:
-    """Substitute {{PLACEHOLDER}} tokens. Raise if any survive rendering.
-
-    A literal placeholder reaching the model produces a confidently wrong run
-    that looks clean in the logs, so this is a hard failure, not a warning.
-    """
-    substitutions = {
-        "INSTRUCTION_SPEC": task.get("instruction_spec", ""),
-        "STEP_PLAN": task.get("step_plan", ""),
-        "OBJECT_IDS": task.get("object_ids", ""),
-        "RUN_NOTES": task.get("run_notes", ""),
-        # Only the executor template contains {{STEPS}} -- see
-        # _format_steps' docstring. Building it here unconditionally is
-        # harmless for the watchdog template, which never references the key.
-        "STEPS": _format_steps(task.get("steps", [])),
-    }
-
-    def replace(m: re.Match) -> str:
-        key = m.group(1)
-        if key not in substitutions:
-            raise ValueError(f"task file has no value for placeholder {{{{{key}}}}}")
-        return str(substitutions[key])
-
-    rendered = _PLACEHOLDER_RE.sub(replace, template_text)
-
-    survivors = _PLACEHOLDER_RE.findall(rendered)
-    if survivors:
-        raise ValueError(
-            f"unrendered placeholder(s) survived template rendering: {survivors}. "
-            f"A literal placeholder reaching the model produces a confidently "
-            f"wrong run that looks clean in the logs -- refusing to proceed."
-        )
-    return rendered
 
 
 def main() -> int:

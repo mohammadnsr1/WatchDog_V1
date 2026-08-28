@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "robot-backend-scene": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
+      ]
+    },
+    "robot-backend-motion": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
+      ]
+    },
+    "robot-backend-gripper": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
+      ]
+    },
+    "robot-backend-watchdog": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend watchdog_mcp_server"
+      ]
+    },
+    "kit": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["-lc", "exec kit-mcp"],
+      "env": {
+        "OMNI_KIT_MCP_PORT": "9009"
+      }
+    }
+  }
+}

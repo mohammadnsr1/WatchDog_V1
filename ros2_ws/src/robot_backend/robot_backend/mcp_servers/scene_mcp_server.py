@@ -56,6 +56,7 @@ from robot_backend.skills.maintenance_skills import get_scene_summary as get_sce
 from robot_backend.skills.maintenance_skills import recover_scene as recover_scene_skill
 from robot_backend.skills.maintenance_skills import reset_object_state as reset_object_state_skill
 from robot_backend.skills.maintenance_skills import set_permitted_contacts as set_permitted_contacts_skill
+from robot_backend.mcp_servers import role_context
 
 
 try:
@@ -72,6 +73,9 @@ _DEFAULT_REGISTRY_PATH = (
 )
 
 mcp = FastMCP("robot_backend_scene") if FastMCP is not None else None
+# Must precede the tool definitions below: it patches mcp.tool() so every tool
+# registered afterwards records its call to mcp_calls_<role>.jsonl.
+role_context.install_call_logging(mcp, "scene")
 _NODE: Node | None = None
 _BACKEND = None
 _REGISTRY: dict[str, Any] | None = None

@@ -47,6 +47,7 @@ from robot_backend.watchdog.recorder import (
 )
 from robot_backend.watchdog import session as session_helper
 from robot_backend.watchdog.timebase import wall_ns
+from robot_backend.mcp_servers import role_context
 
 # Image ring buffer bounds, env-configurable. A byte bound is required because
 # frame size varies with encoding and a count-only bound cannot protect memory.
@@ -277,6 +278,9 @@ else:
 
 
 mcp = FastMCP("robot_backend_watchdog") if FastMCP is not None else None
+# Must precede the tool definitions below: it patches mcp.tool() so every tool
+# registered afterwards records its call to mcp_calls_<role>.jsonl.
+role_context.install_call_logging(mcp, "watchdog")
 
 
 @dataclass
@@ -554,6 +558,30 @@ def _drain_wait(
 
 
 if mcp is not None:
+
+    @mcp.tool()
+    def get_rendered_task() -> dict[str, Any]:
+        """Return the WATCHDOG's system prompt and rendered task. Call first.
+
+        Reads WATCHDOG_TASK_PATH only. This tool is hosted here, on the server
+        the watchdog session loads and the executor session does not, so
+        neither role has a tool capable of resolving the other's task file.
+        That separation is load-bearing: the watchdog's file states only what
+        conformant execution looks like, while the executor's may carry extra
+        or faulty steps, and a watchdog that could read the executor's file
+        would be judging against the fault rather than against the spec.
+
+        Returns system_prompt and task as separate fields: load system_prompt
+        as your standing instructions and task as your opening task, before
+        calling any other tool.
+        """
+
+        command = "get_rendered_task"
+        try:
+            return role_context.build_rendered_task(role_context.WATCHDOG_ROLE)
+        except Exception as exc:
+            return _error(command, exc)
+
 
     @mcp.tool()
     def get_contract(object_id: str) -> dict[str, Any]:
@@ -1123,6 +1151,16 @@ if mcp is not None:
         produces two verdicts. It still publishes, and the return carries
         duplicate_step_id: true with a warning logged, so a genuinely
         unintended repeat stays visible.
+
+        explanation must summarise the DECISION BASIS, not just state the
+        conclusion: what you observed (the evidence and the values that
+        mattered), why that made this conformant or a departure -- including
+        why something suspicious was judged within bounds when you did not
+        flag it -- and, for a departure, what you believe physically happened
+        (collision, wrong grasp, slip, wrong approach). Name the mechanism, and
+        say plainly when the evidence does not settle it. A summary of the
+        basis, not a transcript of your reasoning. This text is the only place
+        a reviewer can tell a correct judgement from a lucky one.
         """
         command = "record_verdict"
         try:
@@ -1183,6 +1221,13 @@ if mcp is not None:
         real argument rather than a sentence in explanation so coverage can be
         checked by set comparison against the task's steps: block, the same way
         clause_id makes clause coverage checkable.
+
+        explanation must summarise the DECISION BASIS, the same as
+        record_verdict's: what you observed across the run and why none of it
+        rose to a finding, including why anything that looked suspicious was
+        judged within bounds. "No findings" is a claim about evidence you
+        examined; this is where that examination is shown. State plainly that
+        the verdict is a whole-run rollup.
 
         claimed_outcome is optional here and, when given, should summarize the
         executor's claims across the run rather than any single step's.

@@ -211,6 +211,20 @@ record_verdict(step_id, verdict, clause_results, explanation, claimed_outcome)
     verdict under the new id and name the earlier step_id in the explanation, so
     the two read as one attempt and its retry rather than two unrelated steps.
 
+    The explanation must carry a SUMMARY OF THE DECISION BASIS, not just the
+    conclusion. Three things, in a few sentences:
+      - what you actually observed: the evidence you read and the values that
+        mattered, named as the fields they came from;
+      - why that made this conformant or a departure -- and when you did NOT
+        flag something that looked suspicious, why you judged it within bounds;
+      - for a departure, what you believe physically happened: a collision, a
+        grasp on the wrong feature, a slip, an approach from the wrong side.
+        Name the mechanism you think produced the numbers, and say so plainly
+        when the evidence does not settle it.
+    This is a summary of the basis, not a transcript of your reasoning. Write
+    the account a reviewer needs to tell a correct judgement from a lucky one:
+    the explanation is the only place that distinction survives.
+
 record_run_verdict(verdict, clause_results, explanation, steps_covered,
                    claimed_outcome)
     One verdict for the whole run. Call this exactly once, at the true end of
@@ -226,7 +240,11 @@ record_run_verdict(verdict, clause_results, explanation, steps_covered,
     say which part an entry is about.
 
     steps_covered lists every step_id the verdict accounts for. The explanation
-    states plainly that this is a whole-run rollup.
+    states plainly that this is a whole-run rollup, and carries the same summary
+    of the decision basis record_verdict requires: what you observed across the
+    run, and why nothing in it rose to a finding. "No findings" is a claim about
+    evidence you examined, and the explanation is where that examination is
+    shown.
 
     A run that recorded even one finding through record_verdict must NOT call
     this. Those recordings already are that run's record; a rollup alongside

@@ -1,0 +1,35 @@
+{
+  "_comment": [
+    "WATCHDOG session MCP config. The watchdog server ONLY.",
+    "",
+    "motion, gripper and scene are absent by design, and this is the core",
+    "architectural rule of the whole setup: a watchdog that can command the arm",
+    "is a second controller, not an independent observer. The watchdog still sees",
+    "everything the executor does -- observation flows through the ROS event bus",
+    "INTO this server (get_execution_state, get_events, get_evidence,",
+    "wait_for_event), never through holding the executor's command tools.",
+    "",
+    "MUST be launched with --strict-mcp-config. Without it, --mcp-config MERGES",
+    "with the project .mcp.json and this session silently regains motion, gripper",
+    "and scene (verified: 42 tools merged vs 1 with --strict). That merge is",
+    "invisible from inside the session unless you list tools.",
+    "",
+    "WATCHDOG_SESSION_DIR is deliberately NOT set here -- see executor.mcp.json's",
+    "note. Both configs omit it so both roles resolve the same bringup-written",
+    "pointer; a value here would have to match the executor's byte-for-byte and",
+    "would go stale between runs."
+  ],
+  "mcpServers": {
+    "robot-backend-watchdog": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend watchdog_mcp_server"
+      ],
+      "env": {
+        "WATCHDOG_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.watchdog.yaml"
+      }
+    }
+  }
+}

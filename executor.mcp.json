@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "EXECUTOR session MCP config. Command servers ONLY -- motion, gripper, scene.",
+    "The watchdog server is absent by design: an executor holding monitoring tools",
+    "could arm, disarm, or record its own verdicts, and the study's independence",
+    "claim would be gone. See RUN.md.",
+    "",
+    "MUST be launched with --strict-mcp-config. Without it, --mcp-config MERGES",
+    "with the project .mcp.json and this session silently regains the watchdog",
+    "server (verified: 42 tools merged vs 1 with --strict).",
+    "",
+    "WATCHDOG_SESSION_DIR is deliberately NOT set here. The cell bringup writes",
+    "~/.watchdog/current_session at launch, so both sessions resolve the same",
+    "directory by rule='pointer', fresh for each run. Hardcoding a path here",
+    "would pin every run to one directory AND override the bringup's own fresh",
+    "session (rule='env' beats the pointer). get_rendered_task hard-fails if the",
+    "resolved rule is 'fresh', so a missing pointer is loud, not silent."
+  ],
+  "mcpServers": {
+    "robot-backend-motion": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+      }
+    },
+    "robot-backend-gripper": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+      }
+    },
+    "robot-backend-scene": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+      }
+    }
+  }
+}

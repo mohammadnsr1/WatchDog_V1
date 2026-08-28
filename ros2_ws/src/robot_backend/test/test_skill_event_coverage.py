@@ -49,6 +49,13 @@ MOTION_ALLOWLIST: dict[str, str] = {
         "pure local computation (pose geometry only) -- touches no backend, "
         "no ROS service, no physical state"
     ),
+    "get_rendered_task": (
+        "prompt/config rendering for the Claude Code path -- reads the role's "
+        "system prompt and task file, touches no backend, no ROS service, no "
+        "physical state. It is also called once before the run begins, so it "
+        "has no step to be observed within; the call itself is still recorded "
+        "in mcp_calls_executor.jsonl"
+    ),
 }
 
 

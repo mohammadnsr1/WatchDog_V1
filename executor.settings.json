@@ -1,0 +1,31 @@
+{
+  "_comment": "EXECUTOR session permissions. Command servers only -- no watchdog tools appear here, so a config mistake that leaked the watchdog server into this session would still prompt on every monitoring call instead of running silently.",
+  "permissions": {
+    "allow": [
+      "mcp__robot-backend-gripper__close_gripper",
+      "mcp__robot-backend-gripper__get_gripper_state",
+      "mcp__robot-backend-gripper__grasp",
+      "mcp__robot-backend-gripper__open_gripper",
+      "mcp__robot-backend-gripper__release",
+      "mcp__robot-backend-gripper__set_gripper_joint_position",
+      "mcp__robot-backend-gripper__set_gripper_width",
+      "mcp__robot-backend-motion__compute_grasp_approach_poses",
+      "mcp__robot-backend-motion__execute_approach_and_preposition",
+      "mcp__robot-backend-motion__get_rendered_task",
+      "mcp__robot-backend-motion__get_robot_state",
+      "mcp__robot-backend-motion__move_grasp_center_to_pose",
+      "mcp__robot-backend-motion__move_tcp_to_pose",
+      "mcp__robot-backend-motion__move_to_joint_positions",
+      "mcp__robot-backend-motion__move_to_named_safe_joint_pose",
+      "mcp__robot-backend-scene__begin_step",
+      "mcp__robot-backend-scene__end_step",
+      "mcp__robot-backend-scene__get_object_pose",
+      "mcp__robot-backend-scene__get_object_poses",
+      "mcp__robot-backend-scene__get_scene_summary",
+      "mcp__robot-backend-scene__recover_scene",
+      "mcp__robot-backend-scene__reset_object_state",
+      "mcp__robot-backend-scene__reset_tf",
+      "mcp__robot-backend-scene__sync_scene"
+    ]
+  }
+}

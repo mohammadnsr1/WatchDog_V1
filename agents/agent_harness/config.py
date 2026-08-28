@@ -79,7 +79,27 @@ def _expand(path_str: str) -> Path:
     return Path(os.path.expanduser(os.path.expandvars(path_str)))
 
 
-def load_config(config_path: str | Path) -> AgentConfig:
+def load_config(
+    config_path: str | Path,
+    *,
+    require_api_key: bool = True,
+    base_dir: Path | None = None,
+) -> AgentConfig:
+    """Load and validate an agent config.
+
+    require_api_key=False skips the api_key_env presence check. The Claude Code
+    path has no API key by construction -- the model is driven by the CLI, not
+    by this harness -- but the same config still names the role's system_prompt
+    and task_template, which get_rendered_task needs. Defaults to True so the
+    run_agent.py path keeps failing loudly on a missing key, which is the right
+    behaviour when a provider IS about to be called.
+
+    base_dir overrides the directory relative config paths resolve against.
+    It defaults to Path.cwd() because run_agent.py is documented as being run
+    from agents/. An MCP server inherits its cwd from whatever terminal
+    launched the session, so it must pass the agents/ directory explicitly
+    rather than inherit a cwd that has nothing to do with the repo.
+    """
     config_path = Path(config_path).resolve()
     with open(config_path) as f:
         raw = yaml.safe_load(f)
@@ -87,7 +107,7 @@ def load_config(config_path: str | Path) -> AgentConfig:
     # Relative paths in the config (system_prompt, task_template,
     # transcript_dir) are written relative to the agents/ directory the
     # tooling is run from (see README), not relative to config/ itself.
-    base_dir = Path.cwd()
+    base_dir = Path(base_dir) if base_dir is not None else Path.cwd()
 
     def resolve_relative(p: str) -> Path:
         expanded = _expand(p)
@@ -108,7 +128,7 @@ def load_config(config_path: str | Path) -> AgentConfig:
         )
 
     api_key_env = raw["api_key_env"]
-    if not os.environ.get(api_key_env):
+    if require_api_key and not os.environ.get(api_key_env):
         raise RuntimeError(
             f"{config_path}: api_key_env names '{api_key_env}', but that "
             f"environment variable is not set. Copy .env.example to .env, "
