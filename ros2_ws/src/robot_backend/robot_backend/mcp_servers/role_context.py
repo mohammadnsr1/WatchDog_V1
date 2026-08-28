@@ -261,14 +261,28 @@ def _call_log_path() -> Path | None:
     die because its log path could not be resolved. A None here degrades to
     "no call log", which the session guard and the ROS-side recording will
     both make obvious anyway.
+
+    Uses active_session_dir(), which returns None for rule='fresh', rather
+    than resolve_session_dir(), which would hand back a NEW timestamped path.
+    The difference matters because the writer below creates missing parents:
+    with the full resolver, a session directory deleted part-way through a run
+    would make this quietly mint a fresh directory and carry on appending
+    there, splitting one run's call log across two locations with nothing
+    reporting it. That is the same silent divergence resolve_session_dir_strict
+    exists to prevent, and get_rendered_task's guard cannot catch it because it
+    runs once at session start, before the directory goes away. Losing the tail
+    of a call log is recoverable; a second session directory nobody knows about
+    is not.
     """
     try:
         role = detect_role()
     except Exception:
         return None
     try:
-        session_dir, _ = session_helper.resolve_session_dir()
+        session_dir = session_helper.active_session_dir()
     except Exception:
+        return None
+    if session_dir is None:
         return None
     return session_dir / f"mcp_calls_{role}.jsonl"
 

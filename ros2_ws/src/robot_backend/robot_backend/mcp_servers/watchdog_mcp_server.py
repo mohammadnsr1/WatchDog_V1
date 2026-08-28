@@ -387,7 +387,26 @@ def _ensure_watchdog() -> WatchDogContext:
         client_cb_group = MutuallyExclusiveCallbackGroup()
         wake_event = threading.Event()
         registry = _load_registry()
-        session_dir = session_helper.ensure_session_dir()
+        # Resolve WITHOUT minting a session for a run that has none.
+        # ensure_session_dir() creates whatever resolve_session_dir() returns,
+        # including the fresh timestamped path produced when the pointer is
+        # missing or dangling -- so merely starting this server against a dead
+        # session left an empty directory behind for a run that
+        # get_rendered_task's guard was about to refuse anyway. Worse, that
+        # directory is a plausible-looking session an operator can later mistake
+        # for a real one. active_session_dir() returns None instead of inventing
+        # a path, which is the same choice monitor_log_default() already makes
+        # for the log location just below.
+        active = session_helper.active_session_dir()
+        if active is not None:
+            active.mkdir(parents=True, exist_ok=True)
+            session_dir = active
+        else:
+            # No session established: fall back to the legacy per-user location
+            # rather than fabricate one. Frame captures land under
+            # ~/.watchdog/frames, matching where monitor_log_default() puts the
+            # event log in this same case.
+            session_dir = Path.home() / ".watchdog"
         # Explicit WATCHDOG_MONITOR_LOG still wins; otherwise the log defaults
         # into the session dir (events_watchdog.jsonl) so this process's events
         # sit alongside the rest of the run's record. See session.py.
