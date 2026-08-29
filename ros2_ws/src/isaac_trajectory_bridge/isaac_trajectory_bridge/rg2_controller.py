@@ -111,6 +111,23 @@ DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact
 DEFAULT_TORQUE_PROBE_STEP_RAD = 0.01  # uniform step size for the entire torque-mode close
 # Measured idle magnitude peaks at ~0.027 across orientations; floor adds a margin.
 DEFAULT_EFFORT_NOISE_FLOOR = 0.03
+# Fraction of the goal's force_threshold that effort must reach before a
+# flat-derivative reading is allowed to count as a plateau stop.
+#
+# The plateau gate CANNOT be the idle noise floor. Effort in free space sits
+# just above 0.03 (0.031-0.040 measured), so with a noise-floor gate any
+# smooth free-space close reads as "stalled against something" after the two
+# ticks effort_plateau_ticks requires, and the gripper stops fully open. That
+# went unnoticed for as long as the parts vibrated: contact chatter kept
+# d_effort above effort_plateau_deriv, so the branch never fired spuriously.
+# Fixing the physics vibration removed the noise and exposed it -- the guarded
+# move began stopping at 103 mm with stop_reason "effort_plateau" at effort
+# 0.04 against a force_threshold of 15.
+#
+# A fraction keeps the branch reachable (the primary force_threshold stop
+# fires first at 1.0) while requiring the gripper to actually be pressing.
+# At the default force_threshold of 15 this gates at 3.75 -- ~140x idle.
+DEFAULT_EFFORT_PLATEAU_GATE_FRAC = 0.25
 # The single effort stop threshold for torque-mode guarded_move is
 # goal.force_threshold — sourced per object from the registry spec
 # (spec.grasp.force_threshold_n, via robot_backend/skills/gripper_skills.py).
@@ -181,6 +198,9 @@ class RG2Controller(Node):
         self.declare_parameter("torque_probe_step_rad", DEFAULT_TORQUE_PROBE_STEP_RAD)
         self.declare_parameter("effort_noise_floor", DEFAULT_EFFORT_NOISE_FLOOR)
         self.declare_parameter("effort_plateau_deriv", DEFAULT_EFFORT_PLATEAU_DERIV)
+        self.declare_parameter(
+            "effort_plateau_gate_frac", DEFAULT_EFFORT_PLATEAU_GATE_FRAC
+        )
         self.declare_parameter("effort_plateau_ticks", DEFAULT_EFFORT_PLATEAU_TICKS)
         self.declare_parameter("effort_contact_ticks", DEFAULT_EFFORT_CONTACT_TICKS)
         self.declare_parameter("asymmetry_threshold_m", DEFAULT_ASYMMETRY_THRESHOLD_M)
@@ -231,6 +251,9 @@ class RG2Controller(Node):
         self._torque_probe_step_rad = float(self.get_parameter("torque_probe_step_rad").value)
         self._effort_noise_floor = float(self.get_parameter("effort_noise_floor").value)
         self._effort_plateau_deriv = float(self.get_parameter("effort_plateau_deriv").value)
+        self._effort_plateau_gate_frac = float(
+            self.get_parameter("effort_plateau_gate_frac").value
+        )
         self._effort_plateau_ticks = int(self.get_parameter("effort_plateau_ticks").value)
         self._effort_contact_ticks = int(self.get_parameter("effort_contact_ticks").value)
         self._asymmetry_threshold_m = float(self.get_parameter("asymmetry_threshold_m").value)
@@ -756,7 +779,9 @@ class RG2Controller(Node):
                  spike at first contact — sustained contact is required, not
                  a one-sample crossing.
               4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
-                 effort_plateau_ticks while effort is above effort_noise_floor.
+                 effort_plateau_ticks while effort is above the plateau gate
+                 (effort_plateau_gate_frac x force_threshold, floored at
+                 effort_noise_floor).
                  Catches effort that stalls above sensor noise without ever
                  crossing force_threshold — the expected outcome when the
                  commanded floor (target_width_m) physically caps achievable
@@ -949,14 +974,25 @@ class RG2Controller(Node):
                     contact_count = 0
 
                 # ── 4. PLATEAU CONFIRM (secondary) ────────────────────────
-                # Catches effort that has stalled above sensor noise without
-                # ever crossing force_threshold — i.e. the close has stopped
-                # advancing against something.  Gate is the noise floor
-                # itself, not a fraction of force_threshold: gating at or
-                # above force_threshold would make this path unreachable,
-                # since the primary stop fires first at that level.
+                # Catches effort that has stalled while PRESSING, without ever
+                # crossing force_threshold — i.e. the close has stopped
+                # advancing against something.
+                #
+                # The gate is a fraction of force_threshold, NOT the idle noise
+                # floor.  Free-space effort sits just above the noise floor
+                # (0.031-0.040 measured), so a noise-floor gate makes any
+                # smooth free-space close look like a stall after
+                # effort_plateau_ticks samples and stops the gripper fully
+                # open.  Contact chatter used to hide this by keeping d_effort
+                # large; it appeared as soon as the physics vibration was
+                # fixed.  A fraction below 1.0 keeps this path reachable — the
+                # primary stop fires first only at the full threshold.
                 # d_effort keeps its sign for the derivative check.
-                if abs(effort) > self._effort_noise_floor:
+                plateau_gate = max(
+                    self._effort_noise_floor,
+                    self._effort_plateau_gate_frac * force_threshold,
+                )
+                if abs(effort) > plateau_gate:
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:
