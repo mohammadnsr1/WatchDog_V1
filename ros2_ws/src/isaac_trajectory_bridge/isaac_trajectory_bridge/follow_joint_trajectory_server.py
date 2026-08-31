@@ -42,7 +42,13 @@ class FollowJointTrajectoryBridge(Node):
         self.declare_parameter("goal_tolerance", 0.03)
         self.declare_parameter("goal_time_tolerance_sec", 2.0)
         self.declare_parameter("require_joint_state_before_execute", True)
-        self.declare_parameter("publish_full_joint_command", True)
+        # Default False, matching both launch files (trajectory_bridge.launch.py
+        # declares "false"; sim_moveit_bringup passes "false"). It defaulted to
+        # True here, so running this node bare -- a test, a hand-launch --
+        # silently selected the full-articulation path, which is NOT
+        # equivalent: see _publish_full_joint_command for why it drops clamp
+        # force on the gripper.
+        self.declare_parameter("publish_full_joint_command", False)
         self.declare_parameter("log_extra_joints_once", True)
 
         self.joint_names = list(
@@ -89,14 +95,16 @@ class FollowJointTrajectoryBridge(Node):
             self.get_parameter("log_extra_joints_once").get_parameter_value().bool_value
         )
 
-        command_mode = (
-            "full joint command mode"
-            if self.publish_full_joint_command
-            else "arm-only command mode"
-        )
-        self.get_logger().info(
-            f"Bridge configured for {command_mode}."
-        )
+        if self.publish_full_joint_command:
+            self.get_logger().warn(
+                "Bridge configured for FULL joint command mode. Non-arm joints "
+                "are echoed from measured /joint_states as commands, which "
+                "cancels gripper clamp force during every arm move — see "
+                "_publish_full_joint_command. Both launch files ship this off; "
+                "only leave it on if Isaac requires full-articulation commands."
+            )
+        else:
+            self.get_logger().info("Bridge configured for arm-only command mode.")
 
         if len(self.joint_names) != 6:
             raise ValueError("Parameter 'joint_names' must contain exactly 6 joints.")
@@ -417,6 +425,23 @@ class FollowJointTrajectoryBridge(Node):
     def _publish_full_joint_command(
         self, positions: Sequence[float], velocities: Sequence[float]
     ) -> bool:
+        """Publish every joint, overwriting only the arm's six.
+
+        WARNING -- this mode fights the gripper controller, which is why it is
+        off in both launch files. The non-arm entries are copied from the
+        latest MEASURED /joint_states and published as COMMANDS. While the
+        gripper is clamping an object, its commanded angle is deliberately
+        past its measured angle (that tracking error IS the clamp force), so
+        republishing the measured angle as the target at publish_rate_hz
+        cancels the squeeze for the duration of every arm move, and nothing
+        restores the RG2 controller's setpoint afterwards. Measured velocities
+        get republished as velocity targets the same way.
+
+        Only enable this if Isaac genuinely requires full-articulation
+        commands, and then fix the preservation source first: the non-arm
+        entries must come from the last COMMANDED setpoint, not from
+        /joint_states.
+        """
         latest_full_joint_state = self._get_latest_full_joint_state_locked()
         if latest_full_joint_state is None:
             return False

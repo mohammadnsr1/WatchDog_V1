@@ -114,6 +114,12 @@ DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # Fraction of the goal's force_threshold that effort must reach before a
 # flat-derivative reading is allowed to count as a plateau stop.
 #
+# 1.0 BY DECISION: the threshold the caller defines is the threshold that must
+# be passed. A fraction below 1.0 means a close can be declared contact at a
+# quarter (or whatever fraction) of the force the object's spec asked for,
+# which silently redefines the contract -- spec.grasp.force_threshold_n stops
+# meaning "the force required to confirm this grasp".
+#
 # The plateau gate CANNOT be the idle noise floor. Effort in free space sits
 # just above 0.03 (0.031-0.040 measured), so with a noise-floor gate any
 # smooth free-space close reads as "stalled against something" after the two
@@ -124,10 +130,23 @@ DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # move began stopping at 103 mm with stop_reason "effort_plateau" at effort
 # 0.04 against a force_threshold of 15.
 #
-# A fraction keeps the branch reachable (the primary force_threshold stop
-# fires first at 1.0) while requiring the gripper to actually be pressing.
-# At the default force_threshold of 15 this gates at 3.75 -- ~140x idle.
-DEFAULT_EFFORT_PLATEAU_GATE_FRAC = 0.25
+# CONSEQUENCE, and it is the intended one: at 1.0 the plateau branch is
+# unreachable, because it is gated on effort being BELOW force_threshold (its
+# documented role: "stalled while pressing without ever crossing the
+# threshold") while simultaneously being at or above the gate. There is no
+# such band at 1.0. torque mode therefore has exactly ONE stop condition --
+# effort reaching the caller's force_threshold for effort_contact_ticks
+# consecutive fresh samples -- and a close that cannot reach it ends in
+# stop_reason="timeout" with success=False rather than being rescued by a
+# weaker criterion. An unreachable threshold now shows up as a failure to be
+# fixed in model_registry.yaml, not as a quiet pass.
+#
+# The mechanism is kept and still parameterized (effort_plateau_gate_frac):
+# lower it at launch to re-enable the plateau diagnostic, which is what
+# rg2_effort_sweep.py's force_threshold/effort_plateau boundary reads to
+# locate the per-object effort ceiling. With the gate at 1.0 that same
+# ceiling is the force_threshold/timeout boundary instead.
+DEFAULT_EFFORT_PLATEAU_GATE_FRAC = 1.0
 # The single effort stop threshold for torque-mode guarded_move is
 # goal.force_threshold — sourced per object from the registry spec
 # (spec.grasp.force_threshold_n, via robot_backend/skills/gripper_skills.py).
@@ -156,6 +175,12 @@ DEFAULT_TORQUE_STALE_HOLD_SEC = 0.060  # 60 ms ≈ 3× the 50 Hz period
 # the noise floor without ever crossing it (expected when target_width_m
 # caps the achievable close before force_threshold is reached). Consumers
 # that gate on "contact confirmed" must accept both.
+#
+# "effort_plateau" is UNREACHABLE at the default effort_plateau_gate_frac of
+# 1.0 — see that constant. It stays in the set because the gate is a launch
+# parameter: lower it and the reason returns. Consumers must therefore keep
+# accepting both, and must not infer from the default that a torque-mode
+# success implies stop_reason == "force_threshold".
 CONTACT_STOP_REASONS = frozenset({"force_threshold", "effort_plateau"})
 
 
@@ -292,8 +317,31 @@ class RG2Controller(Node):
         self._joint_pub = self.create_publisher(JointState, self._joint_command_topic, 10)
         self._width_pub = self.create_publisher(Float64, "/gripper_width_true", 10)
 
-        self.create_subscription(JointState, self._joint_state_topic, self._joint_state_cb, 50)
-        self.create_timer(self._control_period_sec, self._width_timer_cb)
+        # These two need SEPARATE callback groups, and that is load-bearing
+        # rather than tidiness. Created without an explicit group they both
+        # landed in the node's default MutuallyExclusive group, so under the
+        # MultiThreadedExecutor they could never overlap: _width_timer_cb does
+        # two TF lookups at timeout=0.05 each, so any TF gap held the group for
+        # up to 100 ms against a 20 ms timer period, and _joint_state_cb then
+        # queued and fired in a burst afterwards. That is the origin of the
+        # ~286 ms /joint_states "stalls" the torque loop's freshness gate
+        # reports below -- self-inflicted starvation by this node, not a
+        # simulator problem. It also aliases the effort signal, which reads
+        # downstream as a sudden jump in clamp force.
+        self._joint_state_group = MutuallyExclusiveCallbackGroup()
+        self._width_timer_group = MutuallyExclusiveCallbackGroup()
+        self.create_subscription(
+            JointState,
+            self._joint_state_topic,
+            self._joint_state_cb,
+            50,
+            callback_group=self._joint_state_group,
+        )
+        self.create_timer(
+            self._control_period_sec,
+            self._width_timer_cb,
+            callback_group=self._width_timer_group,
+        )
 
         # ---- services ----------------------------------------------------------
         svc_group = MutuallyExclusiveCallbackGroup()
@@ -747,6 +795,42 @@ class RG2Controller(Node):
     # =========================================================================
 
     def _execute_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
+        """Serialize guarded_move against the open/close/set_position services.
+
+        The action previously ran without taking the busy lock that all three
+        services acquire, and its server uses a ReentrantCallbackGroup. Two
+        writers could therefore drive /joint_command at once -- a guarded_move
+        probe stepping the angle up while a service-side _command_angle_shaped
+        ramp drove it somewhere else, or two guarded_move goals probing
+        together. Conflicting setpoints on the same joint show up as an effort
+        spike and, mid-grasp, as a dropped clamp.
+
+        The group stays Reentrant on purpose: cancel requests must still be
+        serviced while the probe loop blocks. Exclusion is the lock's job, not
+        the callback group's.
+        """
+        if not self._acquire():
+            result = GripperGuardedMove.Result()
+            result.success = False
+            # Not in CONTACT_STOP_REASONS, so gripper_skills correctly reads
+            # this as "no confirmed contact" rather than a successful grasp.
+            result.stop_reason = "busy"
+            result.final_width_m = self._get_true_width() or 0.0
+            result.final_effort = self._get_master_effort()
+            result.asymmetry_detected = False
+            result.message = (
+                "Rejected: another gripper command (open/close/set_position or "
+                "a concurrent guarded_move) is already in progress."
+            )
+            self.get_logger().warn(result.message)
+            goal_handle.abort()
+            return result
+        try:
+            return self._run_guarded_move(goal_handle)
+        finally:
+            self._release()
+
+    def _run_guarded_move(self, goal_handle) -> GripperGuardedMove.Result:
         """Guarded move action — two mutually isolated modes.
 
         mode "width":
@@ -779,14 +863,21 @@ class RG2Controller(Node):
                  spike at first contact — sustained contact is required, not
                  a one-sample crossing.
               4. PLATEAU CONFIRM (secondary) — |d_effort/dt| stable for
-                 effort_plateau_ticks while effort is above the plateau gate
-                 (effort_plateau_gate_frac x force_threshold, floored at
-                 effort_noise_floor).
-                 Catches effort that stalls above sensor noise without ever
-                 crossing force_threshold — the expected outcome when the
-                 commanded floor (target_width_m) physically caps achievable
-                 effort before the primary threshold is reached.  stop_reason
-                 = "effort_plateau", distinct from PRIMARY STOP's
+                 effort_plateau_ticks while effort is inside the band
+                 [plateau_gate, force_threshold), where plateau_gate is
+                 effort_plateau_gate_frac x force_threshold floored at
+                 effort_noise_floor.
+                 DISABLED AT THE DEFAULT GATE: effort_plateau_gate_frac is 1.0,
+                 which empties that band, so the caller's force_threshold is
+                 the only stop condition in torque mode and a close that
+                 cannot reach it ends in "timeout" / success=False rather than
+                 passing on a weaker criterion.  Lower the gate at launch to
+                 re-enable it.
+                 When enabled it catches effort that stalls above sensor noise
+                 without ever crossing force_threshold — the expected outcome
+                 when the commanded floor (target_width_m) physically caps
+                 achievable effort before the primary threshold is reached.
+                 stop_reason = "effort_plateau", distinct from PRIMARY STOP's
                  "force_threshold" — both are in CONTACT_STOP_REASONS and are
                  treated as confirmed contact, but the string is preserved so
                  logs (and the WatchDog) can tell HOW contact was detected.
@@ -874,10 +965,21 @@ class RG2Controller(Node):
             # Safety floor: cap commanded_angle here, never a stop condition.
             floor_angle = self.angle_for_width(target_width)
 
-            prev_effort: float = 0.0
+            # prev_effort starts as None, not 0.0. With a 0.0 seed the first
+            # fresh sample produced d_effort = effort / dt (~50x effort at a
+            # 20 ms period), treating "no previous sample" as a step from zero
+            # torque. That happened to be safe in direction -- a huge
+            # derivative suppresses the plateau branch, it can never trigger
+            # it -- but it was an accident of the seed rather than a decision,
+            # and it silently made the first tick of every goal unusable.
+            # None makes the unknown-derivative case explicit; see below.
+            prev_effort: Optional[float] = None
             plateau_count = 0
             contact_count = 0
+            # dt paces the loop's sleep. It is deliberately NOT used as the
+            # divisor for d_effort -- see sample_dt below.
             dt = self._control_period_sec
+            floor_reached_logged = False
 
             # Snapshot the current stamp as "already used" so the first
             # iteration must wait for a genuinely new joint_state.
@@ -932,10 +1034,29 @@ class RG2Controller(Node):
 
                 # Fresh sample confirmed — consume it.
                 last_used_stamp = current_stamp
-                last_fresh_wall_time = time.time()
+                now_wall = time.time()
+                # d_effort divides by the interval that ACTUALLY elapsed since
+                # the previous fresh sample, not by the nominal control period.
+                # Each iteration also runs a TF lookup (up to 2x50 ms on a TF
+                # gap) and publishes feedback, so the true interval is variable
+                # and can exceed 100 ms; dividing 100 ms of effort change by a
+                # nominal 20 ms overstated d_effort by ~5x and made the plateau
+                # branch under-fire. The sweep's force_threshold/effort_plateau
+                # boundary is read through this derivative, so a wrong divisor
+                # directly biases the measured effort ceiling.
+                sample_dt = now_wall - last_fresh_wall_time
+                last_fresh_wall_time = now_wall
                 effort = candidate_effort
 
-                d_effort = (effort - prev_effort) / dt
+                if prev_effort is None or sample_dt <= 0.0:
+                    # First fresh sample of this goal (nothing to difference
+                    # against), or a clock that did not advance. inf, not 0.0:
+                    # the derivative is UNKNOWN here, and 0.0 would read as
+                    # "perfectly flat" and hand the plateau branch a free tick
+                    # toward effort_plateau_ticks on the very first sample.
+                    d_effort = float("inf")
+                else:
+                    d_effort = (effort - prev_effort) / sample_dt
                 prev_effort = effort
                 final_effort = effort
 
@@ -985,14 +1106,22 @@ class RG2Controller(Node):
                 # effort_plateau_ticks samples and stops the gripper fully
                 # open.  Contact chatter used to hide this by keeping d_effort
                 # large; it appeared as soon as the physics vibration was
-                # fixed.  A fraction below 1.0 keeps this path reachable — the
-                # primary stop fires first only at the full threshold.
-                # d_effort keeps its sign for the derivative check.
+                # fixed.  d_effort keeps its sign for the derivative check.
+                #
+                # The band is [plateau_gate, force_threshold): at or above
+                # force_threshold this is the PRIMARY stop's business, and the
+                # explicit upper bound is what keeps the two from racing.
+                # Without it, plateau (effort_plateau_ticks=2 flat samples)
+                # could fire one tick BEFORE the primary debounce
+                # (effort_contact_ticks=3 samples) completes, labelling a
+                # genuine threshold crossing "effort_plateau".  At the default
+                # gate_frac of 1.0 the band is empty by construction, which is
+                # how "the caller's threshold is the only stop" is enforced.
                 plateau_gate = max(
                     self._effort_noise_floor,
                     self._effort_plateau_gate_frac * force_threshold,
                 )
-                if abs(effort) > plateau_gate:
+                if plateau_gate < abs(effort) < force_threshold:
                     if abs(d_effort) < self._effort_plateau_deriv:
                         plateau_count += 1
                         if plateau_count >= self._effort_plateau_ticks:
@@ -1020,6 +1149,27 @@ class RG2Controller(Node):
                 if next_angle > commanded_angle:
                     commanded_angle = next_angle
                     self._command_angle(commanded_angle)
+                elif not floor_reached_logged:
+                    # The probe can no longer advance: commanded_angle has hit
+                    # floor_angle (or close_position). By design that is NOT a
+                    # stop condition -- target_width_m is a safety floor only,
+                    # see this method's docstring -- so the loop will now spin
+                    # until torque_max_duration_sec and report
+                    # stop_reason="timeout" with success=False unless effort
+                    # rises. Log it once so those seconds are visible as "held
+                    # at the width floor without reaching force_threshold"
+                    # rather than looking like a hung goal.
+                    floor_reached_logged = True
+                    self.get_logger().warn(
+                        f"torque mode: probe held at the width floor "
+                        f"(angle={commanded_angle:.4f} rad, "
+                        f"floor={floor_angle:.4f} rad, "
+                        f"width={final_width*1000:.1f} mm) with effort "
+                        f"{effort:.3f} below force_threshold "
+                        f"{force_threshold:.3f} — waiting out the remaining "
+                        f"timeout; raise clearance or lower force_threshold "
+                        f"if this object cannot reach the threshold."
+                    )
 
                 time.sleep(dt)
 
