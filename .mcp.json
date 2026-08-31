@@ -1,37 +1,36 @@
 {
+  "_comment": [
+    "PROJECT-WIDE MCP config. Loaded automatically by every editor (Cursor/VSCode)",
+    "Claude session in this workspace, and merged into any CLI session launched",
+    "WITHOUT --strict-mcp-config.",
+    "",
+    "It deliberately contains NO robot-backend servers. Each of those spawns a ROS",
+    "node with a FIXED name (robot_backend_motion_mcp_server, watchdog_node, ...),",
+    "so every additional editor window created a second node with the same name.",
+    "Observed 2026-08-31: two Cursor sessions -> duplicate /watchdog_node,",
+    "/robot_backend_motion_mcp_server, /robot_backend_scene_mcp_server and",
+    "/robot_backend_gripper_mcp_server, with ros2's 'nodes in the graph that share",
+    "an exact name' warning. Two watchdog nodes can both arm monitors and record",
+    "verdicts, and both sets append to the same mcp_calls_*.jsonl in the session",
+    "dir, so a scored run's action trace interleaves two sessions.",
+    "",
+    "RUN.md already forbids scored runs from editor sessions for this reason. The",
+    "sanctioned entry points are the per-role configs, launched explicitly:",
+    "  claude --mcp-config watchdog.mcp.json --strict-mcp-config",
+    "  claude --mcp-config executor.mcp.json --strict-mcp-config",
+    "Keeping the robot-backend servers here bought nothing those two do not, and",
+    "cost a duplicate ROS node per open window.",
+    "",
+    "kit stays: it is a TCP bridge to the running Isaac Sim (omni.kit.mcp on",
+    "OMNI_KIT_MCP_PORT) and creates no ROS node, so N editor windows cause no",
+    "graph collisions. It is also read-only-by-default and useful for inspecting",
+    "the stage while authoring.",
+    "",
+    "If a session needs live read-only observation of the cell, add an",
+    "observer.mcp.json with only the query tools and launch it explicitly with",
+    "--strict-mcp-config -- do not reintroduce command servers here."
+  ],
   "mcpServers": {
-    "robot-backend-scene": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
-      ]
-    },
-    "robot-backend-motion": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
-      ]
-    },
-    "robot-backend-gripper": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
-      ]
-    },
-    "robot-backend-watchdog": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend watchdog_mcp_server"
-      ]
-    },
     "kit": {
       "type": "stdio",
       "command": "bash",

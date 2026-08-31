@@ -73,7 +73,19 @@ CONTACT_STOP_REASONS: frozenset[str] = frozenset({"force_threshold", "effort_pla
 NO_WIDTH_TOLERANCE_OVERRIDE: float = 0.0
 GUARDED_MOVE_ACTION = "/rg2_controller/guarded_move"
 ACTION_SERVER_TIMEOUT_SEC: float = 5.0
-ACTION_EXECUTE_TIMEOUT_SEC: float = 30.0
+# MUST stay comfortably ABOVE the controller's own torque_max_duration_sec
+# (rg2_controller.DEFAULT_TORQUE_MAX_DURATION_SEC = 30.0). These two were both
+# 30.0, so the client's wait and the controller's internal timeout raced: a
+# close that ran to the controller's timeout would usually trip this first and
+# raise "action timed out waiting for result" instead of returning the real
+# result with stop_reason="timeout", final_effort and final_width_m. The
+# effort data from exactly the cells that need diagnosing was lost to an
+# exception. That race used to be rare because the effort_plateau branch
+# rescued unreachable-threshold closes early; with the plateau gate at 1.0
+# (see rg2_controller.DEFAULT_EFFORT_PLATEAU_GATE_FRAC) a full-duration
+# timeout is the NORMAL outcome for a threshold the object cannot reach, so
+# the controller must always be the one to time out and report.
+ACTION_EXECUTE_TIMEOUT_SEC: float = 45.0
 
 
 def _get_grasp_spec(

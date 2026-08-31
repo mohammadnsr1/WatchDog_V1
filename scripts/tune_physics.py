@@ -106,15 +106,71 @@ SOLVER_VELOCITY_ITERATIONS = 4
 CONTACT_OFFSET_M = 0.005
 REST_OFFSET_M = 0.0
 
+# --- Mimic-joint stiffness: the lever that actually sets clamp force --------
+#
+# Only finger_joint is DRIVEN. The other five have no drive and carry
+# PhysxMimicJointAPI:rotX referencing finger_joint (gearing +1 on the three
+# knuckles, -1 on the two inner fingers). Their naturalFrequency sets how much
+# commanded travel survives to the part instead of being absorbed as
+# constraint yield.
+#
+# Measured 2026-08-31 on u_green at 3 mm clearance, 240 Hz, via
+# test/rg2_gripper_stiffness_sweep.py. Settled clamp effort / grip width error
+# in mm, at dampingRatio 0.8 and 2.0:
+#
+#   naturalFrequency   dr=0.8            dr=2.0
+#   1000 (authored)    20.2 (+0.30)      17.5 (+0.34)
+#   1500               33.7 (+0.26)      26.9 (+0.20)
+#   2000               49.1 (+0.17)      40.0 (+0.07)
+#   3000               82.6 (-0.08)      62.8 (-0.05)
+#   5000              144.2 (+0.21)      98.4 (-0.14)
+#
+# A NEGATIVE width error means the fingers are penetrating a rigid part --
+# over-clamping. That starts at 3000, so 3000+ is out regardless of how firm
+# it looks. 2000/2.0 gives 2.2x the authored clamp with +0.07 mm width error,
+# the closest to zero of the 18 cells swept.
+#
+# At the authored 1000 the commanded 3 mm clearance never reached the part:
+# right_outer_knuckle_joint yielded ~2.6 mm under load, leaving ~29 um of
+# actual contact penetration, which is why grasps read effort ~20 yet slipped.
+#
+# The finger_joint DRIVE is deliberately not tuned here: stiffness 400->6400
+# (16x) and damping 60->240 (4x) moved settled clamp only 16.7->20.9. The
+# drive sits upstream of the mimic constraint, so stiffening it changes
+# nothing. (The docstring's note that detuning the drive to 400/40/400/200
+# failed with "too little authority to clamp" is therefore misattributed --
+# drive stiffness barely affects clamp at all.)
+#
+# Changing these invalidates every per-object spec.grasp.force_threshold_n in
+# model_registry.yaml, which was measured against the soft constraint.
+# Re-measure per part before scoring.
+MIMIC_JOINTS = [
+    "/World/ur5e/Rg2_mn/onrobot_rg2/joints/left_inner_knuckle_joint",
+    "/World/ur5e/Rg2_mn/onrobot_rg2/joints/right_inner_knuckle_joint",
+    "/World/ur5e/Rg2_mn/onrobot_rg2/joints/right_outer_knuckle_joint",
+    "/World/ur5e/Rg2_mn/onrobot_rg2/joints/left_inner_finger_joint",
+    "/World/ur5e/Rg2_mn/onrobot_rg2/joints/right_inner_finger_joint",
+]
+MIMIC_NATURAL_FREQUENCY = 2000.0   # authored value was 1000.0
+MIMIC_DAMPING_RATIO = 2.0          # authored value was 0.8
 
-def apply(verbose: bool = True, tune_rate: bool = False) -> dict:
+
+def apply(verbose: bool = True, tune_rate: bool = False,
+          tune_mimic: bool = True) -> dict:
     """Apply the tuning to the currently loaded stage. Returns before/after.
 
     tune_rate=False (default) applies only the changes verified not to break
-    the grasp. tune_rate=True additionally raises timeStepsPerSecond, which
-    removes the chatter but currently causes the guarded move to stop early
-    with "effort_plateau" -- do not enable it for a scored run until
-    rg2_controller's plateau test no longer depends on sample count.
+    the grasp. tune_rate=True additionally raises timeStepsPerSecond. NOTE:
+    the historical blocker for that -- the guarded move stopping early with
+    "effort_plateau" -- is gone: rg2_controller's plateau branch is now
+    unreachable at its default effort_plateau_gate_frac of 1.0. Measured at
+    480 Hz it tightens settled-clamp spread to 6% (from 17%) but does not
+    change the mimic yield, so it is a repeatability knob, not a grip fix.
+
+    tune_mimic=True (default) sets the five mimic joints' naturalFrequency /
+    dampingRatio -- the parameter that actually sets clamp force. See the
+    MIMIC_* constants for the sweep this came from. Pass False to leave the
+    authored 1000 / 0.8 in place.
     """
     import omni.usd
     from pxr import Usd, UsdPhysics
@@ -141,6 +197,14 @@ def apply(verbose: bool = True, tune_rate: bool = False) -> dict:
              TIME_STEPS_PER_SECOND, "timeStepsPerSecond")
     _set(ARTICULATION_ROOT, "physxArticulation:solverVelocityIterationCount",
          SOLVER_VELOCITY_ITERATIONS, "solverVelocityIterationCount")
+
+    if tune_mimic:
+        for path in MIMIC_JOINTS:
+            name = path.rsplit("/", 1)[-1]
+            _set(path, "physxMimicJoint:rotX:naturalFrequency",
+                 MIMIC_NATURAL_FREQUENCY, f"{name}:naturalFrequency")
+            _set(path, "physxMimicJoint:rotX:dampingRatio",
+                 MIMIC_DAMPING_RATIO, f"{name}:dampingRatio")
 
     offsets_before, offsets_after = {}, {}
     for name in PARTS:

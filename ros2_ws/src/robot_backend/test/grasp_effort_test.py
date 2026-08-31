@@ -37,10 +37,20 @@ A full per-sample effort trace for every cycle is written to --csv
 (default grasp_effort_trace.csv) with a phase label per row, so you can
 plot effort vs time and see exactly where it lets go.
 
+The grasp width is instruction-sourced and matters: it becomes grasp_skill's
+expected_width_m, which is what makes the probe's commanded floor
+width - GRASP_CLEARANCE_M. Omit it and the floor is FULLY CLOSED, so the
+effort measured is "squeezed all the way into the part" rather than "effort at
+the configured clearance". Known objects default; anything else needs
+--width_m. Asymmetric parts also need their instruction grasp_center_offset,
+loaded automatically from agents/tasks/<object>_pick.executor.yaml.
+
 Run (full stack up, workspace sourced):
     python3 grasp_effort_test.py --cycles 10
     python3 grasp_effort_test.py --cycles 10 --lift
     python3 grasp_effort_test.py --cycles 5 --object red_cube --csv red_trace.csv
+    python3 grasp_effort_test.py --cycles 5 --object u_green --lift \\
+            --csv u_green_trace.csv
 """
 
 from __future__ import annotations
@@ -59,7 +69,11 @@ from sensor_msgs.msg import JointState
 import tf2_ros
 
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
-from robot_backend.skills.gripper_skills import grasp_skill, release_skill
+from robot_backend.skills.gripper_skills import (
+    GRASP_CLEARANCE_M,
+    grasp_skill,
+    release_skill,
+)
 from robot_backend.skills.motion_skills import (
     move_to_named_safe_joint_pose_skill,
     move_grasp_center_to_pose_skill,
@@ -67,14 +81,19 @@ from robot_backend.skills.motion_skills import (
 from robot_backend.skills.maintenance_skills import (
     set_permitted_contacts as set_permitted_contacts_skill,
 )
-from robot_backend.utils.geometry import make_pose
+from robot_backend.utils.geometry import compose_poses, make_pose
 
 # ------------------------- CONFIG -------------------------
 WORLD_FRAME = "world"            # set to "World" if that's the cube parent frame
 GREEN = "green_cube"
 RED = "red_cube"
 SAFE_POSE_NAME = "ready"
-GRASP_WIDTH_M = 0.04
+# grasp_width_m is instruction-sourced (agents/tasks/*.yaml's steps: block),
+# not registry-sourced. Kept here only as --object defaults so the common
+# cases need no --width_m. u_green is 0.042, not the pre-2x 0.021: its
+# registry entry points at the vertex-baked 2x mesh. Mirrors
+# rg2_effort_sweep.KNOWN_OBJECT_WIDTHS_M -- keep the two in sync.
+KNOWN_OBJECT_WIDTHS_M = {"red_cube": 0.06, "green_cube": 0.04, "u_green": 0.042}
 APPROACH_HEIGHT_M = 0.10
 SETTLE_SEC = 1.0
 HOLD_SEC = 2.0                   # static post-grasp hold, effort watched here
@@ -99,10 +118,71 @@ def _load_registry() -> dict:
         return {}
 
 
-def _pose(x, y, z):
+def _load_grasp_center_offset(object_id: str, task_path: Path | None = None) -> dict | None:
+    """Load T_object_grasp_center for object_id from its executor task YAML.
+
+    grasp_center_offset is instruction-sourced (see agents/tasks/*.yaml's
+    steps: block), not registry-sourced, and is NOT identity for u_green --
+    its grasp point sits on the U's off-center right arm, not the object's TF
+    origin. Grasping such a part top-down at its raw TF position contacts the
+    wrong geometry, so the measured effort does not transfer to the real task.
+
+    Defaults to agents/tasks/<object_id>_pick.executor.yaml; returns None (the
+    caller then falls back to a plain top-down grasp at the raw TF position)
+    if that file or a matching steps: entry does not exist -- true for
+    red_cube/green_cube, which have no task file of their own.
+
+    Mirrors rg2_effort_sweep._load_grasp_center_offset; keep the two in sync.
+    """
+    import yaml
+
+    if task_path is None:
+        repo_root = Path(__file__).resolve().parents[4]
+        task_path = repo_root / "agents" / "tasks" / f"{object_id}_pick.executor.yaml"
+    if not task_path.is_file():
+        return None
+    with task_path.open("r", encoding="utf-8") as fh:
+        task = yaml.safe_load(fh) or {}
+    for entry in task.get("steps") or []:
+        if isinstance(entry, dict) and entry.get("object_id") == object_id:
+            offset = entry.get("grasp_center_offset")
+            if isinstance(offset, dict):
+                return offset
+    return None
+
+
+def _grasp_center_pose(object_pose: dict, offset: dict | None) -> dict:
+    """Compose the instruction grasp_center_offset onto the object's live pose.
+
+    With no offset, fall back to a plain top-down grasp at the object's raw TF
+    position, ignoring the object's own orientation -- this file's original
+    behaviour, correct for the symmetric cubes.
+    """
+    if offset is None:
+        return make_pose(
+            position=dict(object_pose["position"]),
+            orientation=dict(TOP_DOWN_QUAT),
+            frame_id=WORLD_FRAME,
+        )
+    offset_pose = make_pose(
+        position=offset.get("position", {"x": 0.0, "y": 0.0, "z": 0.0}),
+        orientation=offset.get(
+            "orientation", {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
+        ),
+    )
+    return compose_poses(object_pose, offset_pose)
+
+
+def _raised(pose: dict, dz: float) -> dict:
+    """Copy of pose translated by dz in world z, orientation preserved.
+
+    Orientation must be preserved: with an offset-composed grasp pose the
+    approach/lift poses share the grasp orientation, so rebuilding them from
+    TOP_DOWN_QUAT would rotate the wrist between approach and grasp.
+    """
     return make_pose(
-        position={"x": x, "y": y, "z": z},
-        orientation=dict(TOP_DOWN_QUAT),
+        position={**pose["position"], "z": pose["position"]["z"] + dz},
+        orientation=dict(pose["orientation"]),
         frame_id=WORLD_FRAME,
     )
 
@@ -128,9 +208,20 @@ class TFReader:
         return False
 
     def pose(self, child) -> dict:
+        """Full 6-DOF pose of child in WORLD_FRAME.
+
+        Orientation is returned, not just position: an asymmetric part's
+        instruction grasp_center_offset is expressed relative to the object's
+        own orientation, so composing it needs the rotation too.
+        """
         tf = self.buf.lookup_transform(WORLD_FRAME, child, rclpy.time.Time())
         t = tf.transform.translation
-        return {"x": t.x, "y": t.y, "z": t.z}
+        r = tf.transform.rotation
+        return make_pose(
+            position={"x": t.x, "y": t.y, "z": t.z},
+            orientation={"x": r.x, "y": r.y, "z": r.z, "w": r.w},
+            frame_id=WORLD_FRAME,
+        )
 
     def shutdown(self):
         self.executor.shutdown()
@@ -228,13 +319,23 @@ class EffortLogger:
 
 
 class GraspCycle:
-    def __init__(self, backend, tf, effort, registry, object_id, do_lift):
+    def __init__(self, backend, tf, effort, registry, object_id, do_lift,
+                 grasp_width_m, grasp_center_offset=None):
         self.b = backend
         self.tf = tf
         self.effort = effort
         self.registry = registry
         self.object_id = object_id
         self.do_lift = do_lift
+        # The object's true width at contact, instruction-sourced. Passed to
+        # grasp_skill as expected_width_m, which is what makes the probe's
+        # commanded floor width - GRASP_CLEARANCE_M instead of 0.0. Without
+        # it the safety floor is FULLY CLOSED and the measured effort is
+        # "squeezed all the way into the part", not "effort at the configured
+        # clearance" -- a different and higher number, useless for choosing
+        # force_threshold_n and liable to crush the part.
+        self.grasp_width_m = float(grasp_width_m)
+        self.grasp_center_offset = grasp_center_offset
 
     def _phase_summary(self, cycle: int, phase: str) -> str:
         s = self.effort.window_stats(cycle, phase)
@@ -254,22 +355,30 @@ class GraspCycle:
             move_to_named_safe_joint_pose_skill(self.b, SAFE_POSE_NAME)
 
             # --- approach ---
+            # grasp_pose is the object's live pose with the instruction
+            # grasp_center_offset composed on (identity fallback = plain
+            # top-down at the raw TF position). Held for the whole cycle: once
+            # grasped, the object's TF rides with the gripper, so re-reading it
+            # would be circular.
             self.effort.phase(cycle, "approach")
-            p = self.tf.pose(oid)
+            grasp_pose = _grasp_center_pose(
+                self.tf.pose(oid), self.grasp_center_offset
+            )
             move_grasp_center_to_pose_skill(
-                self.b, _pose(p["x"], p["y"], p["z"] + APPROACH_HEIGHT_M),
-                gripper_width_m=GRASP_WIDTH_M)
+                self.b, _raised(grasp_pose, APPROACH_HEIGHT_M),
+                gripper_width_m=self.grasp_width_m)
             time.sleep(SETTLE_SEC)
 
             # --- descend ---
             self.effort.phase(cycle, "descend")
             move_grasp_center_to_pose_skill(
-                self.b, _pose(p["x"], p["y"], p["z"]), gripper_width_m=GRASP_WIDTH_M)
+                self.b, grasp_pose, gripper_width_m=self.grasp_width_m)
             time.sleep(SETTLE_SEC)
 
             # --- grasp (torque mode) ---
             self.effort.phase(cycle, "grasp")
-            res = grasp_skill(self.b, object_id=oid, registry=self.registry)
+            res = grasp_skill(self.b, object_id=oid, registry=self.registry,
+                              expected_width_m=self.grasp_width_m)
             prov = res.get("provenance", {})
 
             # --- static hold: watch for effort decay = slipping grip ---
@@ -284,8 +393,8 @@ class GraspCycle:
                 # circular and laggy.
                 self.effort.phase(cycle, "lift")
                 move_grasp_center_to_pose_skill(
-                    self.b, _pose(p["x"], p["y"], p["z"] + LIFT_HEIGHT_M),
-                    gripper_width_m=GRASP_WIDTH_M)
+                    self.b, _raised(grasp_pose, LIFT_HEIGHT_M),
+                    gripper_width_m=self.grasp_width_m)
                 time.sleep(SETTLE_SEC)
                 self.effort.phase(cycle, "lifthold")
                 time.sleep(HOLD_SEC)
@@ -297,8 +406,7 @@ class GraspCycle:
                 # the gripper opens (no freefall, no re-rotation).
                 self.effort.phase(cycle, "place")
                 move_grasp_center_to_pose_skill(
-                    self.b, _pose(p["x"], p["y"], p["z"]),
-                    gripper_width_m=GRASP_WIDTH_M)
+                    self.b, grasp_pose, gripper_width_m=self.grasp_width_m)
                 time.sleep(SETTLE_SEC)
 
             # --- release + home (not scored; just leaves a clean state) ---
@@ -338,6 +446,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cycles", type=int, default=10)
     ap.add_argument("--object", default=GREEN, help="registry object_id to grasp")
+    ap.add_argument("--width_m", type=float, default=None,
+                    help="expected grasp width in metres at contact "
+                         "(instruction-sourced; not in the registry). Passed to "
+                         "grasp_skill as expected_width_m, which sets the probe's "
+                         "commanded floor to width - GRASP_CLEARANCE_M. Defaults "
+                         "to the --object's known width if it is red_cube, "
+                         "green_cube or u_green.")
+    ap.add_argument("--task", default=None,
+                    help="path to the executor task YAML providing "
+                         "grasp_center_offset (defaults to "
+                         "agents/tasks/<object>_pick.executor.yaml)")
+    ap.add_argument("--no-offset", action="store_true",
+                    help="ignore any task-file grasp_center_offset and grasp "
+                         "top-down at the object's raw TF position")
     ap.add_argument("--lift", action="store_true",
                     help="after grasp, lift LIFT_HEIGHT_M and hold to watch effort under load")
     ap.add_argument("--csv", default="grasp_effort_trace.csv",
@@ -345,6 +467,31 @@ def main():
     ap.add_argument("--finger-joint", default=FINGER_JOINT_NAME,
                     help="name of the RG2 master finger joint in /joint_states")
     args = ap.parse_args()
+
+    # Resolve the grasp width BEFORE bringing anything up: a missing width is
+    # the one input that silently changes what this test measures (the probe
+    # floor becomes fully-closed), so fail loudly instead of defaulting.
+    if args.width_m is not None:
+        grasp_width_m = args.width_m
+    elif args.object in KNOWN_OBJECT_WIDTHS_M:
+        grasp_width_m = KNOWN_OBJECT_WIDTHS_M[args.object]
+    else:
+        print(f"ERROR: --width_m not given and {args.object!r} has no known "
+              f"default width. grasp_width_m is instruction-sourced -- read it "
+              f"from agents/tasks/{args.object}_pick.executor.yaml's steps: "
+              f"block and pass --width_m explicitly.")
+        return 1
+
+    offset = None if args.no_offset else _load_grasp_center_offset(
+        args.object, Path(args.task) if args.task else None
+    )
+    print(f"object={args.object}  width_m={grasp_width_m}  "
+          f"clearance={GRASP_CLEARANCE_M} -> probe floor "
+          f"{max(0.0, grasp_width_m - GRASP_CLEARANCE_M):.4f} m")
+    if offset is not None:
+        print(f"using instruction grasp_center_offset: {offset}")
+    else:
+        print("no grasp_center_offset: plain top-down grasp at the raw TF position")
 
     if not rclpy.ok():
         rclpy.init()
@@ -376,7 +523,10 @@ def main():
     fails = []
     for i in range(1, args.cycles + 1):
         print(f"\n===== CYCLE {i}/{args.cycles} (grasp {args.object}) =====")
-        ok, msg = GraspCycle(backend, tf, effort, registry, args.object, args.lift).run(i)
+        ok, msg = GraspCycle(
+            backend, tf, effort, registry, args.object, args.lift,
+            grasp_width_m=grasp_width_m, grasp_center_offset=offset,
+        ).run(i)
         print(f"CYCLE {i}: {'PASS' if ok else 'FAIL'}")
         print(msg)
         passes += int(ok)

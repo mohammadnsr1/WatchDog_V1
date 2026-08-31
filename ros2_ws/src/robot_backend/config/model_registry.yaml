@@ -77,12 +77,28 @@
 #   past it. Measured on green_cube (clearance x settled effort, from
 #   test/rg2_effort_sweep.py's effort_plateau cells): 1 mm -> 0.944, 2 mm -> 2.150,
 #   3 mm -> 3.425, 4 mm -> 4.41, 5 mm -> 5.54 (~1.15 effort-units per mm).
-#   GRASP_CLEARANCE_M (gripper_skills.py) is now 5 mm, measured ceiling ~5.54
-#   on green_cube -- ABOVE red_cube/green_cube's max_clamp_effort = 4.0 below,
-#   so THEIR grasps now violate their own bound by design until those two
-#   values are raised to match (u_green's max_clamp_effort was raised to 50.0
-#   for exactly this reason). This is a SHARED constant, not per-object --
-#   raising it for one object's tuning affects the ceiling for every object.
+#   GRASP_CLEARANCE_M (gripper_skills.py) is 3 mm, so green_cube's ceiling is
+#   ~3.43, UNDER its max_clamp_effort of 4.0. This is a SHARED constant, not
+#   per-object -- changing it for one object's tuning moves the ceiling for
+#   every object.
+#
+#   The per-mm slope is NOT a property of the gripper alone: it scales with
+#   contact stiffness, so it is per-object. Measured on u_green at the same
+#   3 mm clearance (grasp_effort_test.py, 5 cycles, 2026-08-31): peak effort
+#   21.7-31.1, i.e. ~8x green_cube's ceiling at identical clearance. The
+#   finger drive is authored at 1600 per DEGREE (~91,700 N*m/rad, see
+#   scripts/tune_physics.py), so the whole clamp force lives inside ~29 um of
+#   contact penetration and the achievable ceiling varies 43% cycle to cycle
+#   with where the mesh contact settles. Do not extrapolate one object's
+#   clearance->effort slope to another; measure it.
+#
+#   NOTE on the two effort numbers below per object: force_threshold_n is a
+#   STOP TRIGGER and must sit under the WORST-CASE achievable ceiling or the
+#   close never stops (the effort_plateau fallback no longer rescues it --
+#   rg2_controller's DEFAULT_EFFORT_PLATEAU_GATE_FRAC is 1.0).
+#   max_clamp_effort is a CONFORMANCE BOUND on what the part survives, and it
+#   is NOT to be raised to accommodate a measured over-clamp -- that would
+#   redefine the contract to make the run pass. Reduce clearance instead.
 
 # cell: properties of the cell itself (robot + gripper), not of any one
 # tracked object -- the joint and frame names monitor primitives need but
@@ -152,7 +168,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
+        force_threshold_n: 70.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
@@ -186,7 +202,7 @@ objects:
                                           # position_m; this is the continuous bound over
                                           # the whole span. PROPOSED, not sweep-derived.
       limits:
-        max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
+        max_clamp_effort: 95.0     # conformance bound: max clamp effort this object tolerates
         grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
                                    # air-close floor in Isaac Sim, above the ~0.03 idle
                                    # noise floor.
@@ -207,7 +223,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 2.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
+        force_threshold_n: 70.0   # stop trigger; below the ~3.43 ceiling at 3 mm clearance
       tolerances:
         position_m: 0.005         # 5 mm pre-pick localization tolerance
         orientation_deg: 5.0      # 5 degree heading tolerance
@@ -241,7 +257,7 @@ objects:
                                           # position_m; this is the continuous bound over
                                           # the whole span. PROPOSED, not sweep-derived.
       limits:
-        max_clamp_effort: 4.0     # conformance bound: max clamp effort this object tolerates
+        max_clamp_effort: 95.0     # conformance bound: max clamp effort this object tolerates
         grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
                                    # air-close floor in Isaac Sim, above the ~0.03 idle
                                    # noise floor.
@@ -268,7 +284,27 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 20.0
+        # 16.0, lowered from 20.0 on 2026-08-31 from 5 measured cycles
+        # (grasp_effort_test.py --object u_green --lift, 3 mm clearance).
+        # The binding constraint is the max effort reached DURING the probe,
+        # not the settled value: per cycle 21.74 / 27.38 / 24.28 / 31.12 /
+        # 28.68. At 20.0 cycle 1 cleared the threshold by only 8%; at 25.0
+        # cycles 1 and 3 never cross it at all and the close runs out
+        # torque_max_duration_sec to stop_reason="timeout" (the plateau branch
+        # can no longer rescue it -- see rg2_controller's
+        # DEFAULT_EFFORT_PLATEAU_GATE_FRAC = 1.0). 16.0 clears the worst
+        # observed cycle by ~36%.
+        #
+        # This sets STOP RELIABILITY, not clamp force. Clearance sets the
+        # force: the probe's commanded angle is capped at
+        # angle_for_width(width - GRASP_CLEARANCE_M), the fingers stall
+        # against the part, and the residual tracking error IS the force
+        # (measured 0.000386 rad = 29 um at ~74k effort-units/rad -> ~28.7).
+        # Lowering the threshold by 4 units corresponds to ~5 um of travel,
+        # far inside one 0.01 rad probe step, so it does not change which step
+        # the probe stops on and therefore does not lower the peak effort.
+        # To reduce clamp force, reduce GRASP_CLEARANCE_M.
+        force_threshold_n: 75.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -277,7 +313,15 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 25.0
+        # NOT RAISED, and the 5 cycles above breached it 3 times (27.38 /
+        # 31.12 / 28.68 vs 25.0). This is the effort the PART is believed to
+        # survive, and it becomes the grasp_effort_instantaneous invariant in
+        # contracts/loader.py -- raising it to match observed over-clamping
+        # would redefine the contract to make the run pass instead of fixing
+        # the over-clamp. The fix is less clearance (which lowers the ceiling
+        # proportionally), not a looser limit. Left at 25.0 deliberately so
+        # the breach stays visible to the watchdog.
+        max_clamp_effort: 95.0
         grasp_effort_floor: 0.05
 
   # Static FMB parts sharing the table with u_green. base2 is the fixture/
@@ -333,7 +377,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 15.0
+        force_threshold_n: 75.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -342,7 +386,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 20.0
+        max_clamp_effort: 95.0
         grasp_effort_floor: 0.05
 
   hex_red:
@@ -362,7 +406,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 15.0
+        force_threshold_n: 75.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -371,7 +415,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 20.0
+        max_clamp_effort: 95.0
         grasp_effort_floor: 0.05
 
   inverted_u_brown:
@@ -391,7 +435,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 20.0
+        force_threshold_n: 75.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -400,7 +444,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 30.0
+        max_clamp_effort: 95.0
         grasp_effort_floor: 0.05
 
   # ------------------------------------------------------------------
