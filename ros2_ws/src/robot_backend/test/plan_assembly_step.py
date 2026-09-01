@@ -521,6 +521,32 @@ def load_plan_sequence(args) -> list[tuple[str, dict]]:
     previous part's last grasp center.
     """
 
+    if getattr(args, "task", None):
+        # An executor task YAML is NOT a plan: its steps carry action_hint
+        # (prose for the agent) where a plan needs an explicit action, and
+        # grasp_width_m where a plan needs gripper_width_m. Compile it, so the
+        # instruction file itself can be replayed without a hand-maintained
+        # second copy of the same numbers drifting out of sync.
+        if args.plan:
+            raise ValueError("use --task or --plan, not both")
+        import executor_task_to_plan as _adapter
+
+        task_path = Path(args.task)
+        task = yaml.safe_load(task_path.read_text())
+        only = ([x.strip() for x in args.task_only.split(",")]
+                if getattr(args, "task_only", None) else None)
+        plan = _adapter.compile_task(
+            task, only,
+            getattr(args, "task_from", None), getattr(args, "task_to", None),
+            include_setup=True,
+        )
+        if getattr(args, "dump_plan", None):
+            Path(args.dump_plan).write_text(
+                yaml.dump(plan, sort_keys=False, default_flow_style=False))
+            print(f"compiled plan written to {args.dump_plan}")
+        print(f"compiled {task_path.name} -> {len(plan['steps'])} plan steps")
+        return [(task_path.name, plan)]
+
     if not args.plan:
         return [("<ad hoc>", load_plan(args))]
 
@@ -1076,6 +1102,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--plan", type=str, default=None, help="path to a plan YAML file")
+    p.add_argument("--task", type=str, default=None,
+                   help="path to an EXECUTOR TASK yaml (agents/tasks/*.executor.yaml) "
+                        "-- compiled to a plan in memory via executor_task_to_plan.py. "
+                        "Use this to replay an instruction file directly; --plan still "
+                        "takes an already-compiled plan. Mutually exclusive with --plan.")
+    p.add_argument("--task-only", type=str, default=None,
+                   help="with --task: comma-separated executor step_ids to include")
+    p.add_argument("--task-from", type=str, default=None,
+                   help="with --task: first executor step_id to include")
+    p.add_argument("--task-to", type=str, default=None,
+                   help="with --task: last executor step_id to include")
+    p.add_argument("--dump-plan", type=str, default=None,
+                   help="with --task: also write the compiled plan here, for inspection")
     p.add_argument("--continue-on-error", action="store_true",
                    help="assembly mode: keep going after a plan fails instead of stopping. "
                         "Off by default -- an unplaced part means every later plan is "
