@@ -136,22 +136,43 @@ cell:
 # conformance violation, detected by the supervisory monitor from physical
 # evidence, and is deliberately not prevented by the planner.
 acm_allowed_object_pairs:
-  # Trimmed to only the pairs that reflect genuine final-assembly contact:
-  # each part seats against base2, and nothing else. set_permitted_contacts()
-  # applies this whole list in one shot with no way to narrow or revoke a
-  # pair later, so any part-vs-part pair left in here stays collision-blind
-  # for the rest of the run, not just for the "crowded table" moment before
-  # anything is picked -- that previously let the arm carry inverted_u_brown
-  # straight through an already-seated u_green with no collision raised,
-  # since [u_green, inverted_u_brown] had been permitted for the whole task.
-  # If a fresh run now fails to plan from the crowded-table start state
-  # (START_STATE_IN_COLLISION before any pick), that means two movable
-  # parts' resting meshes actually touch at rest and a pair needs to be
-  # restored -- verify against the live cell before adding one back.
+  # Full pair list: every part against base2 (genuine final-assembly seating)
+  # AND every movable part against every other movable part, so the planner
+  # does not refuse to plan from the crowded-table start state.
+  #
+  # RESTORED 2026-09-01, having been trimmed to the four base2 pairs in
+  # 07dad83. Both halves of the trade-off are real, so record both:
+  #
+  #   Why the part-vs-part pairs were removed: set_permitted_contacts()
+  #   applies this whole list in one shot, with no way to narrow or revoke a
+  #   pair later. So a part-vs-part pair is collision-blind for the WHOLE
+  #   run, not just for the crowded-table moment before anything is picked.
+  #   With [u_green, inverted_u_brown] permitted, the arm carried
+  #   inverted_u_brown straight through an already-seated u_green and no
+  #   collision was raised.
+  #
+  #   Why they are back: without them the crowded-table start state can fail
+  #   to plan at all (START_STATE_IN_COLLISION before any pick), because the
+  #   parts' resting meshes touch at rest. A run that cannot start is worse
+  #   than one that needs the carry-through watched for.
+  #
+  # Consequence to keep in mind: collision checking will NOT catch a carried
+  # part passing through a seated part. That has to be caught from physical
+  # evidence by the supervisory monitor, which is where it belongs anyway --
+  # see the note above about the ACM carrying no task-level permission.
+  # If the through-part carry becomes the dominant failure, the fix is
+  # per-step ACM scoping in set_permitted_contacts(), not re-trimming this
+  # list: the two failure modes cannot both be fixed by one static list.
   - [u_green, base2]
+  - [u_green, hex_blue]
+  - [u_green, hex_red]
+  - [u_green, inverted_u_brown]
   - [base2, hex_blue]
   - [base2, hex_red]
   - [base2, inverted_u_brown]
+  - [hex_blue, hex_red]
+  - [hex_blue, inverted_u_brown]
+  - [hex_red, inverted_u_brown]
 
 objects:
   red_cube:

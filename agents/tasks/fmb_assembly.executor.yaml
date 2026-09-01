@@ -44,8 +44,7 @@ instruction_spec: |
     - The part's final pose matches its placement frame within the part's
       registry position and orientation tolerances.
     - The part was grasped securely on the way there: measured width at
-      plateau matched the step's grasp_width_m within tolerance; no slippage in hand meaning the part
-      should not move more than registry tolerances relative to tcp.
+      plateau matched the step's grasp_width_m within tolerance; no slippage in hand;
     - Previously seated parts are undisturbed: none has moved beyond its
       registry position tolerance from its pre-step snapshot.
 
@@ -197,7 +196,6 @@ steps:
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
-    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_brown_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     # Offset from the frame, expressed in the FRAME'S OWN axes (not
