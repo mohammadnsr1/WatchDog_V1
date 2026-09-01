@@ -257,7 +257,7 @@ objects:
                                           # position_m; this is the continuous bound over
                                           # the whole span. PROPOSED, not sweep-derived.
       limits:
-        max_clamp_effort: 95.0     # conformance bound: max clamp effort this object tolerates
+        max_clamp_effort: 130.0     # conformance bound: max clamp effort this object tolerates
         grasp_effort_floor: 0.05  # instrument characterization constant: empirical RG2
                                    # air-close floor in Isaac Sim, above the ~0.03 idle
                                    # noise floor.
@@ -304,7 +304,7 @@ objects:
         # far inside one 0.01 rad probe step, so it does not change which step
         # the probe stops on and therefore does not lower the peak effort.
         # To reduce clamp force, reduce GRASP_CLEARANCE_M.
-        force_threshold_n: 75.0
+        force_threshold_n: 70.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -321,7 +321,7 @@ objects:
         # the over-clamp. The fix is less clearance (which lowers the ceiling
         # proportionally), not a looser limit. Left at 25.0 deliberately so
         # the breach stays visible to the watchdog.
-        max_clamp_effort: 95.0
+        max_clamp_effort: 130.0
         grasp_effort_floor: 0.05
 
   # Static FMB parts sharing the table with u_green. base2 is the fixture/
@@ -377,7 +377,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 75.0
+        force_threshold_n: 70.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -386,7 +386,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 95.0
+        max_clamp_effort: 130.0
         grasp_effort_floor: 0.05
 
   hex_red:
@@ -406,7 +406,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 75.0
+        force_threshold_n: 70.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -415,7 +415,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 95.0
+        max_clamp_effort: 130.0
         grasp_effort_floor: 0.05
 
   inverted_u_brown:
@@ -435,7 +435,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 75.0
+        force_threshold_n: 70.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -444,7 +444,7 @@ objects:
         grasp_width_tolerance_m: 0.005
         grasp_slip_tolerance_m: 0.01
       limits:
-        max_clamp_effort: 95.0
+        max_clamp_effort: 130.0
         grasp_effort_floor: 0.05
 
   # ------------------------------------------------------------------

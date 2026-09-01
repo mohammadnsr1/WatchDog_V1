@@ -22,10 +22,33 @@ echo "== 1. ROS node duplicates =="
 if ! command -v ros2 >/dev/null 2>&1; then
   echo "  ${YEL}SKIP${OFF} ros2 not on PATH; source /opt/ros/jazzy/setup.bash and the workspace"
 else
-  dups=$(ros2 node list 2>/dev/null | sort | uniq -d | grep -Ev '^/(rviz2|transform_listener_impl)' || true)
+  # Restart the daemon FIRST. `ros2 node list` reads the daemon's cached
+  # discovery, and the daemon does not reliably prune a node that died while
+  # other nodes stayed up -- so a node killed and relaunched (an rviz2 from an
+  # earlier bringup, say) can linger and show as a duplicate that no longer
+  # exists. Without this the check reports phantom failures, and worse, it can
+  # mask a real one behind a name you have learned to ignore.
+  ros2 daemon stop >/dev/null 2>&1 || true
+  sleep 1
+  nodes=$(ros2 node list 2>/dev/null)
+  dups=$(echo "$nodes" | sort | uniq -d | grep -Ev '^/transform_listener_impl' || true)
   if [ -n "$dups" ]; then
-    echo "  ${RED}FAIL${OFF} duplicate node names:"; echo "$dups" | sed 's/^/    /'
-    fail=1
+    echo "  duplicates after a daemon refresh (these are real, not cache):"
+    while read -r n; do
+      [ -z "$n" ] && continue
+      # Count live processes plausibly backing this node, to separate "two
+      # processes" from "one process registering the name twice".
+      short=${n#/}
+      nproc=$(ps -eo comm= 2>/dev/null | grep -cx "$short" || true)
+      case "$n" in
+        /rviz2)
+          echo "    ${YEL}WARN${OFF} $n (rviz2 processes: $nproc) -- visualization only:"
+          echo "           no monitors, no commands, no session logging. Not scoring-relevant."
+          ;;
+        *)
+          echo "    ${RED}FAIL${OFF} $n (matching processes: $nproc)"; fail=1 ;;
+      esac
+    done <<< "$dups"
   else
     echo "  ${GRN}OK${OFF} no duplicate node names"
   fi
