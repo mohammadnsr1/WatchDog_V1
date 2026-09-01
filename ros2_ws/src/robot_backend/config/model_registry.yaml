@@ -304,7 +304,7 @@ objects:
         # far inside one 0.01 rad probe step, so it does not change which step
         # the probe stops on and therefore does not lower the peak effort.
         # To reduce clamp force, reduce GRASP_CLEARANCE_M.
-        force_threshold_n: 70.0
+        force_threshold_n: 50.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -377,7 +377,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 70.0
+        force_threshold_n: 50.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -406,7 +406,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 70.0
+        force_threshold_n: 50.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -435,7 +435,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 70.0
+        force_threshold_n: 50.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0

@@ -82,17 +82,24 @@ else
     [ -z "$own" ] && continue
     owners["$own"]=$(( ${owners["$own"]:-0} + 1 ))
   done
+  live=0
   for ppid in "${!owners[@]}"; do
     cmd=$(ps -o cmd= -p "$ppid" 2>/dev/null | cut -c1-90)
-    if [ "$ppid" = "1" ]; then
-      echo "  ${RED}ORPHANED${OFF} ${owners[$ppid]} process(es) with no parent"
-      fail=1
-    else
-      echo "  owner pid $ppid (${owners[$ppid]} procs): ${cmd:-<gone>}"
-    fi
+    case "$cmd" in
+      *claude*|*"ros2 run"*)
+        echo "  owner pid $ppid (${owners[$ppid]} procs): ${cmd:-<gone>}"
+        live=$((live+1)) ;;
+      *)
+        # Reparented to a subreaper (systemd --user) or init: the session that
+        # started it is gone but the process survived, still holding its ROS
+        # node name. A later session's server then collides and its tools never
+        # register. Run with --kill.
+        echo "  ${RED}ORPHANED${OFF} ${owners[$ppid]} process(es), reparented to: ${cmd:-<gone>}"
+        echo "           -> rerun with --kill"
+        fail=1 ;;
+    esac
   done
-  live=$(( ${#owners[@]} ))
-  [ "$live" -gt 1 ] && { echo "  ${RED}FAIL${OFF} $live separate owners -- expect 1 per role, never 2 of the same"; fail=1; }
+  [ "$live" -gt 1 ] && { echo "  ${RED}FAIL${OFF} $live live owners -- expect 1 per role, never 2 of the same"; fail=1; }
 fi
 
 echo "== 3. session pointer =="
@@ -110,13 +117,31 @@ fi
 
 if [ "${1:-}" = "--kill" ]; then
   echo "== killing ORPHANED servers only =="
+  # An orphan is NOT identified by PPID 1. When a Claude session's MCP server
+  # dies, the surviving python grandchild reparents to the nearest SUBREAPER,
+  # which on a systemd user session is `systemd --user` (observed: PPID 2777),
+  # never init. The earlier PPID==1 test therefore matched nothing and this
+  # flag silently killed zero orphans while three hung servers squatted the
+  # ROS node names -- which is what made an executor session come up with
+  # gripper tools but no motion tools, so get_rendered_task was missing.
+  #
+  # Correct test: the owner is not a live claude session and not a `ros2 run`
+  # wrapper. Also SIGKILL after SIGTERM -- these hang and ignore SIGTERM
+  # (they stop answering discovery while still holding their names).
   n=0
   while read -r pid; do
     [ -z "$pid" ] && continue
-    if [ "$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')" = "1" ]; then
-      kill "$pid" 2>/dev/null && { echo "  killed $pid"; n=$((n+1)); }
-    fi
-  done < <(pgrep -f "robot_backend\.mcp_servers|ros2 run robot_backend" 2>/dev/null || true)
+    ppid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -z "$ppid" ] && continue
+    owner=$(ps -o cmd= -p "$ppid" 2>/dev/null)
+    case "$owner" in
+      *claude*|*"ros2 run"*) continue ;;   # live, leave alone
+    esac
+    kill "$pid" 2>/dev/null
+    sleep 0.5
+    if kill -0 "$pid" 2>/dev/null; then kill -9 "$pid" 2>/dev/null; fi
+    kill -0 "$pid" 2>/dev/null || { echo "  killed $pid (was owned by: ${owner:-<gone>})"; n=$((n+1)); }
+  done < <(pgrep -f "robot_backend\.mcp_servers" 2>/dev/null || true)
   echo "  $n orphan(s) killed"
 fi
 

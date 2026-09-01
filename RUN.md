@@ -115,8 +115,14 @@ Then, as the session's first action:
 
 ```bash
 cd ~/watchdog/WatchDog_V1
-claude --mcp-config executor.mcp.json --strict-mcp-config
+claude --mcp-config executor.mcp.json --strict-mcp-config --settings executor.settings.json
 ```
+
+`--settings executor.settings.json` is mandatory here, not optional: it is what
+denies the executor session's Bash and Read (and Glob/Grep) tools, so the
+executor cannot shell out to or directly read model_registry.yaml, the
+task/plan YAML files, or their comments. Those must only ever be reached
+through the command servers' contract/registry/pose tool calls.
 
 Then call `get_rendered_task` (hosted on the motion server for this role) and
 load both returned fields the same way.
@@ -183,16 +189,22 @@ harness transcript.
 
 ---
 
-## Optional: split permission sets
+## Split permission sets
 
-`executor.settings.json` and `watchdog.settings.json` hold per-role allowlists,
-for reviewer-legible isolation:
+`executor.settings.json` and `watchdog.settings.json` hold per-role
+allow/deny rules. For the watchdog side this is belt-and-braces only:
+`--settings` is a separate flag from `--mcp-config` and does not affect which
+servers load, so an unloaded server's tools cannot be called regardless of
+what any allowlist says.
 
 ```bash
 claude --mcp-config watchdog.mcp.json --strict-mcp-config --settings watchdog.settings.json
 ```
 
-This is belt-and-braces only. `--settings` is a separate flag from
-`--mcp-config` and does not affect which servers load; an unloaded server's
-tools cannot be called regardless of what any allowlist says. The shared
-`.claude/settings.local.json` allowlist is harmless for the same reason.
+For the executor side it is NOT merely belt-and-braces: `executor.settings.json`
+also carries `permissions.deny` for `Bash`, `Read`, `Glob` and `Grep`, which is
+the actual enforcement that keeps the executor from reading
+model_registry.yaml, the task/plan YAML files, or their comments directly (or
+via shell). That deny rule only applies if `--settings executor.settings.json`
+is passed, which is why it is called out as mandatory above, not optional. The
+shared `.claude/settings.local.json` allowlist does not substitute for it.

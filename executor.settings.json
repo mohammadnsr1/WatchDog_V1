@@ -1,10 +1,16 @@
 {
-  "_comment": "EXECUTOR session permissions. Command servers only -- no watchdog rule here, so a config mistake that leaked the watchdog server into this session would still prompt on every monitoring call instead of running silently.",
+  "_comment": "EXECUTOR session permissions. Command servers only -- no watchdog rule here, so a config mistake that leaked the watchdog server into this session would still prompt on every monitoring call instead of running silently. Bash and Read are explicitly denied: the executor's source of truth is the contract/registry/pose tool calls on the command servers, never the raw registry or task YAML files (and never their comments) read directly off disk or via shell.",
   "permissions": {
     "allow": [
       "mcp__robot-backend-motion",
       "mcp__robot-backend-gripper",
       "mcp__robot-backend-scene"
+    ],
+    "deny": [
+      "Bash",
+      "Read",
+      "Glob",
+      "Grep"
     ]
   }
 }
