@@ -136,20 +136,22 @@ cell:
 # conformance violation, detected by the supervisory monitor from physical
 # evidence, and is deliberately not prevented by the planner.
 acm_allowed_object_pairs:
-  # Static FMB parts sharing the table with u_green (see registry entries
-  # below) -- allowed to touch each other so the planner doesn't refuse to
-  # plan near a crowded table; carries no task-level permission, same as
-  # the pair above.
+  # Trimmed to only the pairs that reflect genuine final-assembly contact:
+  # each part seats against base2, and nothing else. set_permitted_contacts()
+  # applies this whole list in one shot with no way to narrow or revoke a
+  # pair later, so any part-vs-part pair left in here stays collision-blind
+  # for the rest of the run, not just for the "crowded table" moment before
+  # anything is picked -- that previously let the arm carry inverted_u_brown
+  # straight through an already-seated u_green with no collision raised,
+  # since [u_green, inverted_u_brown] had been permitted for the whole task.
+  # If a fresh run now fails to plan from the crowded-table start state
+  # (START_STATE_IN_COLLISION before any pick), that means two movable
+  # parts' resting meshes actually touch at rest and a pair needs to be
+  # restored -- verify against the live cell before adding one back.
   - [u_green, base2]
-  - [u_green, hex_blue]
-  - [u_green, hex_red]
-  - [u_green, inverted_u_brown]
   - [base2, hex_blue]
   - [base2, hex_red]
   - [base2, inverted_u_brown]
-  - [hex_blue, hex_red]
-  - [hex_blue, inverted_u_brown]
-  - [hex_red, inverted_u_brown]
 
 objects:
   red_cube:
