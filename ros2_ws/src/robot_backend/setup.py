@@ -38,7 +38,10 @@ setup(
             ],
         ),
     ],
-    install_requires=["setuptools", "mcp", "PyYAML", "trimesh"],
+    # mcp<2: 2.x renamed FastMCP -> MCPServer and the mcp_servers modules
+    # import mcp.server.fastmcp. numpy<2 so the workspace venv does not shadow
+    # the numpy 1.26 that ROS 2 Jazzy's dist-packages were built against.
+    install_requires=["setuptools", "mcp<2", "PyYAML", "trimesh", "numpy<2"],
     zip_safe=True,
     maintainer="mnasr3@asu.edu",
     maintainer_email="todo@example.com",

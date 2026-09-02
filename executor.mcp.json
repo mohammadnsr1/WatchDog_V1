@@ -25,7 +25,7 @@
         "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
       ],
       "env": {
-        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
       }
     },
     "robot-backend-gripper": {
@@ -36,7 +36,7 @@
         "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
       ],
       "env": {
-        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
       }
     },
     "robot-backend-scene": {
@@ -47,7 +47,7 @@
         "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
       ],
       "env": {
-        "EXECUTOR_TASK_PATH": "/home/mohammadnsr1/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.executor.yaml"
       }
     }
   }

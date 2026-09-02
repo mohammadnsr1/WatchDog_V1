@@ -13,6 +13,10 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>moveit_configs_utils</exec_depend>
+  <!-- config/ompl_planning.yaml names ompl_interface/OMPLPlanner and
+       launch/planning_context.launch.py sets ompl as the only pipeline, so the
+       planner plugin is a hard runtime requirement, not an optional extra. -->
+  <exec_depend>moveit_planners_ompl</exec_depend>
   <exec_depend>moveit_ros_move_group</exec_depend>
   <exec_depend>moveit_ros_planning_interface</exec_depend>
   <exec_depend>moveit_ros_visualization</exec_depend>
