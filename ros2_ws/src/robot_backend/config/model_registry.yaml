@@ -400,7 +400,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 50.0
+        force_threshold_n: 25.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
@@ -429,7 +429,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 50.0
+        force_threshold_n: 25.0
       tolerances:
         position_m: 0.005
         orientation_deg: 5.0
