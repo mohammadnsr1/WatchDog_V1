@@ -202,7 +202,7 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from inverted_u_brown_pick.plan.yaml.
     target_offset:
-      position: {x: 0.00, y: -0.10000, z: 0.0}
+      position: {x: 0.00, y: -0.1500, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.04
     grasp_center_offset:

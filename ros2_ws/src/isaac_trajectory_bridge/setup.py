@@ -13,7 +13,19 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/launch", ["launch/trajectory_bridge.launch.py"]),
         ("share/" + package_name, ["README.md", "README_RG2_CONTROLLER.md"]),
-        ("share/" + package_name + "/config", ["config/rg2_width_table.csv"]),
+        # rg2_calibration_table.csv is NOT optional and must not be dropped:
+        # robot_backend's rg2_geometry resolves DEFAULT_RG2_WIDTH_TABLE_PATH to
+        # this installed share path. When the file is absent the lookup falls
+        # back to a 2-point linear model whose grasp-centre depth is ~12.5 mm
+        # too shallow at a 42 mm opening, which drives the TCP that much too
+        # low on every grasp -- silently, with no error anywhere.
+        (
+            "share/" + package_name + "/config",
+            [
+                "config/rg2_width_table.csv",
+                "config/rg2_calibration_table.csv",
+            ],
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

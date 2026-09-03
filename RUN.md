@@ -100,8 +100,14 @@ from anything worth observing.
 
 ```bash
 cd ~/watchdog/WatchDog_V1
-claude --mcp-config watchdog.mcp.json --strict-mcp-config
+claude --mcp-config watchdog.mcp.json --strict-mcp-config --settings watchdog.settings.json
 ```
+
+`--settings watchdog.settings.json` is mandatory here, not optional. It denies
+this session's `Bash`/`Read`/`Glob`/`Grep` **and** `Task`/`Agent`, without which
+the watchdog can simply open `agents/tasks/fmb_assembly.executor.yaml` off disk
+— or have a subagent do it — and learn the executor's rendering, which is the
+one thing the two-file split exists to prevent.
 
 Then, as the session's first action:
 
@@ -123,6 +129,13 @@ denies the executor session's Bash and Read (and Glob/Grep) tools, so the
 executor cannot shell out to or directly read model_registry.yaml, the
 task/plan YAML files, or their comments. Those must only ever be reached
 through the command servers' contract/registry/pose tool calls.
+
+It also denies `Task`/`Agent`, which is not redundant with denying Bash/Read: a
+subagent runs under its *own* permissions, so an executor that can spawn one can
+have it read the registry off disk and report back, bypassing every deny rule in
+the file. Observed 2026-09-02 — the executor answered "what are the tolerances"
+by spawning an `Explore` subagent to "find and dump model registry" instead of
+calling `get_rendered_task`.
 
 Then call `get_rendered_task` (hosted on the motion server for this role) and
 load both returned fields the same way.
@@ -192,10 +205,17 @@ harness transcript.
 ## Split permission sets
 
 `executor.settings.json` and `watchdog.settings.json` hold per-role
-allow/deny rules. For the watchdog side this is belt-and-braces only:
+allow/deny rules. The *allowlist* half is belt-and-braces on the watchdog side:
 `--settings` is a separate flag from `--mcp-config` and does not affect which
 servers load, so an unloaded server's tools cannot be called regardless of
 what any allowlist says.
+
+The *deny* half is not belt-and-braces on either side. Both files deny
+`Bash`/`Read`/`Glob`/`Grep` and `Task`/`Agent`, and both must be passed. For the
+watchdog that deny list is what stops the session reading the executor's task
+YAML off disk; the MCP-layer guarantee in `role_context.py` ("neither role has
+any tool capable of naming the other's file") is true only of MCP tools and says
+nothing about the session's own filesystem access.
 
 ```bash
 claude --mcp-config watchdog.mcp.json --strict-mcp-config --settings watchdog.settings.json

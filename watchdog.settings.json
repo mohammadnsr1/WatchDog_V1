@@ -1,8 +1,21 @@
 {
-  "_comment": "WATCHDOG session permissions. Watchdog server only -- no motion/gripper/scene rule, so a config mistake that leaked a command server into this session would still prompt before the arm could be moved.",
+  "_comment": "WATCHDOG session permissions. Watchdog server only -- no motion/gripper/scene rule, so a config mistake that leaked a command server into this session would still prompt before the arm could be moved. The deny list is the session-level half of the independence guarantee: role_context.py notes that role is derived from the environment and get_rendered_task is hosted only on this role's server, so 'neither role has any tool capable of naming the other's file'. That holds at the MCP layer only. A watchdog session with Read can open agents/tasks/fmb_assembly.executor.yaml directly, and one that can spawn a subagent can have it do the reading under its own permissions -- either way the watchdog learns the executor's rendering, which is the one thing the two-file split exists to prevent. The watchdog observes through its MCP tools (get_execution_state, get_events, get_evidence, wait_for_event) and records through record_verdict, all server-side; it needs no filesystem, shell, or network access to do its job.",
   "permissions": {
     "allow": [
       "mcp__robot-backend-watchdog"
+    ],
+    "deny": [
+      "Bash",
+      "Read",
+      "Glob",
+      "Grep",
+      "Task",
+      "Agent",
+      "WebFetch",
+      "WebSearch",
+      "Write",
+      "Edit",
+      "NotebookEdit"
     ]
   }
 }

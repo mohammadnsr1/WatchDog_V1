@@ -52,7 +52,7 @@ GRASP_MIN_PLAUSIBLE_WIDTH_M: float = 0.003   # 3 mm; see rationale above
 # green_cube, ABOVE that 4.0 bound -- red_cube/green_cube grasps will now
 # violate their own max_clamp_effort by design until those registry values
 # are raised too (u_green's was raised to 50.0, comfortably clear of 5.54).
-GRASP_CLEARANCE_M: float = 0.003
+GRASP_CLEARANCE_M: float = 0.005
 # Fallback only, used when the registry entry lacks force_threshold_n.
 # Matches the controller's hard-guard default (DEFAULT_HARD_FORCE_THRESHOLD in
 # rg2_controller.py); per-object tuned overrides belong in the registry's

@@ -1,5 +1,5 @@
 {
-  "_comment": "EXECUTOR session permissions. Command servers only -- no watchdog rule here, so a config mistake that leaked the watchdog server into this session would still prompt on every monitoring call instead of running silently. Bash and Read are explicitly denied: the executor's source of truth is the contract/registry/pose tool calls on the command servers, never the raw registry or task YAML files (and never their comments) read directly off disk or via shell.",
+  "_comment": "EXECUTOR session permissions. Command servers only -- no watchdog rule here, so a config mistake that leaked the watchdog server into this session would still prompt on every monitoring call instead of running silently. Bash and Read are explicitly denied: the executor's source of truth is the contract/registry/pose tool calls on the command servers, never the raw registry or task YAML files (and never their comments) read directly off disk or via shell. Task/Agent are denied for the same reason and are not redundant with Bash/Read: a subagent runs under its OWN permissions, so an executor that can spawn one can have it read the registry off disk and report back, bypassing every deny rule here. Observed 2026-09-02: the executor spawned an Explore subagent to 'find and dump model registry' instead of calling get_rendered_task. Write/Edit are denied because the executor has no business modifying the repo mid-run; WebFetch/WebSearch because a scored run's inputs must come from the cell, not the internet.",
   "permissions": {
     "allow": [
       "mcp__robot-backend-motion",
@@ -10,7 +10,14 @@
       "Bash",
       "Read",
       "Glob",
-      "Grep"
+      "Grep",
+      "Task",
+      "Agent",
+      "WebFetch",
+      "WebSearch",
+      "Write",
+      "Edit",
+      "NotebookEdit"
     ]
   }
 }

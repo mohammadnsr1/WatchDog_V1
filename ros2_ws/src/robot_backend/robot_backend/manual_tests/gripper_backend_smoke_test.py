@@ -10,6 +10,12 @@ from __future__ import annotations
 import argparse
 import time
 
+# Same workspace-venv re-exec as the MCP servers: the gripper skills below pull
+# in robot_backend.events (pydantic), which lives only in the venv.
+from robot_backend.mcp_servers import ensure_mcp_server_environment
+
+ensure_mcp_server_environment("robot_backend.manual_tests.gripper_backend_smoke_test")
+
 import rclpy
 from rclpy.node import Node
 

@@ -25,6 +25,15 @@ import threading
 from pathlib import Path
 from typing import Any
 
+# This node is launched by sim_moveit_bringup through a console script whose
+# shebang is /usr/bin/python3, so it does NOT inherit an activated venv. It
+# reaches robot_backend.events (pydantic) via the imports below, so it needs the
+# same workspace-venv re-exec the MCP servers perform. Must run before any
+# import that pulls in the event bus.
+from robot_backend.mcp_servers import ensure_mcp_server_environment
+
+ensure_mcp_server_environment("robot_backend.nodes.scene_tf_sync_node")
+
 import rclpy
 import rclpy.executors
 from ament_index_python.packages import get_package_share_directory
