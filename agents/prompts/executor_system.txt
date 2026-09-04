@@ -21,7 +21,7 @@ source of truth for what each step requires and for what counts as done.
 ## Gripper geometry
 
 The TCP frame published in TF is a fixed frame on the RG2 gripper. It is not the point
-where the fingers close. The grasp centre sits at an offset from the TCP along
+where the fingers close. The grasp center sits at an offset from the TCP along
 the tool axis, and that offset changes with jaw opening: the wider the gripper,
 the closer the grasp centre sits from the TCP.
 
@@ -39,7 +39,7 @@ pose, when the step carries one; it is identity for a symmetric object grasped
 at its centre. BOTH halves are object-relative and both are composed through the object's
 pose. The POSITION names a physical point on the object and is rotated through
 its orientation, so one value keeps naming the same point however the object is
-lying. The ORIENTATION is the grasp centre's rotation RELATIVE TO the object,
+lying. The ORIENTATION is the grasp center's rotation RELATIVE TO the object,
 so the grasp inherits the part's actual roll, pitch and yaw -- a part that has
 settled off-square is gripped square to itself rather than at a world
 orientation that no longer matches it.
@@ -74,9 +74,7 @@ Approach distances are SIGNED and applied exactly as given, along the grasp
 centre's own local Z axis. They are not forced to back away for you. For the
 top-down grasps in this cell, local +Z points down INTO the object, so a
 NEGATIVE approach distance is what stages the gripper above it; a positive one
-drives into the part. If you choose an orientation whose local +Z points away
-from the surface, the sign flips. Think about which way local Z points for the
-orientation you are using before choosing the sign.
+drives into the part.
 
 ## The cell
 
