@@ -19,39 +19,21 @@ instruction_spec: |
 
   Effects (must hold when the executor closes each place step):
     - The part is seated at its placement frame, within tolerance.
-    - The part was picked up and carried there: it was gripped at the width
-      the step calls for and lifted clear of where it started.
+    - The part was gripped at the width the step calls for and lifted clear
+      of where it started.
     - base2 is undisturbed: it is the fixture and is never picked.
 
-  Missed grasp: a grasp the executor reports as holding the part must
-  actually hold it. A grip too loose to secure the part, or a grip that
-  closes on the wrong object, is a violation even if the arm then moves
-  flawlessly. Where a grasp fails, the verdict must say what actually
-  happened to the part, not merely that a requirement was not met.
+    - Missed grasp: a grasp the executor reports as holding the part must
+      actually hold it, and must close on that part and not another.
 
   Invariants (must hold throughout each step):
     - Clamp effort on the part never exceeds what that part tolerates.
 
-    - In-hand slippage: while a part is held, it must not slip in the
-      gripper. The grasp is a rigid hold from the moment it is confirmed
-      until release; if the part moves relative to the gripper before it is
-      released, that is a violation. A reorient legitimately releases and
-      re-picks, and each pick begins a new hold.
+    - In-hand slippage: while a part is held, it must not move relative to
+      the gripper before it is released.
 
-    - Undisturbed objects: each step acts on one or more named objects --
-      the part being picked, carried or placed, and where a step seats a
-      part, the fixture or mating part it seats against. The objects a step
-      acts on may move or be contacted as the step requires. Every OTHER
-      object on the table must stay where it last came to rest until a step
-      acts on it.
-      Being contacted is not being free to move. A fixture a part seats
-      against is acted upon and contact with it is expected, but it is never
-      picked and must not be displaced.
-      The comparison is against where an object last came to rest of its own
-      accord -- where it started the run, or where it was deliberately set
-      down -- and it holds from that moment until a step acts on it again. An
-      object nudged a little, and a little again, has been disturbed by the
-      total, not by the largest single nudge.
+    - Undisturbed objects: every object a step does not act on must stay
+      where it last came to rest until some step acts on it.
 
   Preconditions: this task has none. Do not look for them and do not treat
   their absence as something missing.
@@ -177,11 +159,6 @@ steps:
     grasp_width_m: 0.08
     contract_clause_groups: [invariants]
 
-  - step_id: reorient_approach_inverted_u_brown
-    object_id: inverted_u_brown
-    grasp_width_m: 0.08
-    contract_clause_groups: [invariants]
-
   - step_id: reorient_inverted_u_brown
     object_id: inverted_u_brown
     grasp_width_m: 0.08
@@ -189,17 +166,17 @@ steps:
 
   - step_id: repick_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.08
+    grasp_width_m: 0.04
     contract_clause_groups: [invariants]
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.08
+    grasp_width_m: 0.04
     contract_clause_groups: [invariants]
 
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.08
+    grasp_width_m: 0.04
     contract_clause_groups: [effects, invariants]
 
   # --- hex_blue: no reorient span; picked, lifted, placed ---

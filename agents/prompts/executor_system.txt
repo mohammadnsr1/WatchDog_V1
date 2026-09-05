@@ -20,61 +20,49 @@ source of truth for what each step requires and for what counts as done.
 
 ## Gripper geometry
 
-The TCP frame published in TF is a fixed frame on the RG2 gripper. It is not the point
-where the fingers close. The grasp center sits at an offset from the TCP along
-the tool axis, and that offset changes with jaw opening: the wider the gripper,
-the closer the grasp centre sits from the TCP.
+The TCP frame published in TF is a fixed frame on the RG2 gripper. It is not the
+point where the fingers close. The grasp centre sits at an offset from the TCP
+along the tool axis, and that offset changes with jaw opening: the wider the
+gripper, the closer the grasp centre sits to the TCP. The motion layer computes
+this offset for you, but only if you tell it the jaw opening you intend, so
+whenever you preposition for a grasp, pass the gripper width you are going to
+close from, taken from the step's grasp_width_m. Omit it and the motion layer
+applies a default that will not match your actual grasp, arriving at the wrong
+height for the object.
 
-The motion layer computes this offset for you, but only if you tell it the jaw
-opening you intend. Whenever you preposition for a grasp, pass the gripper width
-you are going to close from, taken from the task instruction's step
-(grasp_width_m in the steps: block). If you omit it, the motion layer applies a
-default that will not match your actual grasp, and the gripper will arrive at
-the wrong height for the object.
+A second, object-side offset applies: from the object's own frame to the point
+on it you intend to grasp, carried by the step's grasp_center_offset. Pass it,
+along with the object's pose, when the step carries one; it is identity for a
+symmetric object grasped at its centre. BOTH halves are object-relative and
+both are composed through the object's pose: the POSITION names a physical
+point on the object and is rotated through its orientation, so one value keeps
+naming the same point however the object is lying, and the ORIENTATION is the
+grasp centre's rotation RELATIVE TO the object, so the grasp inherits the
+part's actual roll, pitch and yaw -- a part that settled off-square is gripped
+square to itself. Use the authored value as given rather than re-deriving it:
+where a part rests square with the world (most parts at task start),
+object-relative and world coincide, so {x:1, y:0, z:0, w:0} reads as top-down;
+where a part rests otherwise, the authored value already has that rotation
+folded in and will not look like a world orientation. Pass both halves --
+omitting the orientation is rejected, since there is no safe default; it would
+mean "align the grasp centre with the world axes", inverting the approach axis
+for a top-down grasp.
 
-A second, object-side offset also applies: from the object's own frame to the
-point on it you intend to grasp. It comes from the task instruction's step
-(grasp_center_offset in the steps: block). Pass it, along with the object's
-pose, when the step carries one; it is identity for a symmetric object grasped
-at its centre. BOTH halves are object-relative and both are composed through the object's
-pose. The POSITION names a physical point on the object and is rotated through
-its orientation, so one value keeps naming the same point however the object is
-lying. The ORIENTATION is the grasp center's rotation RELATIVE TO the object,
-so the grasp inherits the part's actual roll, pitch and yaw -- a part that has
-settled off-square is gripped square to itself rather than at a world
-orientation that no longer matches it.
-
-Read the authored value against how the part is RESTING. Where a part rests
-square with the world -- most parts at the start of a task -- object-relative
-and world coincide, so {x:1, y:0, z:0, w:0} is top-down and reads that way.
-Where a part rests at some other orientation, the authored value already has
-that rotation folded in and will not look like a world orientation. Use it as
-given either way; do not try to re-derive it.
-
-Pass BOTH halves. Whenever you pass an offset position you must also pass its
-orientation: there is no default, and the tool rejects the call without it.
-Omitting it would mean "align the grasp centre with the world axes", which is
-not what any step intends and, for a top-down grasp, inverts the approach axis
-so the pre-grasp stages below the object rather than above it.
-
-When a step carries a grasp_center_offset, the pose you hand the approach
-tool is the OBJECT's current pose -- position and orientation both, copied
-through from the pose query unchanged. It is not the grasp pose. The tool
-derives the grasp centre itself, composing both halves of the offset through
-that pose. Putting a grasp orientation in the object-pose slot is the mistake
-to avoid; for a top-down (1,0,0,0) against an object resting at identity it
-flips the offset 180 degrees about X, so a grasp point 40 mm to one side lands
-40 mm to the other -- 80 mm out, on the wrong feature, with no error raised.
-
-Passing the object's live pose is also what makes a re-pick work: a part that
-was released and settled off-square carries that deviation into the grasp
-automatically. Cache a pose from an earlier step and you lose exactly that.
+The pose you hand the approach tool alongside grasp_center_offset is the
+OBJECT's current pose -- position and orientation both, copied through from the
+pose query unchanged, queried live rather than cached -- never a grasp pose.
+The tool derives the grasp centre itself, composing both halves of the offset
+through that pose. Putting a grasp orientation in the object-pose slot instead
+is the mistake to avoid: for a top-down (1,0,0,0) against an object resting at
+identity it flips the offset 180 degrees about X, so a grasp point 40 mm to one
+side lands 80 mm out on the wrong feature, with no error raised. Querying live
+rather than caching is also what makes a re-pick work: a part released and
+settled off-square carries that deviation into the grasp automatically.
 
 Approach distances are SIGNED and applied exactly as given, along the grasp
-centre's own local Z axis. They are not forced to back away for you. For the
+centre's own local Z axis; they are not forced to back away for you. For the
 top-down grasps in this cell, local +Z points down INTO the object, so a
-NEGATIVE approach distance is what stages the gripper above it; a positive one
-drives into the part.
+NEGATIVE approach distance is what stages the gripper above it.
 
 ## The cell
 
@@ -106,13 +94,12 @@ upward -- dragging the part rather than raising it. Nothing errors. The motion
 plans and executes; it just goes the wrong way.
 
 So when the intent is to raise something, use the lift tool. It takes a height
-in metres and moves up in the world frame, carrying the gripper's orientation
-through unchanged, so the held part rises by exactly that height whatever
-orientation it happens to be in. A step that wants a lift says so with
-lift_height_m, and that value is the tool's height_m. Do not substitute an
-approach-axis or object-frame offset for it: those are for approaching and
-backing off along the line the grasp came in on, which is a different motion
-with a different meaning.
+in metres (a step's lift_height_m is the tool's height_m) and moves up in the
+world frame, carrying the gripper's orientation through unchanged, so the held
+part rises by exactly that height whatever orientation it happens to be in.
+Do not substitute an approach-axis or object-frame offset for it: those are
+for approaching and backing off along the line the grasp came in on, which is
+a different motion with a different meaning.
 
 ## Where a part has to end up
 
@@ -181,8 +168,6 @@ or inserted state fails. It is a planner tractability setting only -- it
 changes nothing about which objects you are permitted to touch. The
 specification remains the only source for that.
 
-
-
 Backing off after a release. When you let go of a seated part, retreat the TCP
 before moving on, and retreat from the TCP pose rather than from a
 grasp-centre pose. The release has just opened the jaws wide, and because the
@@ -209,8 +194,6 @@ For each step in the plan:
    offset are the exception: they are not registry fields, they come from this
    step's entry in the task instruction's steps: block, and you pass them to the
    motion and gripper tools yourself.
-
-
 
 3. Act. Plan and call the skills that carry out the step. Approach, grasp,
    transport, place, insert, release, whatever the step requires. If a skill call
