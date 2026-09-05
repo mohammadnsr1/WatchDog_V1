@@ -166,17 +166,17 @@ steps:
 
   - step_id: repick_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.04
+    grasp_width_m: 0.08
     contract_clause_groups: [invariants]
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.04
+    grasp_width_m: 0.08
     contract_clause_groups: [invariants]
 
   - step_id: place_inverted_u_brown
     object_id: inverted_u_brown
-    grasp_width_m: 0.04
+    grasp_width_m: 0.08
     contract_clause_groups: [effects, invariants]
 
   # --- hex_blue: no reorient span; picked, lifted, placed ---
