@@ -127,6 +127,21 @@ class MonitorPrimitive:
         self.comparison = ""
         self.reference_values: dict[str, Any] = {}
 
+    @property
+    def subject_object_id(self) -> str | None:
+        """The object this monitor is intrinsically about, or None.
+
+        Structural attribution for fire payloads: it comes from the monitor's
+        own parameters, never from the agent-supplied clause, so a fire can be
+        attributed to an object even when the clause omitted object_id.
+
+        None means the monitor has no intrinsic object -- effort_event watches
+        a joint, so which part was in the gripper is a fact about cell state at
+        fire time, not about the monitor. The engine resolves that case from
+        its tracked held part.
+        """
+        return None
+
     def evaluate(self, sample: Any) -> float | None:
         """Return triggering value when violated, else None."""
 
@@ -193,6 +208,11 @@ class RelativeFrameMonitor(MonitorPrimitive):
             ) from exc
         self.reference_values = {"translation": dict(self._reference)}
 
+    @property
+    def subject_object_id(self) -> str | None:
+        """The held part: this primitive watches tcp -> part, so child_frame is it."""
+        return self.child_frame
+
     def evaluate(self, sample: Any) -> float | None:
         transform = sample.lookup_transform(self.parent_frame, self.child_frame)
         current = _transform_position(transform)
@@ -240,6 +260,11 @@ class StationarityMonitor(MonitorPrimitive):
             raise ValueError(f"no latest pose sample for object_id {self.object_id!r}.")
         self._reference = _pose_position(latest)
         self.reference_values = {"position": dict(self._reference)}
+
+    @property
+    def subject_object_id(self) -> str | None:
+        """The object whose pose this primitive holds stationary."""
+        return self.object_id
 
     def evaluate(self, sample: Any) -> float | None:
         latest = (
@@ -295,6 +320,11 @@ class RegionMonitor(MonitorPrimitive):
             raise ValueError('mode must be "stay_inside" or "stay_outside".')
         self.threshold = 0.0
         self.comparison = "le" if self.mode == "stay_inside" else "gt"
+
+    @property
+    def subject_object_id(self) -> str | None:
+        """The object whose position this primitive bounds to a region."""
+        return self.object_id
 
     def evaluate(self, sample: Any) -> float | None:
         latest = (

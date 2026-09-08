@@ -111,6 +111,13 @@ class MonitorFirePayload(BaseModel):
     threshold: float
     comparison: str
     clause: dict[str, Any] | None
+    # Structural attribution of the fire to an object, resolved by the engine
+    # and independent of whatever the agent put in `clause`. For
+    # relative_frame/stationarity/region it is the monitor's own subject; for
+    # effort_event, which is joint-scoped and has no intrinsic object, it is
+    # the part the gripper was holding at fire time. None means genuinely no
+    # object -- an effort fire on an empty gripper, which is itself a finding.
+    object_id: str | None = None
     action_taken: str
     # HaltClient.halt()'s full return dict ({"ok", "detail", "goals_cancelled"})
     # when halt_on_fire triggered a cancel attempt; None when this fire was

@@ -365,6 +365,25 @@ class EvidenceRecorder:
                     self.current_step_id = step_id
                 elif envelope.event_type == "end_step":
                     self.current_step_id = None
+            # Mechanical reactions to the executor's own skill events: the
+            # engine brackets the held span from grasp/release and takes down
+            # a released part's slip monitor before the opening jaws can read
+            # as a slip. Kept outside the lock above, and never allowed to
+            # break event recording.
+            if not is_self_emitted and self.engine is not None:
+                payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+                skill_name = payload.get("skill_name")
+                if isinstance(skill_name, str):
+                    try:
+                        self.engine.on_skill_event(
+                            envelope.event_type,
+                            skill_name,
+                            payload.get("params"),
+                            payload.get("ok"),
+                        )
+                    except Exception as exc:
+                        self._log_warn(f"WatchDog engine skill hook failed: {exc}")
+
             if not is_self_emitted:
                 self.wake_event.set()
         except Exception as exc:
