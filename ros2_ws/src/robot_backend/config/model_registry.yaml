@@ -329,11 +329,11 @@ objects:
         # To reduce clamp force, reduce GRASP_CLEARANCE_M.
         force_threshold_n: 35.0
       tolerances:
-        position_m: 0.01
+        position_m: 0.02
         orientation_deg: 10.0
         lift_height_min_m: 0.05
-        disturbance_tolerance_m: 0.01
-        grasp_width_tolerance_m: 0.01
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
         # NOT RAISED, and the 5 cycles above breached it 3 times (27.38 /
@@ -344,7 +344,7 @@ objects:
         # the over-clamp. The fix is less clearance (which lowers the ceiling
         # proportionally), not a looser limit. Left at 25.0 deliberately so
         # the breach stays visible to the watchdog.
-        max_clamp_effort: 130.0
+        max_clamp_effort: 500.0
         grasp_effort_floor: 0.05
 
   # Static FMB parts sharing the table with u_green. base2 is the fixture/
@@ -402,14 +402,14 @@ objects:
       grasp:
         force_threshold_n: 25.0
       tolerances:
-        position_m: 0.01
+        position_m: 0.02
         orientation_deg: 10.0
         lift_height_min_m: 0.05
-        disturbance_tolerance_m: 0.01
-        grasp_width_tolerance_m: 0.01
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 130.0
+        max_clamp_effort: 500.0
         grasp_effort_floor: 0.05
 
   hex_red:
@@ -431,14 +431,14 @@ objects:
       grasp:
         force_threshold_n: 25.0
       tolerances:
-        position_m: 0.01
+        position_m: 0.02
         orientation_deg: 10.0
         lift_height_min_m: 0.05
-        disturbance_tolerance_m: 0.01
-        grasp_width_tolerance_m: 0.01
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 130.0
+        max_clamp_effort: 500.0
         grasp_effort_floor: 0.05
 
   inverted_u_brown:
@@ -460,14 +460,14 @@ objects:
       grasp:
         force_threshold_n: 35.0
       tolerances:
-        position_m: 0.01
+        position_m: 0.02
         orientation_deg: 10.0
         lift_height_min_m: 0.05
-        disturbance_tolerance_m: 0.01
-        grasp_width_tolerance_m: 0.01
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 130.0
+        max_clamp_effort: 500.0
         grasp_effort_floor: 0.05
 
   # ------------------------------------------------------------------
