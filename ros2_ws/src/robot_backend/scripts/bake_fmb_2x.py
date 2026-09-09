@@ -7,6 +7,16 @@ Requires a Python with `pxr` on the path, e.g.:
 For each part's single collision-tagged UsdGeom.Mesh prim:
     scaled_points_m = raw_usd_points * stage.metersPerUnit * scale_factor
 
+--scale 1.0 is the no-op scale: points are still rebaked into meters and the
+stage normalized to metersPerUnit=1, but the geometry is native size. That is
+the path for a set used as delivered, and it defaults to an empty filename
+suffix so a native part is `u_brown.obj`, not `u_brown_1x.obj` -- the _Nx
+suffix exists to mark scaled geometry and would be a lie on native parts.
+
+Set selection:
+    --set fmb2 --scale 2.0            (the original 2x set; the defaults)
+    --set fmb1 --scale 1.0            (a native-size set)
+
 The mesh prim's own local xformOp:scale is a redundant artifact of the
 Collected_fmb_assemblies export (it duplicates metersPerUnit) and is never
 composed into the transform -- see the fmb_u_green.obj provenance audit.
@@ -22,12 +32,29 @@ from pathlib import Path
 from pxr import Gf, Usd, UsdGeom, Vt
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-SRC_USD_DIR = REPO_ROOT / "assets/usd/Collected_fmb_assemblies/Collected_fmb2"
 OBJ_OUT_DIR = REPO_ROOT / "ros2_ws/src/robot_backend/config/assets"
-USD_OUT_DIR = SRC_USD_DIR
 
-DEFAULT_PARTS = ["base2", "hex_blue", "hex_red", "inverted_u_brown", "u_green"]
-REL_SRC_PREFIX = "assets/usd/Collected_fmb_assemblies/Collected_fmb2"
+# Per-set source layout. Both sets are Isaac "Collected_*" USD exports with the
+# same shape (one collision-tagged mesh per part, a redundant local
+# xformOp:scale duplicating metersPerUnit), so one code path serves both.
+SETS = {
+    "fmb2": {
+        "rel": "assets/usd/Collected_fmb_assemblies/Collected_fmb2",
+        "parts": ["base2", "hex_blue", "hex_red", "inverted_u_brown", "u_green"],
+    },
+    "fmb1": {
+        "rel": "assets/usd/Collected_fmb_assemblies/Collected_fmb1",
+        "parts": ["base1", "u_brown", "u_orange", "inverted_u_yellow", "line_green"],
+    },
+}
+
+# Rebound by main() from --set; module-level defaults keep the original
+# fmb2 invocation working unchanged.
+REL_SRC_PREFIX = SETS["fmb2"]["rel"]
+SRC_USD_DIR = REPO_ROOT / REL_SRC_PREFIX
+USD_OUT_DIR = SRC_USD_DIR
+DEFAULT_PARTS = SETS["fmb2"]["parts"]
+SUFFIX = "_2x"
 
 
 class PartFailed(Exception):
@@ -116,11 +143,24 @@ def format_num(v: float) -> str:
     return s
 
 
-def write_obj(path: Path, part: str, src_usd_rel: str, points, tri_indices) -> None:
+def write_obj(
+    path: Path, part: str, src_usd_rel: str, points, tri_indices, scale_factor: float
+) -> None:
+    if abs(scale_factor - 1.0) < 1e-9:
+        scale_note = "native size (no scaling)"
+    else:
+        # Integral scales print as x2, not x2.0, so re-running the original
+        # fmb2 bake reproduces its committed OBJ headers byte for byte.
+        n = (
+            str(int(scale_factor))
+            if abs(scale_factor - round(scale_factor)) < 1e-9
+            else format_num(scale_factor)
+        )
+        scale_note = f"scaled x{n} at vertex level"
     lines = [
         f"# FMB {part} collision mesh extracted from",
         f"# {src_usd_rel},",
-        "# scaled x2 at vertex level, units meters.",
+        f"# {scale_note}, units meters.",
     ]
     for p in points:
         lines.append(f"v {format_num(p[0])} {format_num(p[1])} {format_num(p[2])}")
@@ -185,7 +225,18 @@ def process_part(part: str, scale_factor: float) -> PartReport:
 
     # --- USD output: full copy of the source layer, then rewrite points +
     # normalize the scale representation so no factor is double-applied. ---
-    usd_out_path = USD_OUT_DIR / f"{part}_2x.usd"
+    usd_out_path = USD_OUT_DIR / f"{part}{SUFFIX}.usd"
+    if usd_out_path.resolve() == src_path.resolve():
+        # At --scale 1.0 the suffix is empty, so without a distinct output
+        # directory the normalized copy would overwrite the pristine
+        # Collected_* export it was derived from. Refuse rather than destroy
+        # the source: pass --usd-out-dir.
+        raise PartFailed(
+            f"USD output would overwrite its own source ({usd_out_path}). "
+            f"Pass --usd-out-dir (or a --suffix) so the normalized stage is "
+            f"written somewhere else."
+        )
+    usd_out_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src_path, usd_out_path)
     out_stage = Usd.Stage.Open(str(usd_out_path))
     out_mesh_prim = out_stage.GetPrimAtPath(mesh_prim.GetPath())
@@ -207,8 +258,8 @@ def process_part(part: str, scale_factor: float) -> PartReport:
     out_stage.GetRootLayer().Save()
 
     # --- OBJ output: identical scaled point set. ---
-    obj_out_path = OBJ_OUT_DIR / f"{part}_2x.obj"
-    write_obj(obj_out_path, part, src_rel, points_2x, tris)
+    obj_out_path = OBJ_OUT_DIR / f"{part}{SUFFIX}.obj"
+    write_obj(obj_out_path, part, src_rel, points_2x, tris, scale_factor)
 
     # --- Cross-check: reload both artifacts from disk, compare. ---
     check_stage = Usd.Stage.Open(str(usd_out_path))
@@ -243,14 +294,46 @@ def process_part(part: str, scale_factor: float) -> PartReport:
 
 
 def main() -> int:
+    global REL_SRC_PREFIX, SRC_USD_DIR, USD_OUT_DIR, SUFFIX
+
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--parts", nargs="+", default=DEFAULT_PARTS)
+    ap.add_argument("--set", dest="set_name", choices=sorted(SETS), default="fmb2")
+    ap.add_argument("--parts", nargs="+", default=None)
     ap.add_argument("--scale", type=float, default=2.0)
+    ap.add_argument(
+        "--usd-out-dir",
+        default=None,
+        help="Directory for the normalized USD stages. Defaults to the source "
+             "directory, which is where the 2x set's outputs live.",
+    )
+    ap.add_argument(
+        "--suffix",
+        default=None,
+        help="Filename suffix for outputs. Defaults to '' at --scale 1.0 and "
+             "'_<N>x' otherwise, so native parts are not labelled as scaled.",
+    )
     args = ap.parse_args()
+
+    spec = SETS[args.set_name]
+    REL_SRC_PREFIX = spec["rel"]
+    SRC_USD_DIR = REPO_ROOT / REL_SRC_PREFIX
+    USD_OUT_DIR = (
+        Path(args.usd_out_dir).expanduser().resolve()
+        if args.usd_out_dir
+        else SRC_USD_DIR
+    )
+    parts = args.parts if args.parts is not None else spec["parts"]
+
+    if args.suffix is not None:
+        SUFFIX = args.suffix
+    elif abs(args.scale - 1.0) < 1e-9:
+        SUFFIX = ""
+    else:
+        SUFFIX = f"_{format_num(args.scale).rstrip('.0') or '1'}x"
 
     reports: list[PartReport] = []
     failures = 0
-    for part in args.parts:
+    for part in parts:
         try:
             reports.append(process_part(part, args.scale))
         except PartFailed as exc:
@@ -275,7 +358,8 @@ def main() -> int:
 
     header = (
         f"{'part':<18}{'mpu':<8}{'verts':<7}{'tris':<6}"
-        f"{'1x AABB (m)':<26}{'2x AABB (m)':<26}{'ancestors':<11}{'obj==usd':<10}{'status'}"
+        f"{'native AABB (m)':<26}{'out AABB (m)':<26}"
+        f"{'ancestors':<11}{'obj==usd':<10}{'status'}"
     )
     print(header)
     print("-" * len(header))
