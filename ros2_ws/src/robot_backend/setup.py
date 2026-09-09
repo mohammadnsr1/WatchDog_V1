@@ -35,6 +35,13 @@ setup(
                 "config/assets/hex_blue_2x.obj",
                 "config/assets/hex_red_2x.obj",
                 "config/assets/inverted_u_brown_2x.obj",
+                # fmb1 set (fmb_assembly_2), native size -- no _2x suffix
+                # because nothing was scaled.
+                "config/assets/base1.obj",
+                "config/assets/u_brown.obj",
+                "config/assets/u_orange.obj",
+                "config/assets/inverted_u_yellow.obj",
+                "config/assets/line_green.obj",
             ],
         ),
     ],

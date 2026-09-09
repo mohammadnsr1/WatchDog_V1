@@ -174,6 +174,21 @@ acm_allowed_object_pairs:
   - [hex_blue, inverted_u_brown]
   - [hex_red, inverted_u_brown]
 
+  # --- fmb_assembly_2 (fmb1 set). Same shape of list as above: every part
+  # against the base1 fixture, and every movable part against every other,
+  # so the crowded-table start state stays plannable. Additive -- the fmb2
+  # pairs above are unaffected, and the two sets never share a table.
+  - [u_brown, base1]
+  - [u_brown, u_orange]
+  - [u_brown, inverted_u_yellow]
+  - [u_brown, line_green]
+  - [base1, u_orange]
+  - [base1, inverted_u_yellow]
+  - [base1, line_green]
+  - [u_orange, inverted_u_yellow]
+  - [u_orange, line_green]
+  - [inverted_u_yellow, line_green]
+
 objects:
   red_cube:
     enabled: false
@@ -485,6 +500,162 @@ objects:
   # mapping; it is never built or synced.
   # ------------------------------------------------------------------
 
+  # ==================================================================
+  # fmb_assembly_2 parts (the fmb1 set, native size -- see
+  # scripts/bake_fmb_2x.py --set fmb1 --scale 1.0 for how the meshes were
+  # produced). base1 is the fixture and is never picked, exactly as base2 is
+  # for the fmb2 set above.
+  #
+  # UNVERIFIED: every spec: block below is a placeholder copied from the fmb2
+  # parts, NOT measured for these parts. They are roughly HALF the size of the
+  # fmb2 set (u_brown is 70x70x21 mm where u_green_2x is 140x140x42 mm), so
+  # the clamp-effort and tolerance numbers have no reason to carry over --
+  # run rg2_effort_sweep.py / grasp_effort_test.py against each before
+  # trusting force_threshold_n / max_clamp_effort / the tolerances for a
+  # contract-bound or fault-injection run.
+  # ==================================================================
+  base1:
+    enabled: true
+    object_id: base1
+    tf_frame: base1   # matches the scene prim name (/World/base1) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_base
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: mesh
+      mesh_path: assets/base1.obj
+      # Native size, as delivered -- the fmb1 set is NOT scaled, so unlike the
+      # *_2x meshes there is no baked scale factor here and none to undo.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+
+  u_brown:
+    enabled: true
+    object_id: u_brown
+    tf_frame: u_brown   # matches the scene prim name (/World/u_brown) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_u
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/u_brown.obj
+      # Native size, as delivered -- the fmb1 set is NOT scaled, so unlike the
+      # *_2x meshes there is no baked scale factor here and none to undo.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 25.0
+      tolerances:
+        position_m: 0.02
+        orientation_deg: 10.0
+        lift_height_min_m: 0.05
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
+        grasp_slip_tolerance_m: 0.02
+      limits:
+        max_clamp_effort: 500.0
+        grasp_effort_floor: 0.05
+
+  u_orange:
+    enabled: true
+    object_id: u_orange
+    tf_frame: u_orange   # matches the scene prim name (/World/u_orange) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_u
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/u_orange.obj
+      # Native size, as delivered -- the fmb1 set is NOT scaled, so unlike the
+      # *_2x meshes there is no baked scale factor here and none to undo.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 25.0
+      tolerances:
+        position_m: 0.02
+        orientation_deg: 10.0
+        lift_height_min_m: 0.05
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
+        grasp_slip_tolerance_m: 0.02
+      limits:
+        max_clamp_effort: 500.0
+        grasp_effort_floor: 0.05
+
+  inverted_u_yellow:
+    enabled: true
+    object_id: inverted_u_yellow
+    tf_frame: inverted_u_yellow   # matches the scene prim name (/World/inverted_u_yellow) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_inverted_u
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/inverted_u_yellow.obj
+      # Native size, as delivered -- the fmb1 set is NOT scaled, so unlike the
+      # *_2x meshes there is no baked scale factor here and none to undo.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 25.0
+      tolerances:
+        position_m: 0.02
+        orientation_deg: 10.0
+        lift_height_min_m: 0.05
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
+        grasp_slip_tolerance_m: 0.02
+      limits:
+        max_clamp_effort: 500.0
+        grasp_effort_floor: 0.05
+
+  line_green:
+    enabled: true
+    object_id: line_green
+    tf_frame: line_green   # matches the scene prim name (/World/line_green) that Isaac publishes into TF
+    lookup_frame: world
+    class_name: fmb_line
+    source: isaac_gt
+    graspable: true
+    collision:
+      type: mesh
+      mesh_path: assets/line_green.obj
+      # Native size, as delivered -- the fmb1 set is NOT scaled, so unlike the
+      # *_2x meshes there is no baked scale factor here and none to undo.
+      scale: [1.0, 1.0, 1.0]
+      pose_offset:
+        position: {x: 0.0, y: 0.0, z: 0.0}
+        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    spec:
+      grasp:
+        force_threshold_n: 25.0
+      tolerances:
+        position_m: 0.02
+        orientation_deg: 10.0
+        lift_height_min_m: 0.05
+        disturbance_tolerance_m: 0.02
+        grasp_width_tolerance_m: 0.02
+        grasp_slip_tolerance_m: 0.02
+      limits:
+        max_clamp_effort: 500.0
+        grasp_effort_floor: 0.05
+
   u_green_placement:
     enabled: false
     object_id: u_green_placement
@@ -560,3 +731,84 @@ objects:
     collision:
       type: box
       dimensions: [0.001, 0.001, 0.001]
+
+  # --- fmb_assembly_2 destination frames (fmb1 set) ---
+  # The four *_placement frames below ARE published by Isaac today (confirmed
+  # on /tf 2026-09-09). The two *_reorient frames are NOT: the fmb1 stage
+  # publishes no reorient frames at all. They are registered here because
+  # fmb_assembly_2 mirrors fmb_assembly's step structure, which includes a
+  # reorient span for the U and inverted-U parts -- those steps will fail on
+  # frame lookup until the frames are authored in the stage, or the steps are
+  # dropped. enabled: false either way, as for the fmb2 frames.
+
+  u_brown_placement:
+    enabled: false
+    object_id: u_brown_placement
+    tf_frame: u_brown_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  u_orange_placement:
+    enabled: false
+    object_id: u_orange_placement
+    tf_frame: u_orange_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  inverted_u_yellow_placement:
+    enabled: false
+    object_id: inverted_u_yellow_placement
+    tf_frame: inverted_u_yellow_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  line_green_placement:
+    enabled: false
+    object_id: line_green_placement
+    tf_frame: line_green_placement
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
+  u_brown_reorient:
+    enabled: false
+    object_id: u_brown_reorient
+    tf_frame: u_brown_reorient
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]   # NOT published by the stage yet
+
+  inverted_u_yellow_reorient:
+    enabled: false
+    object_id: inverted_u_yellow_reorient
+    tf_frame: inverted_u_yellow_reorient
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]   # NOT published by the stage yet
