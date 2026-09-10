@@ -1,0 +1,81 @@
+# Plan for plan_assembly_step.py -- u_orange pick, place. Mirrors
+# fmb_assembly_2 task file's pick_u_orange / place_approach_u_orange /
+# place_u_orange steps exactly.
+#
+# This is the part the live agent could not find IK for -- run this dry
+# (no --execute) first and read the printed pre-grasp/grasp poses before
+# doing anything else. If plan_assembly_step.py itself reports NO_IK or a
+# planning failure here, that is the ground-truth reproduction of the
+# problem, independent of any agent.
+
+object_id: u_orange
+gripper_width_m: 0.02
+
+steps:
+  - step_id: sync_scene
+    action: sync_scene
+    object_ids: [u_brown, u_orange, line_green, inverted_u_yellow, base1]
+
+  - step_id: set_permitted_contacts
+    action: set_permitted_contacts
+
+  - step_id: safe_start
+    action: move_named_safe_pose
+    name: ready
+
+  - step_id: pick_u_orange
+    action: approach_and_preposition
+    approach_distance_m: -0.1
+    grasp_center_offset:
+      position: {x: 0.025, y: -0.03, z: 0.0}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+    stop_at_pregrasp: false
+
+  - step_id: grasp_u_orange
+    action: grasp
+
+  - step_id: lift_u_orange
+    action: move_grasp_center_to_pose
+    frame: delta_from_last
+    delta: {x: 0.0, y: 0.0, z: 0.2}
+
+  - step_id: clear_octomap_after_grasp
+    action: clear_octomap
+
+  - step_id: set_permitted_contacts_after_grasp
+    action: set_permitted_contacts
+
+  - step_id: place_approach_u_orange
+    action: move_grasp_center_to_pose
+    frame: target_object
+    target_id: u_orange_placement
+    target_offset:
+      position: {x: 0.0, y: -0.1, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_center_offset:
+      position: {x: 0.025, y: -0.03, z: 0.0}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+
+  - step_id: clear_octomap_before_placement
+    action: clear_octomap
+
+  - step_id: place_u_orange
+    action: move_grasp_center_to_pose
+    frame: target_object
+    target_id: u_orange_placement
+    grasp_center_offset:
+      position: {x: 0.025, y: -0.03, z: 0.0}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+    motion:
+      max_velocity_scaling_factor: 0.05
+      max_acceleration_scaling_factor: 0.05
+      allowed_planning_time: 20.0
+      position_tolerance_m: 0.0001
+      orientation_tolerance_rad: 0.05
+
+  - step_id: release_u_orange
+    action: release
+
+  - step_id: retreat_after_placement
+    action: retreat
+    distance_m: -0.10

@@ -279,6 +279,18 @@ from typing import Any
 
 import yaml
 
+# This script is documented to run under plain system python3 (see RUN above),
+# which does not have pydantic -- but it reaches robot_backend.motion_skills,
+# which pulls in robot_backend.events (pydantic) for its @emit_skill_events
+# decorator. Same workspace-venv re-exec the MCP servers use; must run before
+# any robot_backend import that touches events. See mcp_servers/__init__.py
+# for why this needs to be a re-exec and not just a sys.path append: the venv
+# also carries mcp/trimesh, and appending a path doesn't shadow an already
+# system-resolved numpy the way VIRTUAL_ENV + PATH reordering does.
+from robot_backend.mcp_servers import ensure_mcp_server_environment
+
+ensure_mcp_server_environment("plan_assembly_step")
+
 import rclpy
 import rclpy.executors
 from rclpy.node import Node

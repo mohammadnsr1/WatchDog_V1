@@ -1,0 +1,18 @@
+# Full fmb_assembly_2 (fmb1 set) -- runs every part plan back to back, in the
+# finalized order: u_brown, u_orange, line_green, inverted_u_yellow. Mirrors
+# full_assembly.plan.yaml's shape for the fmb2 set.
+#
+#   python3 plan_assembly_step.py --plan full_assembly_2.plan.yaml            # dry run
+#   python3 plan_assembly_step.py --plan full_assembly_2.plan.yaml --execute --yes
+#
+# ORDER MATTERS, same reasoning as full_assembly.plan.yaml: each part placed
+# earlier becomes world geometry for every plan after it. This is also the
+# most direct way to reproduce, in isolation, the u_orange IK failure the
+# live agent hit -- run with --continue-on-error on a dry run to see every
+# part's geometry error in one pass instead of stopping at the first one.
+
+include:
+  - u_brown_pick.plan.yaml
+  - u_orange_pick.plan.yaml
+  - line_green_pick.plan.yaml
+  - inverted_u_yellow_pick.plan.yaml

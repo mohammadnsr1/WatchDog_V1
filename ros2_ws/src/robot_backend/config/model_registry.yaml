@@ -551,7 +551,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 25.0
+        force_threshold_n: 5.0
       tolerances:
         position_m: 0.02
         orientation_deg: 10.0
@@ -560,7 +560,7 @@ objects:
         grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 500.0
+        max_clamp_effort: 100.0
         grasp_effort_floor: 0.05
 
   u_orange:
@@ -582,7 +582,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 25.0
+        force_threshold_n: 5.0
       tolerances:
         position_m: 0.02
         orientation_deg: 10.0
@@ -591,7 +591,7 @@ objects:
         grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 500.0
+        max_clamp_effort: 100.0
         grasp_effort_floor: 0.05
 
   inverted_u_yellow:
@@ -613,7 +613,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 25.0
+        force_threshold_n: 10.0
       tolerances:
         position_m: 0.02
         orientation_deg: 10.0
@@ -622,7 +622,7 @@ objects:
         grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 500.0
+        max_clamp_effort: 100.0
         grasp_effort_floor: 0.05
 
   line_green:
@@ -644,7 +644,7 @@ objects:
         orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     spec:
       grasp:
-        force_threshold_n: 25.0
+        force_threshold_n: 10.0
       tolerances:
         position_m: 0.02
         orientation_deg: 10.0
@@ -653,7 +653,7 @@ objects:
         grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 500.0
+        max_clamp_effort: 100.0
         grasp_effort_floor: 0.05
 
   u_green_placement:

@@ -91,7 +91,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
@@ -110,7 +110,7 @@ steps:
     grasp_width_m: 0.02
     grasp_center_offset:
       position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
   - step_id: place_u_brown
     object_id: u_brown
@@ -119,7 +119,7 @@ steps:
     grasp_width_m: 0.02
     grasp_center_offset:
       position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
     motion:
       max_velocity_scaling_factor: 0.1
@@ -130,10 +130,10 @@ steps:
     object_id: u_orange
     action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.02
-    approach_distance_m: 0.0
+    approach_distance_m: -0.1
     grasp_center_offset:
       position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
@@ -147,12 +147,12 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_orange_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: 0.1, z: 0.0}
+      position: {x: 0.0, y: -0.1, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.02
     grasp_center_offset:
-      position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      position: {x: 0.025, y: -0.03, z: 0.0}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
   - step_id: place_u_orange
     object_id: u_orange
@@ -161,7 +161,7 @@ steps:
     grasp_width_m: 0.02
     grasp_center_offset:
       position: {x: 0.025, y: -0.030, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
     motion:
       max_velocity_scaling_factor: 0.05
@@ -176,9 +176,9 @@ steps:
     object_id: line_green
     action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
     grasp_width_m: 0.03
-    approach_distance_m: 0.0
+    approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
@@ -195,8 +195,8 @@ steps:
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      position: {x: 0.0, y: 0.0, z: 0.01}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_line_green
     object_id: line_green
@@ -204,8 +204,8 @@ steps:
     target_frame: line_green_placement
     grasp_width_m: 0.03
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      position: {x: 0.0, y: 0.0, z: 0.01}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
     motion:
       max_velocity_scaling_factor: 0.05
