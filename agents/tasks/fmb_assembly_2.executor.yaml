@@ -105,7 +105,7 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_brown_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: -0.1, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.02
     grasp_center_offset:
@@ -147,7 +147,7 @@ steps:
     # world): these frames' local +Z does not point up, so a vertical
     # standoff lands on local Y. from u_orange_pick.plan.yaml.
     target_offset:
-      position: {x: 0.0, y: -0.1, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.02
     grasp_center_offset:
@@ -191,7 +191,7 @@ steps:
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
 
     target_offset:
-      position: {x: 0.0, y: -0.15, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.15}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:

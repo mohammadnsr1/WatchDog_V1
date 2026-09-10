@@ -51,7 +51,7 @@ steps:
     frame: target_object
     target_id: u_brown_placement
     target_offset:
-      position: {x: 0.0, y: -0.1, z: 0.0}
+      position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.03, z: 0.0}
