@@ -3,6 +3,10 @@
 Tools:
   get_object_pose      — TF pose of one registry object (planning frame).
   get_object_poses     — TF poses of all enabled registry objects.
+  get_object_spec      — one object's registry spec block (tolerances,
+                         limits, grasp thresholds) plus cell frame names.
+                         Read-only; does not carry grasp_width_m, which is
+                         instruction-sourced (see the tool's docstring).
   reset_tf             — flush the TF buffer after an Isaac sim reset.
   get_scene_summary    — MoveIt's current beliefs: world + attached objects.
   sync_scene           — push TF-derived poses into MoveIt's collision scene.
@@ -264,6 +268,61 @@ if mcp is not None:
             }
         except Exception as exc:
             return _error(command, exc)
+
+    @mcp.tool()
+    def get_object_spec(object_id: str) -> dict[str, Any]:
+        """Return one object's registry spec: tolerances, limits, grasp thresholds.
+
+        This is the object-level truth the task file declines to author --
+        static per-object reference data read straight from
+        model_registry.yaml. It does not change as the run proceeds, so fetch
+        an object's spec once and reuse it.
+
+        It deliberately does NOT return grasp_width_m. That value is
+        instruction-sourced, not registry-sourced: it lives in your task
+        file's steps: block and reaches you through get_rendered_task. The
+        registry has no grasp_width_m to give and no default to fall back on.
+
+        cell carries cell-level (not per-object) joint and frame names --
+        cell.gripper.effort_joint_name, cell.gripper.tcp_frame, and
+        cell.base_frame for MoveIt's planning frame.
+
+        acm_allowed_object_pairs lists object-object pairs whose collision
+        checking is disabled in MoveIt's Allowed Collision Matrix so that
+        intended contact (stacking, insertion) does not leave the planning
+        scene in collision. It is a planner tractability setting, not a
+        permission to touch those objects.
+        """
+        command = "get_object_spec"
+        try:
+            object_id = _validate_object_id(object_id)
+            registry = _load_registry() if _REGISTRY is None else _REGISTRY
+            objects = registry.get("objects", {})
+            if not isinstance(objects, dict) or object_id not in objects:
+                raise KeyError(
+                    f"Object {object_id!r} not found in the registry. "
+                    f"Known objects: {sorted(objects) if isinstance(objects, dict) else []}"
+                )
+            entry = objects[object_id]
+            spec = entry.get("spec")
+            if not isinstance(spec, dict):
+                raise ValueError(
+                    f"Object {object_id!r} has no 'spec' block in the registry, so "
+                    "it carries no tolerances or limits."
+                )
+            acm_pairs = registry.get("acm_allowed_object_pairs", [])
+            return _ok(
+                command,
+                object_id=object_id,
+                spec=spec,
+                graspable=bool(entry.get("graspable", False)),
+                tf_frame=entry.get("tf_frame"),
+                lookup_frame=entry.get("lookup_frame"),
+                acm_allowed_object_pairs=acm_pairs if isinstance(acm_pairs, list) else [],
+                cell=registry.get("cell", {}),
+            )
+        except Exception as exc:
+            return _error(command, exc, object_id=object_id)
 
     @mcp.tool()
     @emit_skill_events
