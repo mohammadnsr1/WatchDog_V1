@@ -193,21 +193,172 @@ def test_manifest_omits_comparison_when_no_source(tmp_path):
     assert data["registry_install_matches_source"] is None
 
 
-def test_write_manifest_first_writer_wins(tmp_path):
+def test_write_manifest_first_writer_wins_when_registry_agrees(tmp_path):
+    """Concurrent writers of the SAME run: first wins, silently and safely.
+
+    This is the legitimate race -- four server processes plus cell bringup all
+    write the manifest at startup and every one of them computes the same
+    registry hash.
+    """
     first = sess.write_manifest(
         tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
         started_wall_ns=1, recorded_topics=[], images_recorded=False,
         image_throttle_hz=5.0,
     )
-    # A second write with different content must leave the first untouched.
-    sess.write_manifest(
-        tmp_path, registry={"b": 2}, registry_path=None, registry_sha256="h2",
+    second = sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
         started_wall_ns=2, recorded_topics=[], images_recorded=True,
         image_throttle_hz=9.0,
     )
+    assert second == first
     data = json.loads(first.read_text())
     assert data["registry"] == {"a": 1}
     assert data["registry_sha256"] == "h1"
+    assert data["started_wall_ns"] == 1
+
+
+# --------------------------------------------------------------------------
+# FIX 1 -- manifest is non-idempotent when the registry changed.
+# This is the Class 4 protection: a session dir whose manifest froze a
+# PRE-corruption registry hash would make post-hoc scoring read a corrupted
+# run as clean. It must be impossible to do that silently.
+# --------------------------------------------------------------------------
+
+def test_registry_change_against_existing_manifest_hard_fails(tmp_path):
+    sess.write_manifest(
+        tmp_path, registry={"clean": True}, registry_path=None,
+        registry_sha256="clean_sha", started_wall_ns=1, recorded_topics=[],
+        images_recorded=False, image_throttle_hz=5.0,
+    )
+    with pytest.raises(sess.RegistryMismatchError) as excinfo:
+        sess.write_manifest(
+            tmp_path, registry={"corrupted": True}, registry_path=None,
+            registry_sha256="corrupted_sha", started_wall_ns=2,
+            recorded_topics=[], images_recorded=False, image_throttle_hz=5.0,
+        )
+    message = str(excinfo.value)
+    # Both hashes and the dir must be named, so the operator can see exactly
+    # which registry the dir was committed to and which one is live now.
+    assert "clean_sha" in message
+    assert "corrupted_sha" in message
+    assert str(tmp_path) in message
+
+    # The original manifest is left intact -- never rewritten, never clobbered.
+    data = json.loads((tmp_path / "manifest.json").read_text())
+    assert data["registry"] == {"clean": True}
+    assert data["registry_sha256"] == "clean_sha"
+
+
+def test_registry_mismatch_uses_live_registry_hash_not_argument(tmp_path):
+    """A Registry object's own hash wins over the passed registry_sha256.
+
+    The launch path passes both; the object's hash is the live one, so the
+    comparison must use it or a stale argument could mask a real change.
+    """
+    from pathlib import Path as _Path
+
+    def _registry(raw_text):
+        return sess.Registry(
+            raw_text=raw_text, raw_dict={"objects": {}},
+            asset_root=_Path(tmp_path), objects={},
+        )
+
+    clean = _registry("objects: {}\n")
+    corrupted = _registry("objects: {}  # fault injected\n")
+    assert clean.raw_sha256 != corrupted.raw_sha256
+
+    sess.write_manifest(
+        tmp_path, registry=clean, registry_path=None,
+        registry_sha256=None, started_wall_ns=1, recorded_topics=[],
+        images_recorded=False, image_throttle_hz=5.0,
+    )
+    recorded = json.loads((tmp_path / "manifest.json").read_text())["registry_sha256"]
+    assert recorded == clean.raw_sha256
+
+    # registry_sha256 still claims the CLEAN hash, but the live object carries
+    # the corrupted one. The object must win, or a stale argument would mask
+    # the change.
+    with pytest.raises(sess.RegistryMismatchError) as excinfo:
+        sess.write_manifest(
+            tmp_path, registry=corrupted, registry_path=None,
+            registry_sha256=clean.raw_sha256, started_wall_ns=2,
+            recorded_topics=[], images_recorded=False, image_throttle_hz=5.0,
+        )
+    assert corrupted.raw_sha256 in str(excinfo.value)
+
+
+def test_unverifiable_manifest_is_refused(tmp_path):
+    """Missing or unreadable provenance is refused, not quietly accepted."""
+    # Manifest with no registry_sha256 at all.
+    (tmp_path / "manifest.json").write_text('{"session_id": "x"}', encoding="utf-8")
+    with pytest.raises(sess.RegistryMismatchError):
+        sess.write_manifest(
+            tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
+            started_wall_ns=1, recorded_topics=[], images_recorded=False,
+            image_throttle_hz=5.0,
+        )
+
+    # Corrupt/unreadable manifest.
+    (tmp_path / "manifest.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(sess.RegistryMismatchError):
+        sess.write_manifest(
+            tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
+            started_wall_ns=1, recorded_topics=[], images_recorded=False,
+            image_throttle_hz=5.0,
+        )
+
+
+# --------------------------------------------------------------------------
+# FIX 2 -- a session dir a prior run used is refused without an override.
+# --------------------------------------------------------------------------
+
+def test_reused_session_dir_refused_without_override(tmp_path, monkeypatch):
+    monkeypatch.delenv("WATCHDOG_ALLOW_SESSION_REUSE", raising=False)
+    # A fresh dir is fine.
+    sess.assert_session_dir_unused(tmp_path)
+
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
+        started_wall_ns=1, recorded_topics=[], images_recorded=False,
+        image_throttle_hz=5.0,
+    )
+    with pytest.raises(sess.SessionReuseError) as excinfo:
+        sess.assert_session_dir_unused(tmp_path)
+    assert str(tmp_path) in str(excinfo.value)
+
+    # Explicit override permits deliberate re-entry.
+    sess.assert_session_dir_unused(tmp_path, allow_reuse=True)
+
+
+def test_session_reuse_override_via_env(tmp_path, monkeypatch):
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="h1",
+        started_wall_ns=1, recorded_topics=[], images_recorded=False,
+        image_throttle_hz=5.0,
+    )
+    monkeypatch.setenv("WATCHDOG_ALLOW_SESSION_REUSE", "1")
+    sess.assert_session_dir_unused(tmp_path)
+    monkeypatch.setenv("WATCHDOG_ALLOW_SESSION_REUSE", "false")
+    with pytest.raises(sess.SessionReuseError):
+        sess.assert_session_dir_unused(tmp_path)
+
+
+def test_reuse_override_does_not_bypass_registry_check(tmp_path, monkeypatch):
+    """The two guards compose: the override permits re-entry, FIX 1 still
+    requires that the re-entered run agree on the registry."""
+    monkeypatch.setenv("WATCHDOG_ALLOW_SESSION_REUSE", "1")
+    sess.write_manifest(
+        tmp_path, registry={"a": 1}, registry_path=None, registry_sha256="clean_sha",
+        started_wall_ns=1, recorded_topics=[], images_recorded=False,
+        image_throttle_hz=5.0,
+    )
+    sess.assert_session_dir_unused(tmp_path)  # override lets us in
+    with pytest.raises(sess.RegistryMismatchError):  # but the registry must agree
+        sess.write_manifest(
+            tmp_path, registry={"b": 2}, registry_path=None,
+            registry_sha256="corrupted_sha", started_wall_ns=2, recorded_topics=[],
+            images_recorded=False, image_throttle_hz=5.0,
+        )
 
 
 # --------------------------------------------------------------------------

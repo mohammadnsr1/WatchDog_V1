@@ -175,6 +175,27 @@ def resolve_session_dir_strict() -> tuple[Path, str]:
 # --------------------------------------------------------------------------
 
 
+def _live_registry_provenance() -> tuple[str | None, str | None]:
+    """Return (path, sha256) of the registry this cell would load.
+
+    Resolved the way the servers resolve it: install space first, source tree
+    as fallback.
+
+    Never raises. Both agents call get_rendered_task before anything else, so
+    a hashing failure must degrade to a reported null rather than block the
+    run; the null is itself the signal that provenance could not be captured.
+    """
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+    except Exception:
+        path = Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
+    try:
+        return str(path), session_helper.sha256_file(path)
+    except Exception:
+        return str(path), None
+
+
 def build_rendered_task(role: str) -> dict[str, Any]:
     """Render this role's system prompt + task. Returns them as SEPARATE fields.
 
@@ -226,6 +247,7 @@ def build_rendered_task(role: str) -> dict[str, Any]:
     task_text = render_task(template_text, task)
 
     session_dir, session_rule = resolve_session_dir_strict()
+    registry_path, registry_sha256 = _live_registry_provenance()
 
     return {
         "ok": True,
@@ -237,8 +259,15 @@ def build_rendered_task(role: str) -> dict[str, Any]:
             "agent_config": str(_config_path_for(role)),
             "system_prompt_path": str(config.system_prompt),
             "task_template_path": str(config.task_template),
-            "task_path": str(task_path),
+            # Fully resolved, symlinks included: the env var below names the
+            # file, but only the resolved path shows WHICH file that actually
+            # was. A stale *_TASK_PATH serves an old task perfectly freshly,
+            # and this is what makes that visible in the session's first turn.
+            "task_path": str(task_path.resolve()),
             "task_path_env": task_env,
+            "task_path_env_value": task_path_raw,
+            "registry_path": registry_path,
+            "registry_sha256": registry_sha256,
         },
         "session_dir": str(session_dir),
         "session_rule": session_rule,

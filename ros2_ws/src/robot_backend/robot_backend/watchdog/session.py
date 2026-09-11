@@ -35,6 +35,27 @@ _SESSION_ENV = "WATCHDOG_SESSION_DIR"
 _SESSION_ROOT_ENV = "WATCHDOG_SESSION_ROOT"
 _MANIFEST_NAME = "manifest.json"
 _POINTER_FILE = Path.home() / ".watchdog" / "current_session"
+_ALLOW_REUSE_ENV = "WATCHDOG_ALLOW_SESSION_REUSE"
+
+
+class RegistryMismatchError(RuntimeError):
+    """A session dir's manifest records a different registry than the live one.
+
+    Raised instead of silently reusing the existing manifest. The manifest is
+    what post-hoc scoring reads to tell a fault-injection run from a clean one,
+    so a dir whose manifest froze a pre-corruption hash would score a corrupted
+    run as clean. That failure is silent and unrecoverable after the fact,
+    which is why this is fatal at startup rather than a warning.
+    """
+
+
+class SessionReuseError(RuntimeError):
+    """The target session dir was already used by a prior run.
+
+    Two runs sharing a directory interleave their events_*.jsonl and
+    mcp_calls_*.jsonl, which cannot be separated afterwards. Refused unless
+    reuse is explicitly requested for deliberate idempotent re-entry.
+    """
 
 
 def _utc_stamp() -> str:
@@ -197,6 +218,75 @@ def git_commit(cwd: Path | None = None) -> str | None:
     return commit or None
 
 
+def _assert_manifest_registry_agrees(
+    manifest_path: Path, live_sha256: str | None
+) -> None:
+    """Raise RegistryMismatchError unless an existing manifest's registry matches.
+
+    Only an explicit, verified match is allowed to proceed. Every other case --
+    differing hashes, an unreadable manifest, or a hash missing on either side
+    -- is refused, because each one leaves the run's registry provenance
+    unverifiable, and an unverifiable scored run is the thing this guard
+    exists to prevent.
+    """
+    session_dir = manifest_path.parent
+    try:
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RegistryMismatchError(
+            f"Session dir {session_dir} already holds a manifest that could not "
+            f"be read ({exc}), so the registry it recorded cannot be verified "
+            f"against the live registry (sha256={live_sha256}). Use a fresh "
+            f"session dir."
+        ) from exc
+
+    recorded_sha = existing.get("registry_sha256") if isinstance(existing, dict) else None
+
+    if recorded_sha is not None and live_sha256 is not None:
+        if recorded_sha == live_sha256:
+            return
+        raise RegistryMismatchError(
+            f"Registry changed since this session dir's manifest was written.\n"
+            f"  session_dir:      {session_dir}\n"
+            f"  manifest sha256:  {recorded_sha}\n"
+            f"  live sha256:      {live_sha256}\n"
+            f"Refusing to reuse the manifest: scoring reads it to tell a "
+            f"fault-injection run from a clean one, so reusing it would record "
+            f"this run under the wrong registry. Start a fresh session dir."
+        )
+
+    raise RegistryMismatchError(
+        f"Session dir {session_dir} already holds a manifest, and the registry "
+        f"cannot be verified against it (manifest sha256={recorded_sha}, live "
+        f"sha256={live_sha256}). Start a fresh session dir."
+    )
+
+
+def assert_session_dir_unused(session_dir: Path, *, allow_reuse: bool | None = None) -> None:
+    """Refuse a session dir a prior run already wrote a manifest into.
+
+    allow_reuse defaults to the WATCHDOG_ALLOW_SESSION_REUSE env var. The
+    override is for deliberate idempotent re-entry only; it does NOT bypass
+    write_manifest's registry check, so a re-entered dir must still agree on
+    the registry.
+    """
+    if allow_reuse is None:
+        allow_reuse = os.environ.get(_ALLOW_REUSE_ENV, "").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+    if allow_reuse:
+        return
+    manifest_path = session_dir / _MANIFEST_NAME
+    if manifest_path.exists():
+        raise SessionReuseError(
+            f"Session dir {session_dir} was already used by a prior run "
+            f"(it holds {_MANIFEST_NAME}). Two runs in one dir interleave their "
+            f"events_*.jsonl and mcp_calls_*.jsonl, which cannot be separated "
+            f"afterwards. Start a fresh session dir, or set "
+            f"{_ALLOW_REUSE_ENV}=1 for deliberate re-entry with the same registry."
+        )
+
+
 def write_manifest(
     session_dir: Path,
     *,
@@ -215,9 +305,12 @@ def write_manifest(
     """Write manifest.json into the session dir, atomically and idempotently.
 
     Atomic: written to a temp file then renamed, so a reader never sees a
-    half-written manifest. Idempotent: if a manifest already exists (another
-    process wrote it first), this leaves it untouched -- the first writer wins,
-    and every process computes the same content anyway.
+    half-written manifest. Idempotent ONLY when the registry agrees: if a
+    manifest already exists, its registry_sha256 is compared against the live
+    registry's. Agreement means another process of this same run wrote it
+    first, so the existing manifest stands untouched. Disagreement raises
+    RegistryMismatchError rather than reusing it -- see that class for why a
+    frozen pre-corruption hash is unrecoverable for post-hoc scoring.
 
     The embedded registry is the load-bearing part. In fault-injection runs the
     registry IS the injected fault; capturing it (and its hash) alongside the
@@ -233,9 +326,10 @@ def write_manifest(
     registry. Null source hash (install-only deployment) omits the comparison.
     """
     manifest_path = session_dir / _MANIFEST_NAME
-    if manifest_path.exists():
-        return manifest_path
 
+    # Derived before the existence check below: a Registry object carries its
+    # own hash, and the comparison needs the LIVE hash, not the caller's
+    # possibly-null argument.
     mesh_provenance: dict[str, dict[str, Any]] = {}
     if isinstance(registry, Registry):
         registry_payload = registry.raw_dict
@@ -243,6 +337,10 @@ def write_manifest(
         mesh_provenance = registry.mesh_provenance()
     else:
         registry_payload = registry
+
+    if manifest_path.exists():
+        _assert_manifest_registry_agrees(manifest_path, registry_sha256)
+        return manifest_path
 
     if registry_source_sha256 is not None and registry_sha256 is not None:
         install_matches_source: bool | None = registry_source_sha256 == registry_sha256
@@ -300,6 +398,9 @@ def write_manifest(
 
 
 __all__ = [
+    "RegistryMismatchError",
+    "SessionReuseError",
+    "assert_session_dir_unused",
     "repo_root",
     "source_registry_path",
     "session_root",

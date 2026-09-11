@@ -123,6 +123,13 @@ def _write_manifest(session_dir: Path, context, recorded_topics, images_recorded
             registry_source_path=src_registry_path,
             registry_source_sha256=src_registry_sha,
         )
+    except sess.RegistryMismatchError:
+        # Deliberately NOT swallowed like the failures below. Everything else
+        # here is best-effort because losing the manifest only costs provenance,
+        # but a registry mismatch means this run would be SCORED against the
+        # wrong registry -- silent and unrecoverable after the fact. Bringup
+        # must stop.
+        raise
     except Exception as exc:  # pragma: no cover
         return LogInfo(msg=f"Session manifest write failed: {exc}")
 
@@ -199,6 +206,19 @@ def _launch_setup(context):
 
     # -- Session recording (Part B/C) ------------------------------------
     session_dir, session_rule = _resolve_session_dir(context)
+    # Before creating anything: refuse a dir a prior run already recorded into.
+    # Unlike the pointer/manifest writes below this is NOT best-effort -- two
+    # runs sharing a dir interleave their JSONL traces irreversibly, so the
+    # only safe moment to catch it is before the first byte is written.
+    allow_reuse = _is_truthy(
+        LaunchConfiguration("allow_session_reuse").perform(context)
+    )
+    try:
+        from robot_backend.watchdog import session as _sess_guard
+    except Exception:  # pragma: no cover - depends on overlay
+        pass
+    else:
+        _sess_guard.assert_session_dir_unused(session_dir, allow_reuse=allow_reuse)
     session_dir.mkdir(parents=True, exist_ok=True)
     # Publish the session path so the separately-launched agents find it with no
     # manual export. Atomic write; best effort (never fails bringup).
@@ -627,6 +647,20 @@ def generate_launch_description():
                     "Orchestrator JSONL transition log directory. Empty (default) "
                     "routes it under the session directory (<session>/orchestrator); "
                     "set it to override with an explicit path."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "allow_session_reuse",
+                default_value="false",
+                description=(
+                    "Allow bringup into a session directory a prior run already "
+                    "wrote a manifest into. Default false: reuse is refused, "
+                    "because two runs in one directory interleave their "
+                    "events_*.jsonl and mcp_calls_*.jsonl irreversibly. Set true "
+                    "only for deliberate idempotent re-entry -- it does NOT "
+                    "bypass the manifest's registry check, so the re-entered run "
+                    "must still agree on the registry. WATCHDOG_ALLOW_SESSION_REUSE "
+                    "has the same effect for the harness-launched path."
                 ),
             ),
             DeclareLaunchArgument(

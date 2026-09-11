@@ -33,6 +33,49 @@ Two things follow, and neither is optional:
 
 ---
 
+## Pre-run checklist — cross-run contamination
+
+Run this before **every** scored run, in order. Steps marked *enforced* now
+fail loudly on their own; the rest are still on you.
+
+| # | Step | Enforced? |
+|---|---|---|
+| 1 | `colcon build` so the registry reaches install space | **manual** — see below |
+| 2 | Mint a fresh session dir + rewrite the pointer | **enforced**: bringup refuses a dir a prior run used |
+| 3 | `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` name the intended files | **enforced**: echoed in `get_rendered_task`'s first response |
+| 4 | `registry_install_matches_source` is true | **manual** — bringup warns, never blocks |
+| 5 | Launch watchdog, then executor | manual |
+
+**Step 1 is the one with no guard.** The servers load the registry from install
+space via `get_package_share_directory`, so editing
+`ros2_ws/src/robot_backend/config/model_registry.yaml` without rebuilding means
+the cell runs the OLD registry — a fault-injection run silently executes clean.
+Nothing raises; bringup only warns (step 4). Rebuild, every time.
+
+What the guards actually do when they fire:
+
+- **Reused session dir** → bringup aborts with `SessionReuseError` naming the
+  dir. Two runs in one directory interleave their `events_*.jsonl` and
+  `mcp_calls_*.jsonl` irreversibly, so this is caught before the first byte is
+  written. Override with `allow_session_reuse:=true` (or
+  `WATCHDOG_ALLOW_SESSION_REUSE=1`) for deliberate idempotent re-entry only.
+- **Registry changed under an existing manifest** → bringup aborts with
+  `RegistryMismatchError` naming both hashes and the dir. The manifest is what
+  post-hoc scoring reads to tell a corrupted run from a clean one, so a dir
+  whose manifest froze a pre-corruption hash would score a Class 4 run as
+  clean. The override above does **not** bypass this check.
+- **Wrong task file or registry** → visible in the session's first turn:
+  `get_rendered_task` returns the resolved absolute `task_path`, the raw
+  `task_path_env_value` it came from, and the live `registry_path` /
+  `registry_sha256`. Both agents call it at startup, so both transcripts carry
+  the provenance. Nothing blocks — check it.
+
+Known latent issue, deliberately not addressed: `ctx.registry` / `_REGISTRY`
+are cached per server process, so `get_contract`'s `raw_spec` and
+`get_object_spec` serve the registry as it was at process start. This only
+bites if the registry is corrupted **mid-session**; Class 4 corrupts between
+runs, where each run gets a fresh process. Left alone on purpose.
+
 ## Prerequisites
 
 ### 1. Standalone `claude` on PATH — not the extension binary
