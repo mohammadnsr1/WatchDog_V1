@@ -107,8 +107,8 @@ DEFAULT_RAMP_TIME_SEC = 1.0
 # ---------------------------------------------------------------------------
 
 DEFAULT_CONTROL_HZ = 50.0
-DEFAULT_PROBE_STEP_RAD = 0.010         # angle increment per tick during contact search (width mode)
-DEFAULT_TORQUE_PROBE_STEP_RAD = 0.01  # uniform step size for the entire torque-mode close
+DEFAULT_PROBE_STEP_RAD = 0.005        # angle increment per tick during contact search (width mode)
+DEFAULT_TORQUE_PROBE_STEP_RAD = 0.005  # uniform step size for the entire torque-mode close
 # Measured idle magnitude peaks at ~0.027 across orientations; floor adds a margin.
 DEFAULT_EFFORT_NOISE_FLOOR = 0.03
 # Fraction of the goal's force_threshold that effort must reach before a
