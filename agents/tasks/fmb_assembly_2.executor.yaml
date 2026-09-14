@@ -77,11 +77,9 @@ step_plan: |
   Sync the scene first, before any motion, so all five objects are in the
   planning scene as collision objects.
 
-  Four parts, seated in order. u_brown and inverted_u_yellow each need a
-  reorient stage (pick flat -> set down at the reorient frame -> release ->
-  re-pick -> carry to placement). u_orange and line_green are picked once and
-  inserted. Each part ends released, verified against its placement frame,
-  with the TCP retreated clear.
+  Four parts, seated in order. Each is picked once and carried straight to its
+  placement -- there is no reorient stage anywhere in this task. Each part ends
+  released, verified against its placement frame, with the TCP retreated clear.
 
 steps:
   - step_id: pick_u_brown
@@ -188,7 +186,7 @@ steps:
     object_id: line_green
     action_hint: approach the hole from above, stopping clear of contact
     target_frame: line_green_placement
-    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
+    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. Unlike the other three placement frames, this one's local +Z DOES point up, so the vertical standoff is carried on local Z -- that is why this step offsets on z where u_brown, u_orange and inverted_u_yellow offset on y. Do not "correct" it to y for consistency.
 
     target_offset:
       position: {x: 0.0, y: 0.0, z: 0.1}
@@ -258,18 +256,18 @@ steps:
       max_acceleration_scaling_factor: 0.1
       allowed_planning_time: 20.0
 object_ids: |
-  u_brown          — FMB U part, graspable. Seated first. Needs a reorient stage.
-  inverted_u_yellow — FMB inverted-U part, graspable, 252mm long. Needs a reorient stage.
-  u_orange         — hex pin, graspable, 140mm long. Inserted directly.
-  line_green          — hex pin, graspable, 140mm long. Inserted directly.
+  u_brown          — FMB U part, graspable. Seated first. Inserted directly.
+  inverted_u_yellow — FMB inverted-U part, graspable. Inserted directly.
+  u_orange         — FMB U part, graspable. Inserted directly.
+  line_green       — FMB line part, graspable. Inserted directly.
   base1            — the fixture. NOT graspable and never picked; it carries
                      the slots the four parts seat into.
 
-  Placement/reorient destinations are published as TF frames and queried like
-  object poses: u_brown_placement, inverted_u_yellow_placement, u_orange_placement,
-  line_green_placement, u_brown_reorient, inverted_u_yellow_reorient. They are
-  pose-only markers, not collision geometry, and they move with the fixture --
-  which is why they are queried rather than hardcoded.
+  Placement destinations are published as TF frames and queried like object
+  poses: u_brown_placement, inverted_u_yellow_placement, u_orange_placement,
+  line_green_placement. They are pose-only markers, not collision geometry, and
+  they move with the fixture -- which is why they are queried rather than
+  hardcoded. This task uses no reorient frames.
 
   Registry acm_allowed_object_pairs covers every pair among u_brown, base1,
   u_orange, line_green and inverted_u_yellow -- a planner collision-checking
