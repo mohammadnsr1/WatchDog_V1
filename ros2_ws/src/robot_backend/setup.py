@@ -21,10 +21,7 @@ setup(
         ),
         (
             "share/robot_backend/config",
-            [
-                "config/model_registry.yaml",
-                "config/model_registry_mesh_example.yaml",
-            ],
+            ["config/model_registry.yaml"],
         ),
         (
             "share/robot_backend/config/assets",
