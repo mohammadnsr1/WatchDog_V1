@@ -21,10 +21,7 @@ setup(
         # low on every grasp -- silently, with no error anywhere.
         (
             "share/" + package_name + "/config",
-            [
-                "config/rg2_width_table.csv",
-                "config/rg2_calibration_table.csv",
-            ],
+            ["config/rg2_calibration_table.csv"],
         ),
     ],
     install_requires=["setuptools"],
