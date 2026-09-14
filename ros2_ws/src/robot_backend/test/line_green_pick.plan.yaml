@@ -23,7 +23,7 @@ steps:
     action: approach_and_preposition
     approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     stop_at_pregrasp: false
 
@@ -46,10 +46,10 @@ steps:
     frame: target_object
     target_id: line_green_placement
     target_offset:
-      position: {x: 0.0, y: 0.0, z: 0.1}
+      position: {x: -0.001, y: -0.001, z: 0.1}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: clear_octomap_before_placement
@@ -60,7 +60,7 @@ steps:
     frame: target_object
     target_id: line_green_placement
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     motion:
       max_velocity_scaling_factor: 0.05

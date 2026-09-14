@@ -176,7 +176,7 @@ steps:
     grasp_width_m: 0.03
     approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
@@ -189,11 +189,11 @@ steps:
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. Unlike the other three placement frames, this one's local +Z DOES point up, so the vertical standoff is carried on local Z -- that is why this step offsets on z where u_brown, u_orange and inverted_u_yellow offset on y. Do not "correct" it to y for consistency.
 
     target_offset:
-      position: {x: 0.0, y: 0.0, z: 0.1}
+      position: {x: -0.001, y: -0.001, z: 0.1}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: place_line_green
@@ -202,7 +202,7 @@ steps:
     target_frame: line_green_placement
     grasp_width_m: 0.03
     grasp_center_offset:
-      position: {x: 0.0, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
     motion:
