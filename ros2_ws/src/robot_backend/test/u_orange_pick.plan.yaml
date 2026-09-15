@@ -63,6 +63,9 @@ steps:
     action: move_grasp_center_to_pose
     frame: target_object
     target_id: u_orange_placement
+    target_offset:
+      position: {x: 0.001, y: 0.0, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
