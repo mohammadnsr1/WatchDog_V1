@@ -1,0 +1,18 @@
+# Workspace venv (ros2_ws/.venv). robot_backend's MCP servers and
+# scene_tf_sync_node re-exec into this interpreter, then append the system
+# dist-packages after it (robot_backend/mcp_servers/__init__.py).
+#
+# numpy MUST stay < 2: SciPy, rclpy and friends come from the Ubuntu/ROS Jazzy
+# system dist-packages, built against numpy 1.x. numpy 2 in the venv shadows the
+# system numpy and breaks them -- trimesh.load_mesh then fails on every mesh
+# ("numpy.dtype size changed ... Expected 96 from C header, got 88"), so
+# sync_scene fails for every mesh-collision object.
+numpy<2
+
+# mcp 2.x renamed FastMCP -> MCPServer; the servers import mcp.server.fastmcp.
+mcp<2
+trimesh
+PyYAML
+usd-core
+cryptography
+pytest

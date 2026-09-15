@@ -95,6 +95,18 @@ claude --version       # e.g. 2.1.88 (Claude Code)
 
 ### 2. Simulation and MoveIt up, cell brought up
 
+The workspace venv must exist and carry numpy < 2. `scene_tf_sync_node` and the
+MCP servers re-exec into `ros2_ws/.venv` and then load SciPy/rclpy from the
+system packages, which are built against numpy 1.x. With numpy 2 in the venv,
+every mesh load fails and `sync_scene` fails for every mesh object. Create or
+refresh it, then confirm the version:
+
+```bash
+python3 -m venv ros2_ws/.venv
+ros2_ws/.venv/bin/pip install -r ros2_ws/requirements.txt
+ros2_ws/.venv/bin/python3 -c 'import numpy; print(numpy.__version__)'   # must be 1.x
+```
+
 Isaac Sim playing, then the cell bringup:
 
 ```bash

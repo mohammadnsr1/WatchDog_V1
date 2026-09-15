@@ -737,6 +737,18 @@ def run_step(
                 return backend.scene.sync_collision_objects(object_ids)
             outcome = confirm_and_run(step_id, _do_sync, settle_sec=settle_sec)
             result["sync_result"] = outcome
+            if not outcome.get("ok", False):
+                # An object that failed to sync is absent from (or stale in)
+                # MoveIt's world scene. Continuing doesn't fail here -- it
+                # fails steps later, e.g. grasp's attach_object raising "not
+                # present in the world collision objects". Stop at the real
+                # failure; scene_tf_sync_node's log has the per-object reason.
+                raise RuntimeError(
+                    f"step '{step_id}': sync_scene failed for "
+                    f"{outcome.get('failed_object_ids', '?')} -- "
+                    f"{outcome.get('message', outcome)}. Check the "
+                    "scene_tf_sync_node log for the per-object reason."
+                )
 
     elif action == "set_permitted_contacts":
         # sync_collision_objects (above) and this are two SEPARATE MoveIt
