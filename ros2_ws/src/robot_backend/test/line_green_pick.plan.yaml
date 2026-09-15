@@ -60,7 +60,7 @@ steps:
     frame: target_object
     target_id: line_green_placement
     target_offset:
-      position: {x: -0.001, y: -0.003, z: 0.0}
+      position: {x: -0.001, y: -0.001, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: 0.0, z: 0.01}
