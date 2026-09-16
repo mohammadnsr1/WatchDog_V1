@@ -323,13 +323,34 @@ class FollowJointTrajectoryBridge(Node):
                     )
 
                 if elapsed_sec > final_time_sec + timeout_margin:
+                    # Report the residual PER JOINT at full precision, not the
+                    # actual positions rounded to 3 decimals: at a goal_tolerance
+                    # of 1e-4 rad the rounded form cannot distinguish a drive
+                    # that missed by a micro-radian from one that missed by a
+                    # centimetre, which is exactly what you need to know to tell
+                    # "tolerance set below what the drive can hold" apart from
+                    # "the arm never got there".
                     actual_text = "unknown"
+                    residual_text = "unknown"
                     if actual is not None:
-                        actual_text = ", ".join(f"{value:.3f}" for value in actual)
+                        goal_positions = self._final_positions(reordered_points)
+                        residuals = [
+                            abs(goal_value - actual_value)
+                            for goal_value, actual_value in zip(goal_positions, actual)
+                        ]
+                        actual_text = ", ".join(f"{value:.6f}" for value in actual)
+                        residual_text = ", ".join(
+                            f"{name}={value:.3e}"
+                            for name, value in zip(self.joint_names, residuals)
+                        )
+                        residual_text += " | max=%.3e rad (tolerance %.3e)" % (
+                            max(residuals),
+                            self.goal_tolerance,
+                        )
                     message = (
                         "Timed out waiting for final joint tolerance after %.3f s. "
-                        "Last actual positions: [%s]"
-                    ) % (elapsed_sec, actual_text)
+                        "Per-joint residual: [%s]. Last actual positions: [%s]"
+                    ) % (elapsed_sec, residual_text, actual_text)
                     self.get_logger().error(message)
                     goal_handle.abort()
                     return self._result(
