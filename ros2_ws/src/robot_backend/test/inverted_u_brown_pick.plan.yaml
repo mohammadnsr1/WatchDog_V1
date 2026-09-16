@@ -110,7 +110,7 @@ steps:
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
-      joint_tolerance: 0.0005
+      joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.2
       max_acceleration_scaling_factor: 0.2
       allowed_planning_time: 20.0
@@ -127,7 +127,7 @@ steps:
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
-      joint_tolerance: 0.0005
+      joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.1
       max_acceleration_scaling_factor: 0.1
       allowed_planning_time: 20.0

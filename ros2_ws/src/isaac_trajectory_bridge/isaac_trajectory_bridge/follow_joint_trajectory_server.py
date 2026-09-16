@@ -39,7 +39,15 @@ class FollowJointTrajectoryBridge(Node):
         # previous target and then jumps, which reads as jitter.
         self.declare_parameter("publish_rate_hz", 60.0)
         self.declare_parameter("clock_stall_timeout_sec", 5.0)
-        self.declare_parameter("goal_tolerance", 0.03)
+        # Per-joint acceptance band for the final trajectory point. This is the
+        # LAST gate before a motion is reported as reached, so it -- not the
+        # MoveIt goal constraint -- sets the precision actually delivered: at
+        # the UR5e's ~0.85 m reach the old 0.03 rad let a move succeed ~25 mm
+        # off target. 1e-4 rad (~0.085 mm at the TCP) matches the cell's
+        # 0.1 mm / 0.1 deg spec in robot_backend's DEFAULT_*_TOLERANCE.
+        # A drive that cannot settle this far now aborts with
+        # GOAL_TOLERANCE_VIOLATED instead of silently passing.
+        self.declare_parameter("goal_tolerance", 0.0001)
         self.declare_parameter("goal_time_tolerance_sec", 2.0)
         self.declare_parameter("require_joint_state_before_execute", True)
         # Default False, matching both launch files (trajectory_bridge.launch.py

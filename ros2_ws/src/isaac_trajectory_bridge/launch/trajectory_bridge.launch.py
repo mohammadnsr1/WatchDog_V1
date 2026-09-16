@@ -13,6 +13,7 @@ def generate_launch_description() -> LaunchDescription:
     rg2_close_position = LaunchConfiguration("rg2_close_position")
     rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
     rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
+    goal_tolerance = LaunchConfiguration("goal_tolerance")
 
     return LaunchDescription(
         [
@@ -57,6 +58,17 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="50.0",
                 description="Publish rate in Hz for RG2 gripper interpolation commands.",
             ),
+            DeclareLaunchArgument(
+                "goal_tolerance",
+                default_value="0.0001",
+                description=(
+                    "Per-joint acceptance band in radians for the final "
+                    "trajectory point. This is the gate that decides the "
+                    "precision actually delivered, so it is held at the cell's "
+                    "0.1 mm / 0.1 deg spec (~1e-4 rad is ~0.085 mm at the TCP). "
+                    "Raise it only to diagnose a drive that cannot settle."
+                ),
+            ),
             Node(
                 package="isaac_trajectory_bridge",
                 executable="follow_joint_trajectory_server",
@@ -78,7 +90,7 @@ def generate_launch_description() -> LaunchDescription:
                         # Matches physxScene:timeStepsPerSecond in the Isaac
                         # stage; a mismatch beats against the physics loop.
                         "publish_rate_hz": 60.0,
-                        "goal_tolerance": 0.03,
+                        "goal_tolerance": goal_tolerance,
                         "goal_time_tolerance_sec": 2.0,
                         "require_joint_state_before_execute": True,
                         "publish_full_joint_command": publish_full_joint_command,

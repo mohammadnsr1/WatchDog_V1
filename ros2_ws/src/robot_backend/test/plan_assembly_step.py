@@ -240,9 +240,13 @@ Optional per-step motion tuning (any move step):
       solve_ik_first: true            # exact-IK + joint-space plan instead of
                                        # a tolerance-sphere pose goal; use for
                                        # placement steps that must land exactly
-      joint_tolerance: 0.0005         # applies on the solve_ik_first path
-      position_tolerance_m: 0.0002    # applies on the default pose-goal path
-      orientation_tolerance_rad: 0.002
+      joint_tolerance: 0.0001         # applies on the solve_ik_first path
+      position_tolerance_m: 0.0001    # applies on the default pose-goal path
+      orientation_tolerance_rad: 0.001  # 0.057 deg
+      # These three ARE the cell defaults (DEFAULT_*_TOLERANCE in
+      # ros_moveit_backend/motion.py) -- omit the keys entirely to get them.
+      # Only ever restate them here to go TIGHTER; a looser value in a plan
+      # silently lowers the goal precision for that step.
       planner_id: RRTConnectkConfigDefault   # any config in ompl_planning.yaml
       planner_fallbacks: []           # [] disables the automatic retry with
                                        # alternate planners; omit for defaults

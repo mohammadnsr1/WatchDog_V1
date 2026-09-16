@@ -34,6 +34,12 @@ from rclpy.node import Node
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
+from robot_backend.ros_moveit_backend.motion import (
+    DEFAULT_ORIENTATION_TOLERANCE_RAD as _DEFAULT_ORIENTATION_TOLERANCE_RAD,
+)
+from robot_backend.ros_moveit_backend.motion import (
+    DEFAULT_POSITION_TOLERANCE_M as _DEFAULT_POSITION_TOLERANCE_M,
+)
 from robot_backend.watchdog import session as session_helper
 from robot_backend.utils.geometry import compose_poses
 from robot_backend.utils.geometry import grasp_center_from_object_and_offset, make_pose, rotate_vector
@@ -67,8 +73,10 @@ _DEFAULT_APPROACH_DISTANCE_M = -0.05
 _DEFAULT_NUM_PLANNING_ATTEMPTS = 4
 _DEFAULT_MAX_VELOCITY_SCALING_FACTOR = 0.7
 _DEFAULT_MAX_ACCELERATION_SCALING_FACTOR = 0.5
-_DEFAULT_POSITION_TOLERANCE_M = 0.0001
-_DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.001
+# _DEFAULT_POSITION_TOLERANCE_M / _DEFAULT_ORIENTATION_TOLERANCE_RAD are
+# imported from ros_moveit_backend.motion above: the goal-precision spec is
+# owned there so the MCP path and the plan-runner/test-script path cannot
+# drift apart.
 _MIN_QUATERNION_NORM = 1e-8
 
 mcp = FastMCP("robot_backend_motion") if FastMCP is not None else None

@@ -47,6 +47,23 @@ DEFAULT_TCP_FRAME = "tcp"
 DEFAULT_MOVE_GROUP_ACTION = "/move_action"
 DEFAULT_IK_SERVICE_NAME = "/compute_ik"
 DEFAULT_JOINT_STATE_TOPIC = "/joint_states"
+
+# The cell's goal-precision spec, defined here ONCE so that every entry point
+# -- MCP tools, plan_assembly_step.py plans, direct backend calls -- lands on
+# the same numbers. motion_mcp_server.py imports these rather than restating
+# them; callers may pass tighter values, but nothing should silently widen
+# them. 0.1 mm of position, and orientation tighter than the 0.1 deg spec.
+DEFAULT_POSITION_TOLERANCE_M = 0.0001
+DEFAULT_ORIENTATION_TOLERANCE_RAD = 0.001  # 0.057 deg, inside the 0.1 deg spec
+# Joint-space counterpart, used on the solve_ik_first path and by
+# move_to_joint_positions. Kept an order of magnitude under the position spec
+# in angle terms: at the UR5e's ~0.85 m reach, 1e-4 rad at one joint is ~0.085
+# mm at the TCP, so a six-joint worst case stays in the same ballpark as
+# DEFAULT_POSITION_TOLERANCE_M. A looser value here (the previous 1e-3) lets a
+# joint-space plan be "reached" almost a millimetre off the pose it was
+# solved from, which defeats the pose tolerance above.
+DEFAULT_JOINT_TOLERANCE_RAD = 0.0001
+
 _DEFAULT_ACTION_TIMEOUT = 30.0
 _DEFAULT_IK_TIMEOUT = 5.0
 _INITIAL_JOINT_STATE_TIMEOUT = 1.0
@@ -173,7 +190,8 @@ class ROSMoveItMotionBackend(MotionBackend):
 
         `solve_ik_first=True` resolves the target pose to one exact joint
         solution through `/compute_ik` first, then plans in joint space
-        against that solution with joint_tolerance (default 1e-3 rad). Use
+        against that solution with joint_tolerance (default
+        DEFAULT_JOINT_TOLERANCE_RAD). Use
         this when a call needs the end-effector to land at (deterministically
         close to) the literal target instead of anywhere inside the default
         pose-goal's tolerance sphere/cone -- the default Cartesian pose-goal
@@ -252,11 +270,14 @@ class ROSMoveItMotionBackend(MotionBackend):
         max_acceleration_scaling_factor = float(
             kwargs.get("max_acceleration_scaling_factor", 0.3)
         )
-        # 0.001 matches the single owned value in motion_mcp_server.py
-        # (_DEFAULT_POSITION_TOLERANCE_M); this is not a second tuning knob.
-        position_tolerance_m = float(kwargs.get("position_tolerance_m", 0.001))
+        # Goal precision is NOT a per-call tuning knob with a local literal:
+        # both defaults are the module-level spec above, which the MCP server
+        # imports rather than restating.
+        position_tolerance_m = float(
+            kwargs.get("position_tolerance_m", DEFAULT_POSITION_TOLERANCE_M)
+        )
         orientation_tolerance_rad = float(
-            kwargs.get("orientation_tolerance_rad", 0.01)
+            kwargs.get("orientation_tolerance_rad", DEFAULT_ORIENTATION_TOLERANCE_RAD)
         )
         action_timeout_sec = float(kwargs.get("timeout_sec", _DEFAULT_ACTION_TIMEOUT))
 
@@ -326,7 +347,9 @@ class ROSMoveItMotionBackend(MotionBackend):
                 max_acceleration_scaling_factor=float(
                     kwargs.get("max_acceleration_scaling_factor", 0.5)
                 ),
-                joint_tolerance=float(kwargs.get("joint_tolerance", 1e-3)),
+                joint_tolerance=float(
+                    kwargs.get("joint_tolerance", DEFAULT_JOINT_TOLERANCE_RAD)
+                ),
                 planner_id=planner_id,
             )
             goal.planning_options = self._build_planning_options(kwargs)

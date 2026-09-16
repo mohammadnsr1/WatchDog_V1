@@ -46,7 +46,7 @@ steps:
     frame: target_object
     target_id: line_green_placement
     target_offset:
-      position: {x: 0.0, y: 0.0, z: 0.1}
+      position: {x: 0.0, y: 0.0, z: 0.06}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: 0.0, z: 0.01}
@@ -60,7 +60,7 @@ steps:
     frame: target_object
     target_id: line_green_placement
     target_offset:
-      position: {x: -0.002, y: -0.001, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: 0.0, z: 0.01}
@@ -70,7 +70,7 @@ steps:
       max_acceleration_scaling_factor: 0.05
       allowed_planning_time: 20.0
       position_tolerance_m: 0.0001
-      orientation_tolerance_rad: 0.05
+      orientation_tolerance_rad: 0.001
 
   - step_id: release_line_green
     action: release
