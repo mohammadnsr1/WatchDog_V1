@@ -183,6 +183,7 @@ def _launch_setup(context):
     rg2_close_position = LaunchConfiguration("rg2_close_position")
     rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
     rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
+    goal_tolerance = LaunchConfiguration("goal_tolerance")
     publish_workspace_floor = LaunchConfiguration("publish_workspace_floor")
     workspace_floor_object_id = LaunchConfiguration("workspace_floor_object_id")
     workspace_floor_top_z = LaunchConfiguration("workspace_floor_top_z")
@@ -315,6 +316,7 @@ def _launch_setup(context):
                 "rg2_close_position": rg2_close_position,
                 "rg2_command_duration_sec": rg2_command_duration_sec,
                 "rg2_command_rate_hz": rg2_command_rate_hz,
+                "goal_tolerance": goal_tolerance,
             }.items(),
         ),
         # MoveIt planning frame is lowercase `world`, while Isaac Sim's default
@@ -733,6 +735,15 @@ def generate_launch_description():
                 "rg2_command_rate_hz",
                 default_value="50.0",
                 description="Publish rate in Hz for RG2 gripper interpolation commands.",
+            ),
+            DeclareLaunchArgument(
+                "goal_tolerance",
+                default_value="0.0005",
+                description=(
+                    "Per-joint acceptance band in radians for the final "
+                    "trajectory point, forwarded to the trajectory bridge. "
+                    "Overridable per-run to tune against drive settling."
+                ),
             ),
             DeclareLaunchArgument(
                 "voxel_leaf_size",

@@ -60,13 +60,15 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "goal_tolerance",
-                default_value="0.0001",
+                default_value="0.0005",
                 description=(
                     "Per-joint acceptance band in radians for the final "
-                    "trajectory point. This is the gate that decides the "
-                    "precision actually delivered, so it is held at the cell's "
-                    "0.1 mm / 0.1 deg spec (~1e-4 rad is ~0.085 mm at the TCP). "
-                    "Raise it only to diagnose a drive that cannot settle."
+                    "trajectory point. A per-joint band is NOT a Cartesian "
+                    "spec: joint error reaches the TCP through the Jacobian, so "
+                    "do not set this to the 0.1 mm TCP figure. Cartesian "
+                    "precision comes from MoveIt's goal constraints instead. "
+                    "1e-4 sat inside the Isaac drives' noise band and aborted "
+                    "under load; 5e-4 clears the measured 2.3e-4 residual."
                 ),
             ),
             Node(

@@ -208,16 +208,19 @@ class ROSMoveItSceneBackend(SceneBackend):
         attached.object = attached_collision_object
         attached.touch_links = list(resolved_touch_links)
 
-        remove_world_object = CollisionObject()
-        remove_world_object.id = normalized_object_id
-        remove_world_object.operation = CollisionObject.REMOVE
-
+        # No explicit world REMOVE here. Attaching already removes the object
+        # from the world, and _get_world_collision_object above guarantees it
+        # was there (it raises otherwise). Sending a REMOVE in the same diff
+        # therefore ran second against an already-empty slot: MoveIt logged
+        # "Tried to remove world object '<id>', but it does not exist in this
+        # scene" and returned success=False for an attach that had in fact
+        # worked -- masking real failures behind a warning that was expected.
+        # verified_removed_from_world below is what actually confirms removal.
         request = ApplyPlanningScene.Request()
         request.scene = PlanningScene()
         request.scene.is_diff = True
         request.scene.robot_state.is_diff = True
         request.scene.robot_state.attached_collision_objects = [attached]
-        request.scene.world.collision_objects = [remove_world_object]
 
         response = self._call_service(
             self._apply_planning_scene_client,
