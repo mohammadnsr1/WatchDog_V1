@@ -5,9 +5,7 @@
 
 
 object_id: hex_red
-gripper_width_m: 0.03       # TODO -- candidates are 0.0323 (across X) or
-                              # 0.0280 (across Z), depending on which way the
-                              # jaws close for your chosen grasp orientation.
+gripper_width_m: 0.03       
 
 steps:
   - step_id: sync_scene
@@ -21,12 +19,11 @@ steps:
 
   - step_id: pick_hex_red
     action: approach_and_preposition
-    # Top-down TCP: local +Z points down into the part, so approach_distance_m
-    # is negative to back up off the table.
-    approach_distance_m: -0.0
+
+    approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.0, y: 0.04, z: 0.0}           
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+     position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
     stop_at_pregrasp: false
 
   - step_id: grasp_hex_red
@@ -35,69 +32,27 @@ steps:
   - step_id: lift_hex_red
     action: move_grasp_center_to_pose
     frame: delta_from_last
-    delta: {x: -0.1, y: -0.2, z: 0.3}
+    delta: {x: 0.0, y: 0.0, z: 0.3}
 
   - step_id: clear_octomap_after_grasp
     action: clear_octomap
 
-  # attach_object REMOVEs the part from the world before re-adding it as an
-  # attached body, so re-assert the ACM here rather than relying on the
-  # start-of-plan entries surviving that round trip.
 
-
-  # - step_id: reorient
-  #   action: move_grasp_center_to_pose
-  #   frame: target_object
-  #   # object_pose is the part's DESIRED world pose. The part is ATTACHED here,
-  #   # so object_pose and grasp_center_offset orientations are NOT independently
-  #   # choosable -- the object->gripper transform is fixed at grasp time. An
-  #   # inconsistent pair silently lands the part somewhere else.
-  #   object_pose:
-  #     position: {x: 0.85533, y: -0.1, z: 0.075}
-  #     orientation: {x: 0.0, y: 0.7071, z: 0.7071, w: 0.0}    # -90, 0, 180 (intrinsic XYZ)
-  #   grasp_center_offset:
-  #     position: {x: 0.0, y: 0.04, z: 0.0}
-  #     # Not free: derived from the top-down pick above. hex_blue rests at
-  #     # (0,0,180) on the table, so the object->gripper transform is
-  #     # (0,-1,0,0), NOT identity -- this value is target (x) that transform.
-  #     # Re-derive it if either the resting pose or the pick orientation changes.
-  #     orientation: {x: -0.7071, y: 0.0, z: 0.0, w: -0.7071}
-  #   motion:
-
-  #     max_velocity_scaling_factor: 0.2
-  #     max_acceleration_scaling_factor: 0.2
-  #     allowed_planning_time: 20.0
-
-
-
-  # Delete this reorient block (through repick_hex_blue) if the part can be
-  # picked straight into its final orientation and never needs setting down.
   - step_id: prepare for insertion
     action: move_grasp_center_to_pose
     frame: target_object
-    # object_pose is the part's DESIRED world pose. The part is ATTACHED here,
-    # so object_pose and grasp_center_offset orientations are NOT independently
-    # choosable -- the object->gripper transform is fixed at grasp time. An
-    # inconsistent pair silently lands the part somewhere else.
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
+  
     target_id: hex_red_hole
-    # target_offset is in the FRAME's own axes, NOT world. This frame's
-    # local +Z does not point up, so the world-vertical standoff that
-    # the old hardcoded z encoded is along local Y here.
     target_offset:
-      position: {x: 0.0, y: 0.18450, z: 0.0}
+      position: {x: 0.0, y: 0.1, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.03
     grasp_center_offset:
-      position: {x: 0.0, y: 0.04, z: 0.0}          
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
 
 
-  # Essential before insertion, not just belt-and-braces: the surrounding
-  # parts are in the scene TWICE -- as synced collision objects (ACM-exempt)
-  # and as camera voxels (NOT exemptable). The pin has to enter space those
-  # voxels occupy.
+
   - step_id: clear_octomap_before_insertion
     action: clear_octomap
   - step_id: set_permitted_contacts_after_grasp
@@ -106,13 +61,10 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
     target_id: hex_red_hole
     grasp_center_offset:
-      position: {x: 0.0, y: 0.04, z: 0.0}     
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
     motion:
       max_velocity_scaling_factor: 0.2
       max_acceleration_scaling_factor: 0.2
@@ -122,10 +74,6 @@ steps:
   - step_id: release_hex_red
     action: release
 
-  # Back the TCP straight out along its own local Z after letting go. Pure TCP
-  # move on purpose: the release just opened the jaws to ~104mm, and a
-  # grasp-center move would convert through that width and drop the TCP ~41mm
-  # INTO the part it just placed.
   - step_id: retreat_after_placement
     action: retreat
     distance_m: -0.10

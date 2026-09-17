@@ -8,19 +8,12 @@ gripper_width_m: 0.042
 steps:
   - step_id: sync_scene
     action: sync_scene
-    # All the static parts sharing the table with u_green, so MoveIt plans
-    # against their real TF pose instead of not knowing about them at all
-    # (or, worse, an earlier stale sync) -- this is what a planning-timeout
-    # in the middle of a plan turned out to be last time.
+
     object_ids: [u_green, base2, hex_blue, hex_red, inverted_u_brown]
 
   - step_id: set_permitted_contacts
     action: set_permitted_contacts
-    # Separate from sync_scene above -- applies model_registry.yaml's
-    # acm_allowed_object_pairs to MoveIt's Allowed Collision Matrix so
-    # planning near this crowded table doesn't refuse contact between the
-    # declared pairs. Reads the pairs straight from the registry; no
-    # per-step fields needed.
+
 
   - step_id: safe_start
     action: move_named_safe_pose
@@ -28,13 +21,9 @@ steps:
 
   - step_id: pick_u_green
     action: approach_and_preposition
-    # Top-down TCP -- local +Z points DOWN into the object, so
-    # approach_distance_m is NEGATIVE: -100mm along the TCP's own local +Z
-    # backs UP away from the table. Sign is yours to set per orientation --
-    # see pregrasp_center_from_grasp_center.
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.05, y: -0.050, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     stop_at_pregrasp: false
 
@@ -46,52 +35,16 @@ steps:
     frame: delta_from_last
     delta: {x: 0.0, y: 0.0, z: 0.3}
 
-  - step_id: reorient_u_green
-    action: move_grasp_center_to_pose
-    # frame: target_object, not world: the position/orientation below are
-    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
-    # grasp-center/TCP pose the robot can drive to directly. u_green is
-    # still ATTACHED here (no release yet), so this is NOT a live-pick
-    # composition (frame: object's "orientation is whatever world
-    # orientation you want" rule does not apply to an attached object --
-    # its orientation is a consequence of the TCP's, not independently
-    # choosable). grasp_center_offset is the FIXED object-relative
-    # transform from when it was grasped (same values as pick_u_green's),
-    # composed the classic way onto the target object pose to solve for
-    # the TCP orientation that target actually requires.
-    frame: target_object
-    # Reorient destination read LIVE from its published frame. The frame
-    # sits at the FINAL reorient pose.
-    target_id: u_green_reorient
-    # Upper waypoint of the two-stage descent. In the FRAME's own axes:
-    # this frame's local +Z points along world +Y, so the 80mm
-    # world-vertical standoff is -80mm on local Y.
-    target_offset:
-      position: {x: 0.0, y: -0.08000, z: 0.0}
-      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: reorient_u_green
     action: move_grasp_center_to_pose
-    # frame: target_object, not world: the position/orientation below are
-    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
-    # grasp-center/TCP pose the robot can drive to directly. u_green is
-    # still ATTACHED here (no release yet), so this is NOT a live-pick
-    # composition (frame: object's "orientation is whatever world
-    # orientation you want" rule does not apply to an attached object --
-    # its orientation is a consequence of the TCP's, not independently
-    # choosable). grasp_center_offset is the FIXED object-relative
-    # transform from when it was grasped (same values as pick_u_green's),
-    # composed the classic way onto the target object pose to solve for
-    # the TCP orientation that target actually requires.
     frame: target_object
-    # Reorient destination read LIVE from its published frame. The frame
-    # sits at the FINAL reorient pose.
     target_id: u_green_reorient
+    target_offset:
+      position: {x: 0.0, y: -0.02000, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.05, y: -0.050, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
   - step_id: release_u_green
@@ -107,7 +60,7 @@ steps:
 
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.05, y: -0.050, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     stop_at_pregrasp: false
 
@@ -127,34 +80,16 @@ steps:
 
   - step_id: placement_approach
     action: move_grasp_center_to_pose
-    # frame: target_object, not world: the position/orientation below are
-    # u_green's DESIRED object pose (read off an Isaac Sim gizmo), not a
-    # grasp-center/TCP pose the robot can drive to directly. u_green is
-    # still ATTACHED here (no release yet), so this is NOT a live-pick
-    # composition (frame: object's "orientation is whatever world
-    # orientation you want" rule does not apply to an attached object --
-    # its orientation is a consequence of the TCP's, not independently
-    # choosable). grasp_center_offset is the FIXED object-relative
-    # transform from when it was grasped (same values as pick_u_green's),
-    # composed the classic way onto the target object pose to solve for
-    # the TCP orientation that target actually requires.
+
     frame: target_object
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
     target_id: u_green_placement
-    # target_offset is in the FRAME's own axes, NOT world. This frame's
-    # local +Z does not point up, so the world-vertical standoff that
-    # the old hardcoded z encoded is along local Y here.
     target_offset:
-      position: {x: 0.0, y: -0.15022, z: 0.0}
+      position: {x: 0.0, y: -0.15, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.05, y: -0.050, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
-    # Placement has to land exactly, so plan against one exact IK solution in
-    # joint space instead of a tolerance-sphere pose goal, and move slowly
-    # enough that Isaac's joint drives actually track the commanded path.
+
     motion:
       solve_ik_first: true
       joint_tolerance: 0.0001
@@ -165,15 +100,9 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-    # Measured seated TF of u_green in the slot -- ground truth, not a gizmo
-    # reading. Same grasp_center_offset as placement_approach: the object is
-    # attached, so the two orientations are not independently choosable.
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
     target_id: u_green_placement
     grasp_center_offset:
-      position: {x: 0.049, y: -0.040, z: 0.0}
+      position: {x: 0.05, y: -0.050, z: 0.0}
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
       solve_ik_first: true
@@ -185,10 +114,6 @@ steps:
   - step_id: release_u_green_final
     action: release
 
-  # Back the TCP straight out along its own local Z after letting go. Pure TCP
-  # move on purpose: the release just opened the jaws to ~104mm, and a
-  # grasp-center move would convert through that width and drop the TCP ~41mm
-  # INTO the part it just placed.
   - step_id: retreat_after_placement
     action: retreat
     distance_m: -0.10

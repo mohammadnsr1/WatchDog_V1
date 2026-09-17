@@ -29,7 +29,7 @@ steps:
     # distance is negative to back up off the table.
     approach_distance_m: -0.10
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}         
+      position: {x: 0.0, y: -0.06, z: 0.0}      
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     stop_at_pregrasp: false
 
@@ -51,7 +51,7 @@ steps:
     # sits at the FINAL reorient pose.
     target_id: inverted_u_brown_reorient
     grasp_center_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0} 
+      position: {x: 0.0, y: -0.06, z: 0.0} 
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 
@@ -76,9 +76,6 @@ steps:
   - step_id: regrasp_inverted_u_brown
     action: grasp
 
-  # The part stood 140mm tall here while unattached, so the octomap holds its
-  # own voxels; attaching does not clear them and the lift then starts "in
-  # collision" with them. Drop them before moving.
   - step_id: clear_octomap_after_regrasp
     action: clear_octomap
 
@@ -91,25 +88,16 @@ steps:
   - step_id: placement_approach
     action: move_grasp_center_to_pose
     frame: target_object
-    # object_pose is the DESIRED world pose of the part. Because the part is
-    # attached here, object_pose and grasp_center_offset orientations are not
-    # independently choosable -- the object->gripper transform is fixed at
-    # grasp time. Dry-run first and check the reported grasp_center.
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
+
     target_id: inverted_u_brown_placement
-    # target_offset is in the FRAME's own axes, NOT world. This frame's
-    # local +Z does not point up, so the world-vertical standoff that
-    # the old hardcoded z encoded is along local Y here.
+
     target_offset:
-      position: {x: 0.0, y: -0.20000, z: 0.0}
+      position: {x: 0.0, y: -0.2, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
-      solve_ik_first: true
       joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.2
       max_acceleration_scaling_factor: 0.2
@@ -118,15 +106,12 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-    # Destination read LIVE from the published placement frame, so this
-    # survives the fixture being moved. The frame sits at the part's
-    # SEATED pose; the approach step adds a standoff to it.
+
     target_id: inverted_u_brown_placement
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
-      solve_ik_first: true
       joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.1
       max_acceleration_scaling_factor: 0.1
@@ -135,10 +120,6 @@ steps:
   - step_id: release_inverted_u_brown
     action: release
 
-  # Back the TCP straight out along its own local Z after letting go. Pure TCP
-  # move on purpose: the release just opened the jaws to ~104mm, and a
-  # grasp-center move would convert through that width and drop the TCP ~41mm
-  # INTO the part it just placed.
   - step_id: retreat_after_placement
     action: retreat
     distance_m: -0.10

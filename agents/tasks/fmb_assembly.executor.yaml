@@ -172,7 +172,7 @@ steps:
     target_frame: inverted_u_brown_reorient
     grasp_width_m: 0.08
     grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.003}
+      position: {x: 0.0, y: -0.06, z: 0.0}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     # Slow for the final descent: at low speed the commanded trajectory
     # is tracked far more closely, and a set-down is where tracking error
@@ -281,12 +281,12 @@ steps:
     grasp_width_m: 0.03
     approach_distance_m: 0.0
     grasp_center_offset:
-      position: {x: 0.0, y: 0.05, z: 0.0}
+      position: {x: 0.0, y: 0.06, z: 0.0}
       orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
     lift_height_m: 0.3
     lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
 
-
+  
   - step_id: place_approach_hex_red
     object_id: hex_red
     action_hint: approach the hole from above, stopping clear of contact
