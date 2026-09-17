@@ -192,7 +192,7 @@ steps:
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. Unlike the other three placement frames, this one's local +Z DOES point up, so the vertical standoff is carried on local Z -- that is why this step offsets on z where u_brown, u_orange and inverted_u_yellow offset on y. Do not "correct" it to y for consistency.
 
     target_offset:
-      position: {x: 0.001, y: 0.0, z: 0.06}
+      position: {x: 0.0, y: 0.0, z: 0.06}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.03
     grasp_center_offset:
@@ -205,7 +205,7 @@ steps:
     target_frame: line_green_placement
     grasp_width_m: 0.03
     target_offset:
-      position: {x: 0.001, y: 0.0, z: 0.0}
+      position: {x: 0.0, y: 0.0, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.0, y: 0.0, z: 0.01}
