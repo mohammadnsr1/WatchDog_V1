@@ -12,6 +12,9 @@ steps:
     action: sync_scene
     object_ids: [u_green, base2, hex_blue, hex_red, inverted_u_brown]
 
+  - step_id: set_permitted_contacts
+    action: set_permitted_contacts
+
 
   - step_id: safe_start
     action: move_named_safe_pose
@@ -22,7 +25,7 @@ steps:
 
     approach_distance_m: -0.1
     grasp_center_offset:
-     position: {x: 0.0, y: 0.06, z: 0.0}
+      position: {x: 0.0, y: 0.06, z: 0.0}
       orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
     stop_at_pregrasp: false
 

@@ -45,10 +45,6 @@ steps:
   - step_id: clear_octomap_after_grasp
     action: clear_octomap
 
-  - step_id: set_permitted_contacts_after_grasp
-    action: set_permitted_contacts
-
-
   - step_id: prepare for insertion
     action: move_grasp_center_to_pose
     frame: target_object
@@ -69,7 +65,6 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-
     target_id: hex_blue_hole
     grasp_center_offset:
       position: {x: 0.0, y: 0.06, z: 0.0}
