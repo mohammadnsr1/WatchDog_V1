@@ -14,6 +14,7 @@ def generate_launch_description() -> LaunchDescription:
     rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
     rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
     goal_tolerance = LaunchConfiguration("goal_tolerance")
+    goal_time_tolerance_sec = LaunchConfiguration("goal_time_tolerance_sec")
 
     return LaunchDescription(
         [
@@ -60,15 +61,29 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "goal_tolerance",
-                default_value="0.0005",
+                default_value="0.002",
                 description=(
                     "Per-joint acceptance band in radians for the final "
-                    "trajectory point. A per-joint band is NOT a Cartesian "
-                    "spec: joint error reaches the TCP through the Jacobian, so "
-                    "do not set this to the 0.1 mm TCP figure. Cartesian "
-                    "precision comes from MoveIt's goal constraints instead. "
-                    "1e-4 sat inside the Isaac drives' noise band and aborted "
-                    "under load; 5e-4 clears the measured 2.3e-4 residual."
+                    "trajectory point -- a gross-failure detector, NOT the "
+                    "precision spec. A per-joint band cannot express a "
+                    "Cartesian requirement; do not re-tighten it to a TCP "
+                    "figure. Measured floor is ~4.1e-4 rad on wrist_2 and is "
+                    "stiffness-independent, and /joint_states is quantized to "
+                    "1e-4 rad. See follow_joint_trajectory_server.py for the "
+                    "measurements. Cartesian precision comes from MoveIt's "
+                    "goal constraints instead."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "goal_time_tolerance_sec",
+                default_value="2.0",
+                description=(
+                    "Seconds past the trajectory's final timestamp that the "
+                    "bridge keeps holding the last setpoint while waiting for "
+                    "goal_tolerance. Used only when MoveIt does not set "
+                    "goal_time_tolerance on the goal itself. Raising it "
+                    "distinguishes a drive still ringing (a longer window "
+                    "converges) from genuine steady-state droop (it does not)."
                 ),
             ),
             Node(
@@ -93,7 +108,7 @@ def generate_launch_description() -> LaunchDescription:
                         # stage; a mismatch beats against the physics loop.
                         "publish_rate_hz": 60.0,
                         "goal_tolerance": goal_tolerance,
-                        "goal_time_tolerance_sec": 2.0,
+                        "goal_time_tolerance_sec": goal_time_tolerance_sec,
                         "require_joint_state_before_execute": True,
                         "publish_full_joint_command": publish_full_joint_command,
                         "use_sim_time": use_sim_time,

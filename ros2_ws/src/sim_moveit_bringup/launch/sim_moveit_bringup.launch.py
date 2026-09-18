@@ -184,6 +184,7 @@ def _launch_setup(context):
     rg2_command_duration_sec = LaunchConfiguration("rg2_command_duration_sec")
     rg2_command_rate_hz = LaunchConfiguration("rg2_command_rate_hz")
     goal_tolerance = LaunchConfiguration("goal_tolerance")
+    goal_time_tolerance_sec = LaunchConfiguration("goal_time_tolerance_sec")
     publish_workspace_floor = LaunchConfiguration("publish_workspace_floor")
     workspace_floor_object_id = LaunchConfiguration("workspace_floor_object_id")
     workspace_floor_top_z = LaunchConfiguration("workspace_floor_top_z")
@@ -317,6 +318,7 @@ def _launch_setup(context):
                 "rg2_command_duration_sec": rg2_command_duration_sec,
                 "rg2_command_rate_hz": rg2_command_rate_hz,
                 "goal_tolerance": goal_tolerance,
+                "goal_time_tolerance_sec": goal_time_tolerance_sec,
             }.items(),
         ),
         # MoveIt planning frame is lowercase `world`, while Isaac Sim's default
@@ -737,12 +739,23 @@ def generate_launch_description():
                 description="Publish rate in Hz for RG2 gripper interpolation commands.",
             ),
             DeclareLaunchArgument(
+                "goal_time_tolerance_sec",
+                default_value="2.0",
+                description=(
+                    "Seconds the trajectory bridge holds the final setpoint "
+                    "waiting for goal_tolerance before aborting. Raise it to "
+                    "tell a drive that is still ringing apart from one that "
+                    "has settled short of the band."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "goal_tolerance",
-                default_value="0.0005",
+                default_value="0.002",
                 description=(
                     "Per-joint acceptance band in radians for the final "
-                    "trajectory point, forwarded to the trajectory bridge. "
-                    "Overridable per-run to tune against drive settling."
+                    "trajectory point, forwarded to the trajectory bridge. A "
+                    "gross-failure detector, not the precision spec -- see "
+                    "follow_joint_trajectory_server.py before changing it."
                 ),
             ),
             DeclareLaunchArgument(

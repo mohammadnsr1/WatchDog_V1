@@ -39,23 +39,29 @@ class FollowJointTrajectoryBridge(Node):
         # previous target and then jumps, which reads as jitter.
         self.declare_parameter("publish_rate_hz", 60.0)
         self.declare_parameter("clock_stall_timeout_sec", 5.0)
-        # Per-joint acceptance band for the final trajectory point. The old
-        # 0.03 rad was useless (~25 mm off target at the UR5e's ~0.85 m reach),
-        # but 1e-4 rad overcorrected: it is a PER-JOINT band being used to
-        # express a CARTESIAN spec, and those are not the same quantity. Joint
-        # error reaches the TCP through the Jacobian, weighted by moment arm, so
-        # requiring every joint within 1e-4 is far stricter than the 0.1 mm TCP
-        # spec in robot_backend's DEFAULT_POSITION_TOLERANCE_M -- and it sits
-        # inside the Isaac drives' steady-state noise band, so it passed in free
-        # space and aborted under load, config-dependent rather than honest.
-        # Observed worst residual was 2.3e-4 rad, concentrated in the WRIST
-        # joints whose short moment arms barely move the TCP, while shoulder_lift
-        # and elbow (which dominate TCP position) sat at 3e-5.
+        # Per-joint acceptance band for the final trajectory point. This is a
+        # gross-failure detector ("the arm never got there"), NOT the precision
+        # spec -- a per-joint band cannot express a Cartesian requirement, since
+        # joint error reaches the TCP through the Jacobian weighted by moment
+        # arm. Do not re-tighten it to a TCP figure; that mistake has been made
+        # twice (0.03 -> 1e-4 -> 5e-4) and both times it aborted valid motions.
         #
-        # 5e-4 clears the measured residual with margin. Cartesian precision is
-        # enforced where it belongs -- MoveIt's goal constraints, from
-        # DEFAULT_POSITION_TOLERANCE_M / DEFAULT_ORIENTATION_TOLERANCE_RAD.
-        self.declare_parameter("goal_tolerance", 0.0005)
+        # Measured 2026-09-17 on the fmb2 set, sweeping Isaac drive stiffness
+        # over 4x on two joints, fitting residual = A/k + B:
+        #   wrist_2       A~11.4  floor B ~ 4.1e-4 rad   <-- 82% of a 5e-4 gate
+        #   shoulder_pan  A~11.1  floor B ~ 2.2e-4 rad
+        # The floor is stiffness-INDEPENDENT: 4x stiffness bought only ~45%,
+        # not the 75% that pure tau/k predicts, and wrist_2 cannot reach 5e-4
+        # with margin at any gain. Separately, Isaac publishes /joint_states
+        # quantized to 1e-4 rad, so a 5e-4 gate is five quanta wide.
+        #
+        # For scale: wrist_2's residual at 5.5e-4 rad is ~0.05 mm at the TCP,
+        # while the registry's own placement tolerance for these parts is
+        # spec.tolerances.position_m = 0.02 (20 mm). 2e-3 sits 3.6x above the
+        # measured floor and still 10x under the task tolerance. Cartesian
+        # precision is enforced by MoveIt's goal constraints instead
+        # (DEFAULT_POSITION_TOLERANCE_M / DEFAULT_ORIENTATION_TOLERANCE_RAD).
+        self.declare_parameter("goal_tolerance", 0.002)
         self.declare_parameter("goal_time_tolerance_sec", 2.0)
         self.declare_parameter("require_joint_state_before_execute", True)
         # Default False, matching both launch files (trajectory_bridge.launch.py
