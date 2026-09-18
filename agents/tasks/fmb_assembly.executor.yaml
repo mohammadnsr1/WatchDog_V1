@@ -211,9 +211,7 @@ steps:
     action_hint: approach the hole from above, stopping clear of contact
     target_frame: hex_blue_hole
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
-    # Offset from the frame, expressed in the FRAME'S OWN axes (not
-    # world): these frames' local +Z does not point up, so a vertical
-    # standoff lands on local Y. from hex_blue_pick.plan.yaml.
+
     target_offset:
       position: {x: 0.0, y: 0.1, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -237,8 +235,7 @@ steps:
       allowed_planning_time: 20.0
 
 
-  # ---- hex_red: single pick, direct insertion -----------------------------
-  # Grasp and lift are ONE step -- see pick_hex_blue.
+
   - step_id: pick_hex_red
     object_id: hex_red
     action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
