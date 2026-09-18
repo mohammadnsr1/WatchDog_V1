@@ -30,7 +30,7 @@ steps:
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}      
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     stop_at_pregrasp: false
 
   - step_id: grasp_inverted_u_brown
@@ -43,54 +43,45 @@ steps:
  
 
     
-  - step_id: reorient_u_inverted_u_brown
-    action: move_grasp_center_to_pose
-
-    frame: target_object
-    # Reorient destination read LIVE from its published frame. The frame
-    # sits at the FINAL reorient pose.
-    target_id: inverted_u_brown_reorient
-    grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.0} 
-      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+  # - step_id: reorient_u_inverted_u_brown
+  #   action: move_grasp_center_to_pose
+  #   frame: target_object
+  #   target_id: inverted_u_brown_reorient
+  #   grasp_center_offset:
+  #     position: {x: 0.0, y: -0.06, z: 0.0} 
+  #     orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
 
 
 
 
-  - step_id: release_inverted_u_brown
-    action: release
-  - step_id: clear_octomap_after_regrasp
-    action: clear_octomap
+  # - step_id: release_inverted_u_brown
+  #   action: release
+  # - step_id: clear_octomap_after_regrasp
+  #   action: clear_octomap
     
-  - step_id: reorient for repick
-    action: approach_and_preposition
-    # Top-down TCP: local +Z points down into the object, so the approach
-    # distance is negative to back up off the table.
-    approach_distance_m: -0.10
-    grasp_center_offset:
-      position: {x: 0.0, y: -0.06, z: 0.0}         
-      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
-    stop_at_pregrasp: false
+  # - step_id: reorient for repick
+  #   action: approach_and_preposition
+  #   approach_distance_m: -0.10
+  #   grasp_center_offset:
+  #     position: {x: 0.0, y: -0.06, z: 0.0}         
+  #     orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+  #   stop_at_pregrasp: false
 
 
-  - step_id: regrasp_inverted_u_brown
-    action: grasp
+  # - step_id: regrasp_inverted_u_brown
+  #   action: grasp
 
-  - step_id: clear_octomap_after_regrasp
-    action: clear_octomap
 
-  - step_id: lift_inverted_u_brown_second
-    action: move_grasp_center_to_pose
-    frame: delta_from_last
-    delta: {x: 0.0, y: 0.0, z: 0.2}
+  # - step_id: lift_inverted_u_brown_second
+  #   action: move_grasp_center_to_pose
+  #   frame: delta_from_last
+  #   delta: {x: 0.0, y: 0.0, z: 0.2}
 
 
   - step_id: placement_approach
     action: move_grasp_center_to_pose
     frame: target_object
-
     target_id: inverted_u_brown_placement
-
     target_offset:
       position: {x: 0.0, y: -0.2, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -98,7 +89,6 @@ steps:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
-      joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.2
       max_acceleration_scaling_factor: 0.2
       allowed_planning_time: 20.0
@@ -106,13 +96,11 @@ steps:
   - step_id: placement
     action: move_grasp_center_to_pose
     frame: target_object
-
     target_id: inverted_u_brown_placement
     grasp_center_offset:
       position: {x: 0.0, y: -0.06, z: 0.0}          
       orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
     motion:
-      joint_tolerance: 0.0001
       max_velocity_scaling_factor: 0.1
       max_acceleration_scaling_factor: 0.1
       allowed_planning_time: 20.0

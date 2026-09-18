@@ -53,9 +53,9 @@ steps:
     target_offset:
       position: {x: 0.0, y: 0.08450, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-      grasp_center_offset:
-        position: {x: 0.0, y: 0.06, z: 0.0}
-        orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
 
 
   - step_id: clear_octomap_before_insertion
