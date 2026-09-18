@@ -1,18 +1,6 @@
 # EXECUTOR instruction for fmb_assembly_2.
 #
-# step_id convention: a step_id here that corresponds to a step in
-# fmb_assembly_2.watchdog.yaml MUST use the exact same step_id string -- that
-# identity is what lets the watchdog match this executor's begin_step events
-# on the shared timeline. A step_id here that the watchdog file does NOT
-# contain is an executor-only extra/alternate step (class 3) or a deliberately
-# faulty step (class 2).
-#
-# Object-level truth (geometry, tolerances, max_clamp_effort) lives in
-# model_registry.yaml, shared by both files -- not authored here.
-#
-# Every geometric value in the steps: block below was derived and validated
-# against the live cell with test/plan_assembly_step.py before being written
-# here; the per-part plan files there are the working record.
+
 
 name: fmb_assembly_2
 instruction_spec: |
@@ -99,9 +87,6 @@ steps:
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_brown_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
-    # Offset from the frame, expressed in the FRAME'S OWN axes (not
-    # world): these frames' local +Z does not point up, so a vertical
-    # standoff lands on local Y. from u_brown_pick.plan.yaml.
     target_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -141,9 +126,6 @@ steps:
     action_hint: approach the hole from above, stopping clear of contact
     target_frame: u_orange_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
-    # Offset from the frame, expressed in the FRAME'S OWN axes (not
-    # world): these frames' local +Z does not point up, so a vertical
-    # standoff lands on local Y. from u_orange_pick.plan.yaml.
     target_offset:
       position: {x: 0.001, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -237,9 +219,6 @@ steps:
     object_id: inverted_u_yellow
     target_frame: inverted_u_yellow_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
-    # Offset from the frame, expressed in the FRAME'S OWN axes (not
-    # world): these frames' local +Z does not point up, so a vertical
-    # standoff lands on local Y. from inverted_u_yellow_pick.plan.yaml.
     target_offset:
       position: {x: 0.00, y: -0.1200, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}

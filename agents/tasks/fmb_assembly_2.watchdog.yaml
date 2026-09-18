@@ -78,52 +78,6 @@ step_plan: |
   the requirements held while it happened, not by whether it was on the plan.
 
 steps:
-  # Mirrors fmb_assembly_2.executor.yaml's clean step_ids EXACTLY, 1:1, in order.
-  #
-  # This block is NO LONGER get_contract's resolution key. Contracts are
-  # addressed by object_id and carry static per-object bounds; nothing here is
-  # consulted to load one, and no step_id is ever rejected by that path any
-  # more. What this block still is, and its only remaining job, is the
-  # watchdog's MAP OF THE EXPECTED PROCESS: the agent diffs each incoming
-  # begin_step's step_id against these entries, and a step_id not among them is
-  # unplanned and must be named as unplanned in the verdict or run-end rollup.
-  #
-  # That makes accuracy here load-bearing in a way it was not before. Adding a
-  # step_id the executor does not emit on the clean path makes a real
-  # divergence look expected and it goes unnamed; removing one it does emit
-  # makes a normal step look unplanned and the record fills with false
-  # divergence. Do not widen this block "helpfully" with plausible alternates,
-  # recovery steps
-  #      (pick_line_green_retry and friends), or anything not in the executor
-  #      file's clean sequence -- that would silently swallow exactly the
-  #      divergence the watchdog is supposed to meet as unrecognized. An
-  #      unrecognized step is not an unwatched step: the active-set
-  #      stationarity and in-hand-slippage monitors stay armed across it.
-  #
-  # contract_clause_groups no longer decides what a single call returns -- a
-  # contract is per-object now and carries the union of these across the
-  # object's steps. It stays authored per step because it is the record of
-  # WHERE in the process each group is judged: only the four place milestones
-  # bear effects, since that is where a part's end-state comes into existence.
-  # Transit and pick steps carry invariants only -- the clamp-effort
-  # bound applies throughout them, but "the part is seated at its placement
-  # frame" is not a thing that can be true at the end of a lift. The agent
-  # cannot read the milestone off a contract call's shape any more, so the
-  # instruction says it in prose and this block keeps it authored.
-  #
-  # This task authors NO preconditions. The machinery still exists for tasks
-  # that want it, but nothing here loads it: the precondition group includes
-  # gripper_is_open, which is false by construction at any step where the
-  # gripper is already holding a part, and a per-object contract has no single
-  # moment at which "before the pick" is true for all of an object's steps.
-  #
-  # grasp_width_m is the conformance bound for the grasp_width_error_m effect
-  # clause, read structurally by get_contract from THIS file (never from the
-  # agent). It must AGREE across every step naming the same object -- it
-  # describes the part's graspable geometry, not the step -- and get_contract
-  # raises if two of an object's steps disagree. grasp_center_offset is intentionally absent throughout: it is
-  # executor command geometry, not a watchdog conformance value. So are the
-  # any intermediate the executor chooses, which is not an end-state.
 
   # --- u_brown: picked, lifted, placed ---
   - step_id: pick_u_brown
@@ -203,6 +157,4 @@ object_ids: |
   conformant only insofar as the effect clauses above are satisfied.
 
 run_notes: ""
-# Stays empty by design, including in fault-injection runs where the registry
-# has been deliberately corrupted: neither the executor nor WatchDog may be
-# told that, since being told would invalidate the comparison.
+# Stays empty by design.
