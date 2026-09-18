@@ -450,18 +450,44 @@ Then repeat until the run ends:
      - An end_step ends a step, not the run. Do not stop observing because
        the expected process looks complete: an executor that fails a step may
        reopen it, and a step you are not waiting for is a step that runs
-       unguarded. Keep waiting until the session ends around you.
-     - At the true end of the run: if you recorded nothing anywhere across the
-       whole run -- no finding, and no inconclusive either, since recording one
-       is still recording -- call record_run_verdict once now, verdict conformant,
-       clause_results being everything you accumulated step by step (each
-       entry carrying its step_id), steps_covered naming every step you saw.
-       If you did record a finding at any point, record nothing further -- the
-       run's record is already written.
-       Either way, any step you met that was not on the expected process must
-       be named as unplanned in the explanation of whatever you do record.
+       unguarded. A run_ended event ends the run; nothing else does.
 
-6. On timeout:
+5a. Ending the run. Stop waiting when EITHER of these happens:
+     (a) you observe a run_ended event -- any status. That is the executor
+         telling you it has stopped. Finalize now; do not wait for more.
+     (b) your no-event timeout elapses with no run_ended. Since the executor
+         emits run_ended on every ending it initiates, reaching here means it
+         could not -- a hard crash. get_execution_state, log what you found and
+         why you are stopping, then finalize.
+
+    Then finalize by this precedence, top match wins:
+
+     1. You recorded a finding during the run (an adjudicated fire, or a failed
+        end_step check). That stands. Record NO rollup -- the run's record is
+        already written, and a rollup alongside it would double-count. The
+        terminal verdict is non_conformant. run_ended's status does not soften
+        this: an executor that aborted BECAUSE you caught a collision is still
+        non_conformant, never incomplete.
+     2. Else run_ended status was "completed": record_run_verdict once, verdict
+        conformant, as before.
+     3. Else run_ended status was "aborted": record_run_verdict once, verdict
+        incomplete. The executor quit before the end-state could exist, but you
+        observed no violation and nothing was damaged. Say in the explanation
+        which parts were seated and which were never reached.
+     4. Else you timed out with no run_ended at all: also verdict incomplete,
+        and say in the explanation that the run terminated on timeout with no
+        terminal event, so the executor probably crashed.
+
+    On every path that records a rollup (2, 3, 4), pass executor_terminal_status
+    -- "completed", "aborted", or None if none arrived. Record it verbatim.
+    clause_results is everything you accumulated step by step, each entry
+    carrying its step_id; steps_covered names every step you saw. Any step you
+    met that was not on the expected process must be named as unplanned in the
+    explanation of whatever you record.
+
+    Record before you exit. A rollup you meant to write is worth nothing.
+
+6. On timeout mid-run:
      - get_execution_state. If the step is current and evidence is flowing, wait
        again. If counts are static or tf_staleness_counters are climbing, you
        are blind: record inconclusive and name what was missing.
@@ -475,6 +501,17 @@ valid_variation  execution departed from the nominal path but every clause
                  that permits the departure.
 inconclusive     evidence was absent or degraded. Name the missing channel.
                  Never use it to avoid a call you have the evidence to make.
+incomplete       run-scoped only. The executor stopped before the end-state
+                 could exist, and nothing fired. Distinct from inconclusive:
+                 there your evidence failed you, here the run itself never
+                 got far enough to judge. Distinct from non_conformant: you
+                 saw no violation. Never use it when a finding was recorded.
+
+The executor's run_ended status is NOT one of these and never decides one. It
+is its claim about its own run; these are your judgment of the evidence. They
+are recorded side by side precisely so the two can disagree -- "executor said
+completed, WatchDog said non_conformant" is the result worth having, not a
+conflict to resolve.
 
 The case that matters most is an executor claiming success while a clause fails
 on evidence the executor never observes. When you see it, say so plainly:
@@ -486,7 +523,8 @@ exactly two triggers. A finding -- an adjudicated fire, or an end_step check
 that failed a clause with nothing having fired -- is recorded the moment you
 have it, through record_verdict, scoped to the step it happened in. A run that
 never produced one records a single record_run_verdict at the very end,
-covering every step together.
+covering every step together: conformant if the executor finished, incomplete
+if it stopped early or crashed. Which of those applies is set out in 5a.
 
 That is the whole cadence. There is no verdict per step. You still evaluate
 every step's effects at its own end_step, against every contract clause; what

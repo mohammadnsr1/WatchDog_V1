@@ -209,6 +209,61 @@ def _contains_keyboard_interrupt(e: BaseException) -> bool:
     return False
 
 
+def _drained_run_ended(result: Any) -> str | None:
+    """The status on a run_ended event in a wait_for_event drain, or None.
+
+    Same two places _drained_begin_step looks -- the woken-on event and
+    anything batched behind it in the same drain -- for the same reason: a
+    run_ended can arrive bundled behind another event and would otherwise be
+    missed. Returns the status string so the caller can tell a clean finish
+    from an abort without re-parsing the drain.
+    """
+    if not isinstance(result, dict):
+        return None
+    if result.get("wake") == "run_ended":
+        payload = result.get("payload") or {}
+        return payload.get("status") if isinstance(payload, dict) else None
+    for ev in result.get("additional_events", None) or []:
+        if isinstance(ev, dict) and ev.get("event_type") == "run_ended":
+            payload = ev.get("payload") or {}
+            if isinstance(payload, dict):
+                return payload.get("status")
+    return None
+
+
+def _emit_fallback_run_ended(status: str, reason: str) -> bool:
+    """Emit a run_ended the executor agent never got to emit itself.
+
+    Covers the harness-level stops -- max_turns_exhausted, agent_idle,
+    provider_error -- where the run ends without the agent choosing to stop,
+    so it never called end_run. Without this the WatchDog would have to infer
+    those endings from silence, which is the behaviour this whole mechanism
+    replaces. A genuine hard crash still reaches neither path; that is what
+    the WatchDog's no-event timeout is for.
+
+    Best-effort: if the event bus is not reachable from this process there is
+    nothing useful to do about it, and failing to emit must never turn an
+    already-ending run into a traceback.
+    """
+    try:
+        from robot_backend.events.bus import get_bus
+        from robot_backend.events.schema import RunEndedPayload, make_event
+
+        get_bus().publish(
+            make_event(
+                "run_ended",
+                RunEndedPayload(
+                    status=status,  # type: ignore[arg-type]
+                    reason=reason,
+                    detail={"emitted_by": "harness_fallback"},
+                ),
+            )
+        )
+        return True
+    except Exception:
+        return False
+
+
 def _drained_begin_step(result: Any) -> bool:
     """True if a wait_for_event result's drain contains a begin_step event.
 
@@ -294,6 +349,13 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             # alone and timed itself out; see _drained_begin_step and the
             # run_complete/no_execution_observed split below.
             begin_step_observed = False
+            # Executor side: whether the agent called end_run itself, so the
+            # finally block knows not to emit a duplicate on its behalf.
+            # WatchDog side: the status off an observed run_ended, which is
+            # now what justifies calling an ending "run_complete" instead of
+            # inferring it from two silent timeouts.
+            run_ended_emitted = False
+            run_ended_status: str | None = None
             # Index into `messages` of the first entry not yet logged to the
             # transcript. The provider always receives the full, growing
             # `messages` list (see providers.complete below) -- this index
@@ -431,9 +493,17 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                     if tc.name in ("record_verdict", "record_run_verdict"):
                         verdict_count += 1
 
+                    # The executor declared its own ending; the finally block
+                    # must not emit a second one on its behalf.
+                    if tc.name == "end_run":
+                        run_ended_emitted = True
+
                     if tc.name == WAIT_FOR_EVENT_TOOL:
                         if _drained_begin_step(result):
                             begin_step_observed = True
+                        drained_status = _drained_run_ended(result)
+                        if drained_status is not None:
+                            run_ended_status = drained_status
                         wake = result.get("wake") if isinstance(result, dict) else None
                         # B2: increment only on a genuine wait_for_event
                         # timeout. Reset on anything else -- a wake on a real
@@ -460,9 +530,22 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
                     # never started is indistinguishable, in its
                     # consequences, from one that ran cleanly with no
                     # violations, unless this is labeled distinctly.
-                    termination_reason = (
-                        "run_complete" if begin_step_observed else "no_execution_observed"
-                    )
+                    #
+                    # An observed run_ended outranks both: the executor SAID
+                    # it stopped, so the ending is a fact rather than the
+                    # inference-from-silence this used to be. Reaching this
+                    # cap anyway means the agent kept waiting after the
+                    # terminal event, which its prompt tells it not to do.
+                    # Note the loop is deliberately NOT broken the moment
+                    # run_ended is drained: the WatchDog still needs a turn
+                    # to record its rollup, and cutting it off there would
+                    # lose the very verdict this mechanism exists to produce.
+                    if run_ended_status is not None:
+                        termination_reason = "run_complete"
+                    else:
+                        termination_reason = (
+                            "run_complete" if begin_step_observed else "no_execution_observed"
+                        )
                     break
     except (KeyboardInterrupt, BaseExceptionGroup) as e:
         # Two distinct ways an operator Ctrl-C can reach here, neither
@@ -499,6 +582,17 @@ async def run(config: AgentConfig, task_text: str, system_prompt: str) -> RunRes
             "runner exited without setting a termination reason -- this is a "
             "bug in runner.py, not a completed run"
         )
+        # Executor-side backstop. The agent is instructed to call end_run on
+        # every ending it chooses, but max_turns_exhausted / agent_idle /
+        # provider_error are endings it does NOT choose -- the loop stops
+        # around it and it never gets the turn. Emit on its behalf so the
+        # WatchDog still gets a terminal event rather than falling back to
+        # inferring the ending from silence. Always "aborted": the executor
+        # did not reach its own completion path, whatever else happened.
+        if config.agent == "executor" and not run_ended_emitted:
+            _emit_fallback_run_ended(
+                "aborted", f"harness terminated the run: {termination_reason}"
+            )
         transcript.run_end(
             termination_reason, turn_count, verdict_count=verdict_count, error=error_detail
         )

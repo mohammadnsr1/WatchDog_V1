@@ -308,7 +308,15 @@ class WatchDogContext:
 
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
-_VALID_VERDICTS = {"conformant", "non_conformant", "valid_variation", "inconclusive"}
+# "incomplete" is run-scoped only: the executor stopped before the end-state
+# could exist, and nothing fired. It is deliberately distinct from
+# "inconclusive" (WatchDog's own evidence was insufficient to judge) and from
+# "non_conformant" (a violation was actually observed), so the scorer's
+# confusion matrix can separate "executor gave up" from "WatchDog caught
+# something" from "WatchDog could not tell".
+_VALID_VERDICTS = {
+    "conformant", "non_conformant", "valid_variation", "inconclusive", "incomplete",
+}
 # Per-process record of step_ids a verdict has already been published for.
 # Detection, not prevention -- a second verdict for a retried step may be
 # legitimate, and silently dropping it would be worse than recording it as
@@ -778,7 +786,16 @@ if mcp is not None:
 
     @mcp.tool()
     def wait_for_event(
-        timeout_sec: float = 120.0,
+        # 180s, not 120s. Measured worst-case LEGITIMATE executor silence:
+        # inter-event gaps on a clean 12-step fmb_assembly_2 run peaked at
+        # 17.1s (p95 6.7s), but the dominant gap is the cell gate wait and
+        # gate_timeout_sec is 90.0 -- a gate that runs to its limit yields a
+        # ~95s gap with nothing wrong. At 120s that left only ~25s of headroom
+        # on a single wait. Tripping mid-run truncates a live run, which is far
+        # worse than waiting longer on a real crash; and now that run_ended
+        # covers every executor-initiated ending, this timeout fires only on a
+        # hard crash, so erring long costs essentially nothing.
+        timeout_sec: float = 180.0,
         event_types: list[str] | None = None,
     ) -> dict[str, Any]:
         """Block until a monitor fire, an executor event of the requested types, or timeout.
@@ -1185,6 +1202,15 @@ if mcp is not None:
         try:
             if verdict not in _VALID_VERDICTS:
                 raise ValueError(f"verdict must be one of {sorted(_VALID_VERDICTS)}.")
+            if verdict == "incomplete":
+                # Run-scoped only: it describes the executor stopping early,
+                # which is a property of the run, not of any one step. A step
+                # the executor abandoned is a "failure"/"partial" claim whose
+                # conformance is still judged on its own evidence.
+                raise ValueError(
+                    "verdict 'incomplete' is run-scoped -- use it on "
+                    "record_run_verdict, not on a per-step record_verdict."
+                )
             _validate_clause_results(clause_results)
             ctx = _ensure_watchdog()
             payload = VerdictPayload(
@@ -1220,6 +1246,7 @@ if mcp is not None:
         explanation: str,
         steps_covered: list[str],
         claimed_outcome: str | None = None,
+        executor_terminal_status: str | None = None,
     ) -> dict[str, Any]:
         """Publish one conformance verdict scoped to the whole run.
 
@@ -1250,6 +1277,22 @@ if mcp is not None:
 
         claimed_outcome is optional here and, when given, should summarize the
         executor's claims across the run rather than any single step's.
+
+        verdict may be "incomplete" here and only here: the executor stopped
+        before the end-state could exist and nothing fired. That is distinct
+        from "inconclusive" (your own evidence was insufficient to judge) and
+        from "non_conformant" (you observed a violation). Use "incomplete"
+        only when no finding was recorded during the run -- a finding always
+        wins, and an abort that happened BECAUSE you caught something is
+        still non_conformant. Say in explanation which parts were and were
+        not reached.
+
+        executor_terminal_status is the status from the executor's run_ended
+        event -- "completed", "aborted", or None if none arrived and you
+        terminated on the no-event timeout. Record it verbatim. It is logged
+        BESIDE your verdict for the scorer to compare; it must never change
+        what your verdict is. An executor claiming "completed" on a run you
+        judge non_conformant is exactly the comparison this field exists for.
         """
         command = "record_run_verdict"
         try:
@@ -1279,6 +1322,7 @@ if mcp is not None:
                 clause_results=clause_results,
                 steps_covered=steps_covered,
                 explanation=explanation,
+                executor_terminal_status=executor_terminal_status,
             )
             event = make_event("run_verdict", payload)
             ctx.event_bus.publish(event)

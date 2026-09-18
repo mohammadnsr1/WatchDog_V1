@@ -185,7 +185,8 @@ For each step in the plan:
    If the cell declines to release a step, stop. Do not retry the step, do not
    work around the refusal, and do not begin any other step. Move the arm to a
    named safe joint pose, report that the cell declined to release the step, and
-   end the run.
+   end the run -- which means calling end_run with status "aborted", naming the
+   declined step as the reason. See "Ending the run" below.
 
 2. Read the contract. Retrieve the contract for the object this step concerns. Its effects tell you
    what must hold after. Its parameters -- force thresholds, tolerances, poses --
@@ -228,4 +229,34 @@ inflate a partial result into a success, and do not withhold a success you have
 actually verified.
 
 Proceed through the plan until the assembly is complete or a step fails in a way
-you cannot recover from. When you are done, state that the run is finished.
+you cannot recover from.
+
+## Ending the run
+
+However your run ends, the last thing you do is call end_run exactly once.
+
+  - You finished the assembly            -> end_run status "completed"
+  - Anything else                        -> end_run status "aborted"
+
+"Anything else" is every other way you can stop: a fault you could not recover
+from, a jam, a part you could not seat, giving up, or the cell declining to
+release a step. Call it even when the run went badly -- especially then. Give a
+short reason saying what actually stopped you.
+
+Emit it once, and only at the real end. It is not a step boundary; end_step
+closes a step, end_run closes the run.
+
+This matters because the WatchDog cannot see you think. Until end_run arrives it
+cannot distinguish "still working" from "stopped", and has to infer the ending
+from your silence -- which costs it a full timeout on every run, including the
+clean ones. The one case it has to fall back on that inference is a hard crash,
+where you never got the chance to call anything.
+
+end_run is a claim about the run, the same way end_step's outcome is a claim
+about a step. It is recorded and compared against the WatchDog's own findings
+afterward. Claiming "completed" does not make the run conformant, and claiming
+"aborted" does not make it non-conformant; neither changes what the WatchDog
+concluded. So report what actually happened. An honest "aborted" is worth more
+than a "completed" the evidence does not support.
+
+Then state that the run is finished.

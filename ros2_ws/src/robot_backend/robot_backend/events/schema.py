@@ -67,6 +67,34 @@ class EndStepPayload(BaseModel):
     notes: str = ""
 
 
+class RunEndedPayload(BaseModel):
+    """Executor declares that it has stopped working, and why.
+
+    Emitted exactly once, on EVERY executor-initiated stop: normal
+    completion, an unrecoverable fault, a jam, giving up, or a step the cell
+    declined. The one path that does NOT emit it is a hard crash (process
+    killed, segfault) -- that is what the WatchDog's no-event timeout
+    backstops. Before this event existed the WatchDog could only INFER the
+    run had ended from silence, which cost a full timeout cycle on every
+    ending, clean ones included.
+
+    status is the executor's OWN CLAIM about the whole run, exactly as
+    end_step.claimed_outcome is its claim about one step. The WatchDog uses
+    it for two things only: to know the run has STOPPED, and to log the
+    claim so the scorer can compare it against the WatchDog's independent
+    verdict. It must NEVER feed that verdict -- "aborted" does not imply
+    non_conformant, and "completed" does not imply conformant. A run where
+    the executor claims "completed" and the WatchDog finds non_conformant is
+    a run-level independence result, not a contradiction to reconcile.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    status: Literal["completed", "aborted"]
+    reason: str = ""
+    detail: dict[str, Any] | None = None
+
+
 class SkillStartPayload(BaseModel):
     """Auto-emitted at the entry of a decorated skill call."""
 
@@ -178,6 +206,15 @@ class RunVerdictPayload(BaseModel):
 
     steps_covered is a real field rather than free text in explanation so
     coverage can be checked by set comparison against the task's steps: block.
+
+    executor_terminal_status is the status the executor put on its run_ended
+    event ("completed"/"aborted"), or None if none arrived (hard crash, so
+    the WatchDog terminated on its no-event timeout). It is recorded BESIDE
+    verdict, never folded into it: the scorer's whole run-level independence
+    measure is the cross-product of the two, and "executor said completed,
+    WatchDog said non_conformant" is its most interesting cell. Kept separate
+    from claimed_outcome, which is the executor's per-step self-assessment
+    and answers a different question.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -188,6 +225,7 @@ class RunVerdictPayload(BaseModel):
     steps_covered: list[str]
     explanation: str
     run_scope: bool = True
+    executor_terminal_status: str | None = None
 
 
 class PhasePayload(BaseModel):
@@ -276,6 +314,7 @@ class EventEnvelope(BaseModel):
     event_type: Literal[
         "begin_step",
         "end_step",
+        "run_ended",
         "skill_start",
         "skill_end",
         "monitor_fire",
@@ -301,7 +340,7 @@ class EventEnvelope(BaseModel):
 # is something the executor did or something WatchDog itself already knows
 # it did.
 _EXECUTOR_EVENT_TYPES = frozenset(
-    {"begin_step", "end_step", "skill_start", "skill_end", "phase"}
+    {"begin_step", "end_step", "run_ended", "skill_start", "skill_end", "phase"}
 )
 _WATCHDOG_EVENT_TYPES = frozenset(
     {
@@ -316,6 +355,7 @@ _WATCHDOG_EVENT_TYPES = frozenset(
 EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
     "begin_step": BeginStepPayload,
     "end_step": EndStepPayload,
+    "run_ended": RunEndedPayload,
     "skill_start": SkillStartPayload,
     "skill_end": SkillEndPayload,
     "monitor_fire": MonitorFirePayload,
@@ -376,9 +416,13 @@ def available_event_type_definitions() -> list[dict[str, Any]]:
 
 
 def make_event(
+    # Kept in step with EventEnvelope.event_type above. "frames_captured" was
+    # missing here while being a valid envelope type, so make_event(
+    # "frames_captured", ...) type-checked wrong though it passed at runtime.
     event_type: Literal[
         "begin_step",
         "end_step",
+        "run_ended",
         "skill_start",
         "skill_end",
         "monitor_fire",
@@ -389,10 +433,12 @@ def make_event(
         "run_verdict",
         "phase",
         "watchdog_ready",
+        "frames_captured",
     ],
     payload: (
         BeginStepPayload
         | EndStepPayload
+        | RunEndedPayload
         | SkillStartPayload
         | SkillEndPayload
         | MonitorFirePayload
@@ -403,6 +449,7 @@ def make_event(
         | RunVerdictPayload
         | PhasePayload
         | WatchDogReadyPayload
+        | FramesCapturedPayload
     ),
 ) -> EventEnvelope:
     """Create a timestamped EventEnvelope from a typed payload model.

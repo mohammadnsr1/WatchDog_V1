@@ -544,6 +544,69 @@ if mcp is not None:
             return _error(command, exc, step_id=step_id)
 
     @mcp.tool()
+    def end_run(
+        status: str,
+        reason: str = "",
+        detail: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Declare that you have stopped working on this run, and why.
+
+        Call this EXACTLY ONCE, as the last thing you do, on EVERY path that
+        ends your run -- you finished the assembly, you hit a fault you could
+        not recover from, a part jammed, you gave up, or the cell declined to
+        release a step. Call it even when the run went badly; especially then.
+
+        Until this event arrives the WatchDog cannot tell "still working" from
+        "stopped", and can only infer the end from silence -- which costs it a
+        full no-event timeout cycle on every ending, clean ones included.
+
+        This is a CLAIM about the whole run, exactly as end_step's
+        claimed_outcome is a claim about one step. It tells the WatchDog you
+        have stopped and is logged for later comparison against the WatchDog's
+        own independent verdict. It does not decide that verdict: claiming
+        "completed" does not make the run conformant, and "aborted" does not
+        make it non-conformant. Report what actually happened.
+
+        Parameters
+        ----------
+        status:
+            "completed" -- you finished the assembly and claim it done.
+            "aborted"   -- you stopped before completing, for any reason.
+        reason:
+            Short free text on why you stopped. For "aborted" say what
+            defeated you, e.g. "cell declined step place_u_orange" or
+            "no IK solution for hex_red insertion after 3 attempts".
+        detail:
+            Optional structured detail, e.g. which steps were completed.
+        """
+        command = "end_run"
+        _VALID_STATUS = {"completed", "aborted"}
+        global _CURRENT_STEP_ID
+        try:
+            if status not in _VALID_STATUS:
+                raise ValueError(
+                    f"status must be one of {sorted(_VALID_STATUS)}, got {status!r}."
+                )
+            _ensure_backend()
+            from robot_backend.events.bus import get_bus
+            from robot_backend.events.schema import RunEndedPayload, make_event
+            event = make_event(
+                "run_ended",
+                RunEndedPayload(
+                    status=status,  # type: ignore[arg-type]
+                    reason=reason,
+                    detail=detail,
+                ),
+            )
+            get_bus().publish(event)
+            # A run that ends mid-step leaves the step open. Clear it so a
+            # later begin_step in the same process cannot be read as nested.
+            _CURRENT_STEP_ID = None
+            return _ok(command, status=status, reason=reason)
+        except Exception as exc:
+            return _error(command, exc, status=status)
+
+    @mcp.tool()
     def mark_phase(phase: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
         """Record that a named phase of the current step has been reached.
 

@@ -335,6 +335,55 @@ def test_context_overflow_elides_retries_and_preserves_reasoning(tmp_path) -> No
     )
 
 
+def test_drained_run_ended_reads_the_woken_on_event() -> None:
+    assert runner._drained_run_ended(
+        {"wake": "run_ended", "payload": {"status": "aborted"}}
+    ) == "aborted"
+
+
+def test_drained_run_ended_reads_an_event_batched_behind_another() -> None:
+    # The case that would otherwise be missed: a run_ended arriving bundled
+    # behind the event the wait actually woke on. Same hazard _drained_begin_step
+    # exists to cover -- miss it and the WatchDog waits out a full timeout after
+    # the executor already said it stopped.
+    assert runner._drained_run_ended(
+        {
+            "wake": "skill_end",
+            "additional_events": [
+                {"event_type": "skill_end", "payload": {}},
+                {"event_type": "run_ended", "payload": {"status": "completed"}},
+            ],
+        }
+    ) == "completed"
+
+
+def test_drained_run_ended_returns_none_when_absent() -> None:
+    assert runner._drained_run_ended({"wake": "timeout"}) is None
+    assert runner._drained_run_ended(
+        {"wake": "begin_step", "additional_events": []}
+    ) is None
+
+
+def test_drained_run_ended_tolerates_malformed_drains() -> None:
+    # Defensive: this runs in the loop's hot path against whatever the MCP
+    # layer returned, and must never be the thing that raises.
+    assert runner._drained_run_ended(None) is None
+    assert runner._drained_run_ended("not a dict") is None
+    assert runner._drained_run_ended({"wake": "run_ended"}) is None
+    assert runner._drained_run_ended(
+        {"wake": "skill_end", "additional_events": [None, 7]}
+    ) is None
+
+
+def test_fallback_emit_never_raises_without_a_bus() -> None:
+    # An ending run must not turn into a traceback because the event bus was
+    # unreachable from the harness process.
+    assert runner._emit_fallback_run_ended("aborted", "max_turns_exhausted") in (
+        True,
+        False,
+    )
+
+
 if __name__ == "__main__":
     import tempfile
 
