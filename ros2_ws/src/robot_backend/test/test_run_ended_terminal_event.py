@@ -81,6 +81,10 @@ def ctx(monkeypatch):
     stub = _StubContext()
     monkeypatch.setattr(ws, "_CONTEXT", stub)
     monkeypatch.setattr(ws, "_RECORDED_VERDICT_STEP_IDS", set())
+    # _RUN is module-level and now feeds executor_terminal_status, so without
+    # a fresh one per test these become order-dependent on whatever an earlier
+    # test observed.
+    monkeypatch.setattr(ws, "_RUN", ws._RunTermination())
     return stub
 
 
@@ -233,9 +237,13 @@ def test_executor_aborting_does_not_force_incomplete(ctx):
     assert payload["executor_terminal_status"] == "aborted"
 
 
-def test_terminal_status_is_optional_for_the_crash_path(ctx):
-    # Hard crash: no run_ended ever arrived, so there is no status to record.
-    # The field must accept None rather than forcing a fabricated value.
+def test_crash_path_records_a_sentinel_not_none(ctx):
+    # Hard crash: no run_ended ever arrived. The recorded status is the
+    # explicit "no_terminal_event" sentinel rather than None -- None is
+    # indistinguishable from a field nobody populated, and the scorer has to
+    # tell a crash apart from a bookkeeping miss. The payload field still
+    # ALLOWS None (see the default test below); it is the recording path that
+    # never leaves it unset.
     ws.record_run_verdict(
         verdict="incomplete",
         clause_results=[_entry("place_u_green")],
@@ -245,7 +253,7 @@ def test_terminal_status_is_optional_for_the_crash_path(ctx):
     )
     payload = ctx.event_bus.of_type("run_verdict")[0].payload
     assert payload["verdict"] == "incomplete"
-    assert payload["executor_terminal_status"] is None
+    assert payload["executor_terminal_status"] == "no_terminal_event"
 
 
 def test_run_verdict_payload_defaults_terminal_status_to_none():

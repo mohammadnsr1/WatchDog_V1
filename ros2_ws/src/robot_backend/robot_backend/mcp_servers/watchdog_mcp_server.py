@@ -323,6 +323,77 @@ _VALID_VERDICTS = {
 # suspicious. Guarded by _CONTEXT_LOCK rather than its own lock since it is
 # always touched alongside _CONTEXT.
 _RECORDED_VERDICT_STEP_IDS: set[str] = set()
+
+# Sentinel terminal status for a run that produced no run_ended event at all.
+# Deliberately a non-null string rather than None: None is indistinguishable
+# from "the field was never populated", and the scorer needs to tell a crash
+# apart from a bookkeeping miss.
+_NO_TERMINAL_EVENT = "no_terminal_event"
+# Consecutive wait_for_event timeouts after which the server finalizes the run
+# ITSELF. Not a suggestion to the agent -- see _timeout_or_finalize. Two, so a
+# single long legitimate gap (the cell gate can block up to gate_timeout_sec,
+# 90s, well under one 180s wait) can never reach it.
+_MAX_CONSECUTIVE_TIMEOUTS = 2
+
+
+@dataclass
+class _RunTermination:
+    """Server-side run state the termination guarantee is built on.
+
+    Lives here, in the MCP server, because for the two-session Claude Code
+    path there IS no harness loop -- the only code that runs between agent
+    turns is this server answering tool calls. A backstop whose whole purpose
+    is bounding a run when things have gone wrong cannot be implemented as an
+    instruction to the agent that has already stopped behaving.
+
+    observed_terminal_status is populated from the run_ended event as it is
+    drained, NOT from an argument the agent passes. The agent getting it right
+    on a clean run and wrong on an aborted one is exactly what happened before
+    this existed.
+    """
+
+    observed_terminal_status: str | None = None
+    steps_seen: list[str] = None  # type: ignore[assignment]
+    consecutive_timeouts: int = 0
+    finalized: bool = False
+
+    def __post_init__(self) -> None:
+        if self.steps_seen is None:
+            self.steps_seen = []
+
+
+_RUN = _RunTermination()
+_RUN_LOCK = threading.Lock()
+
+
+def _observe_drained_events(drained: dict[str, Any]) -> None:
+    """Track run_ended status and observed step_ids off a wait_for_event drain.
+
+    Called for every drain so the server's own picture of the run is built
+    from observed events rather than anything the agent reports. A real event
+    also resets the consecutive-timeout counter: the run is demonstrably alive.
+    """
+    records = []
+    if drained.get("event") is not None:
+        records.append(drained["event"])
+    records.extend(drained.get("additional_events") or [])
+
+    with _RUN_LOCK:
+        _RUN.consecutive_timeouts = 0
+        for rec in records:
+            if not isinstance(rec, dict):
+                continue
+            envelope = rec.get("envelope") or {}
+            payload = envelope.get("payload") or {}
+            etype = rec.get("event_type")
+            if etype == "run_ended":
+                status = payload.get("status")
+                if isinstance(status, str) and status:
+                    _RUN.observed_terminal_status = status
+            elif etype in ("begin_step", "end_step"):
+                step_id = payload.get("step_id")
+                if isinstance(step_id, str) and step_id and step_id not in _RUN.steps_seen:
+                    _RUN.steps_seen.append(step_id)
 # "<section>.<field>", matching how the loader derives clause_id in
 # contracts/loader.py's _make_clause -- e.g. "effects.object_lift_height_m".
 _CLAUSE_ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
@@ -576,12 +647,153 @@ def _drain_wait(
     events = ctx.recorder.pop_wait_events(event_types)
     if events:
         first = events[0]
-        return {
+        drained = {
             "wake": first.get("event_type"),
             "event": event_wrapper(first),
             "additional_events": [event_wrapper(event) for event in events[1:]],
         }
+        _observe_drained_events(drained)
+        return drained
     return None
+
+
+def _publish_run_verdict(
+    ctx: WatchDogContext,
+    *,
+    verdict: str,
+    clause_results: list[dict[str, Any]],
+    steps_covered: list[str],
+    explanation: str,
+    claimed_outcome: str | None,
+    executor_terminal_status: str | None,
+) -> Any:
+    """Build and publish one run-scoped verdict event. Returns the envelope.
+
+    Shared by record_run_verdict (the agent's path) and _timeout_or_finalize
+    (the server's own path) so a server-recorded rollup is the same event,
+    on the same channel, in the same shape as an agent-recorded one. A scorer
+    reading run_verdict events cannot tell -- and should not need to -- which
+    of the two wrote it, beyond the explanation saying so.
+    """
+    payload = RunVerdictPayload(
+        verdict=verdict,
+        claimed_outcome=claimed_outcome,
+        clause_results=clause_results,
+        steps_covered=steps_covered,
+        explanation=explanation,
+        executor_terminal_status=executor_terminal_status,
+    )
+    event = make_event("run_verdict", payload)
+    ctx.event_bus.publish(event)
+    return event
+
+
+def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[str, Any]:
+    """Return a wait_for_event timeout, finalizing the run if it has run out.
+
+    THE TERMINATION GUARANTEE. The failure this exists to stop: a real run
+    where the executor was killed mid-step, both 180s waits timed out exactly
+    as designed, and the agent read each empty result as "keep waiting" --
+    still looping at 456s, no verdict ever recorded, no exit. The timeout
+    firing was never the problem; the timeout firing not CAUSING anything was.
+
+    So the server does not ask. On the Nth consecutive timeout it records the
+    incomplete rollup itself, off its own observed state, and every later
+    wait_for_event returns immediately instead of blocking another full
+    timeout. An agent that ignores the terminal result cannot hang the run and
+    cannot cost it its verdict, because the verdict is already written.
+    """
+    waited = time.monotonic() - t0
+    with _RUN_LOCK:
+        # Already finalized: never block again, and never record twice.
+        if _RUN.finalized:
+            return _ok(
+                command,
+                wake="terminated",
+                terminal=True,
+                waited_sec=waited,
+                run_finalized=True,
+                finalized_by="server",
+                message=(
+                    "This run is over and its verdict is already recorded. Stop "
+                    "calling tools and end your turn."
+                ),
+            )
+        _RUN.consecutive_timeouts += 1
+        count = _RUN.consecutive_timeouts
+        if count < _MAX_CONSECUTIVE_TIMEOUTS:
+            return _ok(
+                command,
+                wake="timeout",
+                waited_sec=waited,
+                consecutive_timeouts=count,
+                timeouts_before_forced_finalize=_MAX_CONSECUTIVE_TIMEOUTS - count,
+                message=(
+                    "No event within the timeout. If the executor has stopped "
+                    "without a run_ended event it has probably crashed: finalize "
+                    f"now. After {_MAX_CONSECUTIVE_TIMEOUTS - count} more such "
+                    "timeout(s) this server will record the incomplete rollup "
+                    "for you and end the run."
+                ),
+            )
+        # Nth timeout: finalize here, whatever the agent does next.
+        observed = _RUN.observed_terminal_status
+        steps = list(_RUN.steps_seen)
+        _RUN.finalized = True
+
+    terminal_status = observed or _NO_TERMINAL_EVENT
+    if observed is None:
+        explanation = (
+            f"Run terminated on the no-event timeout after "
+            f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive waits with no executor "
+            f"event and no run_ended: the executor probably crashed. Recorded "
+            f"by the server, not the monitoring agent. Steps observed before "
+            f"the silence: {steps or 'none'}. No monitor fire was adjudicated "
+            f"and no clause check failed on the evidence gathered, so this is "
+            f"incomplete rather than non_conformant -- the run stopped before "
+            f"its end-state could exist, not because a violation was seen."
+        )
+    else:
+        explanation = (
+            f"Run ended with executor status {observed!r}, and the monitoring "
+            f"agent did not record a rollup before falling silent for "
+            f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive timeouts. Recorded by the "
+            f"server as a backstop. Steps observed: {steps or 'none'}."
+        )
+
+    try:
+        _publish_run_verdict(
+            ctx,
+            verdict="incomplete",
+            clause_results=[],
+            steps_covered=steps,
+            explanation=explanation,
+            claimed_outcome=None,
+            executor_terminal_status=terminal_status,
+        )
+        recorded = True
+    except Exception as exc:  # pragma: no cover - publish failure is not fatal
+        ctx.node.get_logger().error(f"forced finalize could not publish: {exc}")
+        recorded = False
+
+    return _ok(
+        command,
+        wake="terminated",
+        terminal=True,
+        waited_sec=waited,
+        run_finalized=True,
+        finalized_by="server",
+        verdict_recorded=recorded,
+        verdict="incomplete",
+        executor_terminal_status=terminal_status,
+        steps_covered=steps,
+        message=(
+            "Run terminated: no executor event across "
+            f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive timeouts. The server has "
+            "recorded run_verdict=incomplete on your behalf. Do not call "
+            "record_run_verdict. Stop calling tools and end your turn."
+        ),
+    )
 
 
 if mcp is not None:
@@ -833,6 +1045,14 @@ if mcp is not None:
             wanted = set(event_types) if event_types else None
 
             t0 = time.monotonic()
+            # Already finalized: return at once rather than blocking out
+            # another full timeout. An agent that keeps calling after the run
+            # was force-ended costs a round trip, not 180 seconds.
+            with _RUN_LOCK:
+                already_final = _RUN.finalized
+            if already_final:
+                return _timeout_or_finalize(ctx, command, t0)
+
             deadline = t0 + timeout
             while True:
                 immediate = _drain_wait(ctx, wanted)
@@ -840,7 +1060,7 @@ if mcp is not None:
                     return _ok(command, waited_sec=time.monotonic() - t0, **immediate)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    return _ok(command, wake="timeout", waited_sec=time.monotonic() - t0)
+                    return _timeout_or_finalize(ctx, command, t0)
                 ctx.wake_event.clear()
                 # Re-drain after clearing: an event may have arrived between
                 # the drain above and the clear, and clearing would
@@ -1316,20 +1536,42 @@ if mcp is not None:
                     f"clause result was evaluated under."
                 )
             ctx = _ensure_watchdog()
-            payload = RunVerdictPayload(
+            # CODE-populated, not agent-supplied. The agent passing it was
+            # right on a clean run and None on an aborted one -- the status is
+            # observable here from the drained run_ended event, so observation
+            # wins and the argument is only a fallback for a caller that
+            # somehow has it when the server does not. A run that produced no
+            # run_ended at all gets the explicit sentinel rather than None, so
+            # a crash is distinguishable from a field nobody filled in.
+            with _RUN_LOCK:
+                observed_status = _RUN.observed_terminal_status
+            resolved_status = observed_status or executor_terminal_status or _NO_TERMINAL_EVENT
+            if (
+                observed_status is not None
+                and executor_terminal_status is not None
+                and executor_terminal_status != observed_status
+            ):
+                ctx.node.get_logger().warning(
+                    f"record_run_verdict: agent passed executor_terminal_status="
+                    f"{executor_terminal_status!r} but the observed run_ended said "
+                    f"{observed_status!r}; recording the observed value."
+                )
+            event = _publish_run_verdict(
+                ctx,
                 verdict=verdict,
-                claimed_outcome=claimed_outcome,
                 clause_results=clause_results,
                 steps_covered=steps_covered,
                 explanation=explanation,
-                executor_terminal_status=executor_terminal_status,
+                claimed_outcome=claimed_outcome,
+                executor_terminal_status=resolved_status,
             )
-            event = make_event("run_verdict", payload)
-            ctx.event_bus.publish(event)
+            with _RUN_LOCK:
+                _RUN.finalized = True
             return _ok(
                 command,
                 event=event.model_dump(mode="json"),
                 steps_covered=steps_covered,
+                executor_terminal_status=resolved_status,
             )
         except Exception as exc:
             return _error(command, exc, verdict=verdict)

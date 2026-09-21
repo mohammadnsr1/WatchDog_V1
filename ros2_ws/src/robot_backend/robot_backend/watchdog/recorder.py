@@ -85,13 +85,31 @@ def _load_registry(path: Path | None = None) -> dict[str, Any]:
     return load_registry(resolved).raw_dict
 
 
-def _enabled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _sampled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Every registry object with a resolvable TF frame, sampled for evidence.
+
+    Deliberately does NOT filter on `enabled`. That flag is collision-geometry
+    scope, not evidence scope: scene_tf_sync_node skips disabled entries when
+    building collision objects, and the registry says so where the placement
+    frames are defined ("get_object_pose ignores `enabled` and still resolves
+    them"). Reusing it here silently excluded every placement, hole and
+    reorient frame from the watchdog's buffers, so query_snapshot and
+    get_evidence returned null for them and the seating check -- "the part is
+    seated at its placement frame within tolerance", the watchdog's central
+    effect -- had nowhere to get the target except the executor's own report.
+    That is the one measurement the independent channel exists for, so the
+    filter that removed it was the wrong filter.
+
+    A frame that is authored but never published simply yields no samples and
+    shows up in tf_staleness_counters, which is the honest outcome and is
+    already how a missing part frame behaves.
+    """
     frames: dict[str, dict[str, str]] = {}
     objects = registry.get("objects", {})
     if not isinstance(objects, dict):
         return frames
     for object_id, entry in objects.items():
-        if not isinstance(entry, dict) or not entry.get("enabled", True):
+        if not isinstance(entry, dict):
             continue
         tf_frame = entry.get("tf_frame")
         lookup_frame = entry.get("lookup_frame")
@@ -200,7 +218,7 @@ class EvidenceRecorder:
         self.lock = lock or threading.Lock()
         self.wake_event = wake_event or threading.Event()
         self.registry = registry if registry is not None else _load_registry(registry_path)
-        self.object_frames = _enabled_object_frames(self.registry)
+        self.object_frames = _sampled_object_frames(self.registry)
         self.cell_frames = _cell_frame_ids(self.registry)
         # Read the env-configurable ceilings once, at construction, so a test
         # (or a run) can raise them without re-importing the module. The module

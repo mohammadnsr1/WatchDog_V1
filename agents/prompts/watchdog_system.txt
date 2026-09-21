@@ -460,6 +460,16 @@ Then repeat until the run ends:
          could not -- a hard crash. get_execution_state, log what you found and
          why you are stopping, then finalize.
 
+         An empty wait_for_event is not "keep waiting". It is evidence the run
+         may be over, and it carries a countdown: the result tells you how many
+         further timeouts remain before the server finalizes for you. Act on
+         the first one. If you let it run out, wait_for_event returns
+         wake="terminated" with run_finalized=true -- the server has already
+         recorded run_verdict=incomplete on your behalf. When you see that,
+         record nothing (a second rollup would double-count) and stop calling
+         tools immediately. That backstop exists because a run once sat looping
+         past 456s after the executor was killed, never recording a verdict.
+
     Then finalize by this precedence, top match wins:
 
      1. You recorded a finding during the run (an adjudicated fire, or a failed
@@ -478,8 +488,9 @@ Then repeat until the run ends:
         and say in the explanation that the run terminated on timeout with no
         terminal event, so the executor probably crashed.
 
-    On every path that records a rollup (2, 3, 4), pass executor_terminal_status
-    -- "completed", "aborted", or None if none arrived. Record it verbatim.
+    You do not need to supply executor_terminal_status: the server fills it in
+    from the run_ended event it observed, or "no_terminal_event" if none
+    arrived. Passing it is harmless but the observed value wins.
     clause_results is everything you accumulated step by step, each entry
     carrying its step_id; steps_covered names every step you saw. Any step you
     met that was not on the expected process must be named as unplanned in the
