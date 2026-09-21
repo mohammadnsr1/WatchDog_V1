@@ -520,6 +520,43 @@ class EvidenceRecorder:
         with self.lock:
             return [dict(event) for event in list(self.events)[-limit:]]
 
+    def observed_terminal_status(self) -> str | None:
+        """Status of the last ingested run_ended event, or None if there was none.
+
+        Reads the ingest buffer, which every event enters exactly once when the
+        subscriber receives it, rather than any tool's delivery path. That
+        distinction is the whole point of this method.
+
+        The status used to be captured only as wait_for_event drained an event,
+        which coupled "did the watchdog observe the run end" to "did the agent
+        happen to have a blocking wait open at the moment it fired". On the
+        abort run of 2026-09-21 it did not: the last wait_for_event had already
+        returned, run_ended arrived 69s later, and the agent picked it up with
+        get_events -- a path that captured nothing. The verdict's
+        executor_terminal_status fell through to the no_terminal_event
+        sentinel while the explanation, written from that same get_events
+        output, correctly said "aborted". The clean run was right only because
+        its run_ended happened to fire 2s into an open wait.
+
+        Reading the buffer at verdict time instead makes the field independent
+        of how, when, or whether the agent drained the event.
+
+        Returns the LAST run_ended if somehow several exist: a re-emitted
+        terminal event supersedes an earlier one, matching how the drain-time
+        capture overwrote its slot.
+        """
+        with self.lock:
+            records = list(self.events)
+        for record in reversed(records):
+            if record.get("event_type") != "run_ended":
+                continue
+            payload = record.get("payload")
+            if isinstance(payload, dict):
+                status = payload.get("status")
+                if isinstance(status, str) and status:
+                    return status
+        return None
+
     def latest_joint_state(self) -> dict[str, Any] | None:
         with self.lock:
             if not self.joint_samples:

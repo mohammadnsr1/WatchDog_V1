@@ -277,10 +277,45 @@ else:
     _MCP_IMPORT_ERROR = None
 
 
-mcp = FastMCP("robot_backend_watchdog") if FastMCP is not None else None
+class _UnservableToolRegistry:
+    """Stand-in for FastMCP that registers tools as plain functions.
+
+    Used when FastMCP cannot be imported, so the tool block below still
+    DEFINES its functions at module scope instead of being skipped entirely.
+
+    Why this exists rather than `mcp = None`: the tools live inside an
+    `if mcp is not None:` block, so a missing FastMCP silently removed all 18
+    of them from the module. Every unit test that calls one then failed at
+    import-time attribute lookup -- `module has no attribute
+    'record_run_verdict'` -- which reads as a broken test rather than a
+    missing dependency. Five tests covering executor_terminal_status were dead
+    that way, and the field shipped wrong (aborted recorded as
+    no_terminal_event) with its regression tests passing by not running.
+
+    Tool bodies are ordinary Python and do not need a server to be exercised,
+    so their testability should not depend on which MCP library happens to be
+    installed. Serving still does: main() refuses to start on this shim rather
+    than pretending, and call logging is not installed on it because there is
+    no session to log to.
+    """
+
+    def tool(self, *args: Any, **kwargs: Any):
+        def register(func: Any) -> Any:
+            return func
+
+        return register
+
+
+# True only when this process can actually serve MCP. Kept separate from
+# `mcp` being non-None, which no longer implies servability.
+_MCP_SERVABLE = FastMCP is not None
+
+mcp = FastMCP("robot_backend_watchdog") if _MCP_SERVABLE else _UnservableToolRegistry()
 # Must precede the tool definitions below: it patches mcp.tool() so every tool
-# registered afterwards records its call to mcp_calls_<role>.jsonl.
-role_context.install_call_logging(mcp, "watchdog")
+# registered afterwards records its call to mcp_calls_<role>.jsonl. Passed None
+# on the shim -- there is no run to log, and the wrapper would try to open a
+# session file during a unit test.
+role_context.install_call_logging(mcp if _MCP_SERVABLE else None, "watchdog")
 
 
 @dataclass
@@ -364,6 +399,34 @@ class _RunTermination:
 
 _RUN = _RunTermination()
 _RUN_LOCK = threading.Lock()
+
+
+def _resolve_observed_terminal_status(ctx: Any) -> str | None:
+    """The run's terminal status as OBSERVED, by any delivery path, or None.
+
+    Consults the recorder's ingest buffer first and the drain-time capture
+    second. The two disagree in exactly one direction that matters: the drain
+    capture sees an event only if wait_for_event happened to drain it, while
+    the ingest buffer holds every event the subscriber ever received, so a
+    run_ended the agent read through get_events or get_evidence is visible
+    here and was invisible before. See EvidenceRecorder.observed_terminal_status
+    for the run this silently got wrong.
+
+    The drain capture is kept as a fallback rather than deleted because the
+    ingest buffer is bounded (maxlen 5000) and a very long run could in
+    principle evict a run_ended that the capture still holds. Neither source
+    can invent a status, so consulting both can only ever find more truth.
+    """
+    recorder = getattr(ctx, "recorder", None)
+    if recorder is not None:
+        try:
+            status = recorder.observed_terminal_status()
+        except Exception:  # pragma: no cover - never let bookkeeping break a verdict
+            status = None
+        if status:
+            return status
+    with _RUN_LOCK:
+        return _RUN.observed_terminal_status
 
 
 def _observe_drained_events(drained: dict[str, Any]) -> None:
@@ -737,10 +800,15 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
                 ),
             )
         # Nth timeout: finalize here, whatever the agent does next.
-        observed = _RUN.observed_terminal_status
         steps = list(_RUN.steps_seen)
         _RUN.finalized = True
 
+    # Resolved outside the lock, and from the same any-delivery-path source
+    # record_run_verdict uses. This path chooses between two very different
+    # explanations, so reading only the drain capture could assert "the
+    # executor probably crashed" about a run that had cleanly reported
+    # aborted through get_events.
+    observed = _resolve_observed_terminal_status(ctx)
     terminal_status = observed or _NO_TERMINAL_EVENT
     if observed is None:
         explanation = (
@@ -796,6 +864,10 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
     )
 
 
+# Always entered: `mcp` is either a real FastMCP or the shim above, so the tool
+# functions are defined at module scope either way. See
+# _UnservableToolRegistry for why this was effectively conditional before and
+# what that cost.
 if mcp is not None:
 
     @mcp.tool()
@@ -1557,15 +1629,24 @@ if mcp is not None:
                     f"clause result was evaluated under."
                 )
             ctx = _ensure_watchdog()
-            # CODE-populated, not agent-supplied. The agent passing it was
-            # right on a clean run and None on an aborted one -- the status is
-            # observable here from the drained run_ended event, so observation
-            # wins and the argument is only a fallback for a caller that
-            # somehow has it when the server does not. A run that produced no
-            # run_ended at all gets the explicit sentinel rather than None, so
-            # a crash is distinguishable from a field nobody filled in.
-            with _RUN_LOCK:
-                observed_status = _RUN.observed_terminal_status
+            # CODE-populated, not agent-supplied. The agent passed None on
+            # both the clean and the aborted run, so the argument is only a
+            # fallback for a caller that somehow has the status when the
+            # server does not; observation wins.
+            #
+            # Resolved from what was OBSERVED by any delivery path, not from
+            # the wait_for_event drain alone. Keying it to the drain made the
+            # sentinel appear on a run whose run_ended was read through
+            # get_events -- collapsing "aborted" (executor gave up and said
+            # so) onto "no_terminal_event" (hard crash, said nothing), which
+            # are the two most different outcomes this field exists to
+            # separate, and doing it silently with a value that looks valid.
+            #
+            # The sentinel must therefore mean exactly one thing: no run_ended
+            # was ever ingested. It is still an explicit string rather than
+            # None so a crash stays distinguishable from a field nobody filled
+            # in.
+            observed_status = _resolve_observed_terminal_status(ctx)
             resolved_status = observed_status or executor_terminal_status or _NO_TERMINAL_EVENT
             if (
                 observed_status is not None
@@ -1616,9 +1697,17 @@ def main() -> None:
     inside each tool remains the fallback, and --dry-run must keep working
     with no simulator running.
     """
-    if mcp is None:
+    if not _MCP_SERVABLE:
+        # The tool functions exist (on the shim) but nothing can serve them.
+        # Fail here, loudly, rather than letting a shim reach mcp.run(): a
+        # server that starts and exposes zero tools looks to the session like
+        # a working server with nothing to offer.
         raise RuntimeError(
-            "The Python package 'mcp' is required to run watchdog_mcp_server."
+            "Cannot serve watchdog_mcp_server: FastMCP could not be imported "
+            f"({_MCP_IMPORT_ERROR}). This server targets the mcp 1.x API "
+            "(mcp.server.fastmcp.FastMCP); mcp 2.x renamed it to "
+            "mcp.server.mcpserver.MCPServer. Pin 'mcp<2' in the workspace "
+            "virtualenv or migrate this module to the 2.x API."
         ) from _MCP_IMPORT_ERROR
 
     try:
