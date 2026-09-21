@@ -110,12 +110,19 @@ def recover_scene(
     steps: list[dict[str, Any]] = []
     reset_results: list[dict[str, Any]] = []
 
-    # Collect enabled object IDs from registry
+    # Collect enabled object IDs from registry. kind: frame entries are
+    # excluded: reset_object_state detaches a body and re-syncs its collision
+    # geometry, and a frame has neither -- it is a pose-only landmark that was
+    # never added to the planning scene, so resetting one can only fail and
+    # drag all_resets_ok down with it.
     object_ids: list[str] = []
     if registry:
         for oid, entry in registry.get("objects", {}).items():
-            if isinstance(entry, dict) and entry.get("enabled", True):
-                object_ids.append(oid)
+            if not isinstance(entry, dict) or not entry.get("enabled", True):
+                continue
+            if str(entry.get("kind", "object")).strip().lower() == "frame":
+                continue
+            object_ids.append(oid)
 
     # Reset each object (each call emits its own skill_start/skill_end events)
     for oid in object_ids:

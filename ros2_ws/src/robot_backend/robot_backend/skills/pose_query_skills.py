@@ -160,6 +160,7 @@ def get_object_poses(
     *,
     enabled_only: bool = True,
     graspable_only: bool = False,
+    kind: str | None = None,
     tf_timeout_sec: float = 1.0,
     clock=None,
     max_tf_age_sec: float | None = None,
@@ -176,6 +177,12 @@ def get_object_poses(
         Skip entries with enabled: false (default: True).
     graspable_only:
         If True, only return objects with graspable: true in the registry.
+    kind:
+        "object" for physical bodies only, "frame" for pose-only landmarks
+        (placement, hole, reorient targets) only, or None for both (default).
+        Both kinds resolve poses the same way -- a frame has a TF frame like
+        any other entry -- so the default returns everything the stage
+        publishes and the caller filters on the reported `kind` if it cares.
     tf_timeout_sec:
         Per-object TF lookup timeout.
     clock:
@@ -192,6 +199,9 @@ def get_object_poses(
             continue
         if enabled_only and not bool(entry.get("enabled", True)):
             continue
+        entry_kind = str(entry.get("kind", "object")).strip().lower()
+        if kind is not None and entry_kind != kind:
+            continue
         if graspable_only and not bool(entry.get("graspable", False)):
             continue
 
@@ -204,9 +214,14 @@ def get_object_poses(
             max_tf_age_sec=max_tf_age_sec,
         )
         if result["ok"]:
-            poses.append(result)
+            # Tag every pose with its kind so one listing can carry both
+            # bodies and landmarks without the caller re-reading the registry
+            # to tell which is which.
+            poses.append({**result, "kind": entry_kind})
         else:
-            failed.append({"object_id": object_id, "error": result.get("error", "")})
+            failed.append(
+                {"object_id": object_id, "kind": entry_kind, "error": result.get("error", "")}
+            )
 
     return {
         "ok": len(failed) == 0,

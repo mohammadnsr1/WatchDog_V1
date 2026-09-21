@@ -2,7 +2,9 @@
 
 Tools:
   get_object_pose      — TF pose of one registry object (planning frame).
-  get_object_poses     — TF poses of all enabled registry objects.
+  get_object_poses     — TF poses of every enabled registry entry, both
+                         kind: object (physical bodies) and kind: frame
+                         (pose-only placement/hole/reorient landmarks).
   get_object_spec      — one object's registry spec block (tolerances,
                          limits, grasp thresholds) plus cell frame names.
                          Read-only; does not carry grasp_width_m, which is
@@ -237,26 +239,53 @@ if mcp is not None:
 
     @mcp.tool()
     @emit_skill_events
-    def get_object_poses(graspable_only: bool = False) -> dict[str, Any]:
-        """Return current TF poses for all enabled registry objects.
+    def get_object_poses(
+        graspable_only: bool = False,
+        kind: str | None = None,
+    ) -> dict[str, Any]:
+        """Return current TF poses for every enabled registry entry.
+
+        This is the tool to call to find out what is actually on the table.
+        It returns both kinds of entry the registry declares, each pose tagged
+        with its "kind":
+
+        - kind "object" -- a physical body with collision geometry. These are
+          the parts and fixtures; the graspable ones are what you can pick.
+        - kind "frame" -- a pose-only landmark with no body: placement frames,
+          holes and reorient targets. Use these as motion TARGETS. They are
+          not pickable and never appear in the planning scene, so you cannot
+          collide with one and must not try to grasp one.
+
+        Only entries with enabled: true in the registry are returned, so the
+        listing reflects what the running stage publishes. An entry absent
+        from the result is not on the table.
 
         Delegates to scene_tf_sync_node's /get_object_poses service. Failures
-        for individual objects are collected in a 'failed' list rather than
+        for individual entries are collected in a 'failed' list rather than
         aborting the entire call.
 
         Parameters
         ----------
         graspable_only:
-            When True, only returns objects whose registry entry has
-            graspable: true.
+            When True, only returns entries whose registry entry has
+            graspable: true. Implies kind "object" -- no frame is graspable.
+        kind:
+            "object" or "frame" to return just that kind. None (the default)
+            returns both.
         """
         command = "get_object_poses"
         try:
+            _VALID_KINDS = {"object", "frame"}
+            if kind is not None and kind not in _VALID_KINDS:
+                raise ValueError(
+                    f"kind must be one of {sorted(_VALID_KINDS)} or omitted, got {kind!r}."
+                )
             _ensure_backend()
             from robot_backend_interfaces.srv import GetObjectPoses
             req = GetObjectPoses.Request()
             req.graspable_only = graspable_only
             req.enabled_only = True
+            req.kind = kind or ""
             resp = _call_service(_POSES_CLIENT, req, '/get_object_poses')
             poses = json.loads(resp.poses_json) if resp.poses_json else []
             failed = json.loads(resp.failed_json) if resp.failed_json else []

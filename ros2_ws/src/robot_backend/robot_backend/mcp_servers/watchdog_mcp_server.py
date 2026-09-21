@@ -1358,14 +1358,35 @@ if mcp is not None:
                     oid for oid in object_ids if pose_counts.get(oid, 0) < 1
                 ]
                 if cold_objects or joint_count < 1:
+                    # The recorder samples exactly the registry's enabled
+                    # entries, so every id named here is one the registry
+                    # claims the stage publishes. If an id stays cold across
+                    # several retries it is a registry/stage disagreement, not
+                    # slow warm-up: either the prim is missing from the stage
+                    # or the entry should be enabled: false. Say so, because
+                    # the failure this replaces was silent -- the agent
+                    # retried, gave up, moved to step scope, and every
+                    # executor gate then paid its full timeout waiting on a
+                    # run-scope signal that could never come.
+                    frames = getattr(ctx.recorder, "object_frames", {}) or {}
+                    cold_by_kind: dict[str, list[str]] = {}
+                    for oid in cold_objects:
+                        entry_kind = (frames.get(oid) or {}).get("kind", "object")
+                        cold_by_kind.setdefault(entry_kind, []).append(oid)
                     return _error(
                         command,
                         "recorder buffers are not warm yet: "
-                        f"objects with no buffered pose={cold_objects}, "
-                        f"joint_state samples={joint_count}. Wait and retry "
-                        "rather than signalling run-scope readiness.",
+                        f"enabled entries with no buffered pose={cold_objects} "
+                        f"(by kind: {cold_by_kind}), "
+                        f"joint_state samples={joint_count}. Retry a few times; "
+                        "if the same ids stay cold, the stage is not publishing "
+                        "them and the registry's enabled flag is wrong for those "
+                        "entries -- report that rather than signalling run-scope "
+                        "readiness, because leaving run scope unsignalled makes "
+                        "every executor gate wait out its full timeout.",
                         counts=counts,
                         object_ids=object_ids,
+                        cold_by_kind=cold_by_kind,
                     )
                 result = ctx.ready_client.signal(scope, step_id, phase)
                 return _ok(command, result=result, counts=counts, object_ids=object_ids)

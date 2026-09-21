@@ -136,12 +136,14 @@ cell:
 # conformance violation, detected by the supervisory monitor from physical
 # evidence, and is deliberately not prevented by the planner.
 acm_allowed_object_pairs:
-  # Full pair list: every part against base2 (genuine final-assembly seating)
-  # AND every movable part against every other movable part, so the planner
-  # does not refuse to plan from the crowded-table start state.
+  # FULL CLIQUE over every enabled kind: object entry -- all 10 FMB parts and
+  # both base fixtures are on the table AT THE SAME TIME, so every one of them
+  # can touch every other one at rest.
   #
-  # RESTORED 2026-09-01, having been trimmed to the four base2 pairs in
-  # 07dad83. Both halves of the trade-off are real, so record both:
+  # RESTORED 2026-09-01 (from the four base2 pairs in 07dad83), then widened
+  # 2026-09-21 from two disjoint per-assembly cliques to this single clique.
+  # All three states of this list were correct for the stage they were written
+  # against, so record why it moved each time:
   #
   #   Why the part-vs-part pairs were removed: set_permitted_contacts()
   #   applies this whole list in one shot, with no way to narrow or revoke a
@@ -151,40 +153,73 @@ acm_allowed_object_pairs:
   #   inverted_u_brown straight through an already-seated u_green and no
   #   collision was raised.
   #
-  #   Why they are back: without them the crowded-table start state can fail
+  #   Why they came back: without them the crowded-table start state can fail
   #   to plan at all (START_STATE_IN_COLLISION before any pick), because the
   #   parts' resting meshes touch at rest. A run that cannot start is worse
   #   than one that needs the carry-through watched for.
   #
-  # Consequence to keep in mind: collision checking will NOT catch a carried
-  # part passing through a seated part. That has to be caught from physical
-  # evidence by the supervisory monitor, which is where it belongs anyway --
-  # see the note above about the ACM carrying no task-level permission.
-  # If the through-part carry becomes the dominant failure, the fix is
-  # per-step ACM scoping in set_permitted_contacts(), not re-trimming this
-  # list: the two failure modes cannot both be fixed by one static list.
+  #   Why the two cliques merged: the earlier list was split into an fmb2 set
+  #   (u_green, base2, hex_blue, hex_red, inverted_u_brown) and an fmb1 set
+  #   (u_brown, base1, u_orange, inverted_u_yellow, line_green) on the stated
+  #   premise that "the two sets never share a table". Stage inspection on
+  #   2026-09-21 showed all ten prims present simultaneously, so the premise
+  #   was false and the 25 cross-set pairs were missing -- an fmb1 part
+  #   resting against an fmb2 part was an unmodelled start-state collision.
+  #
+  # Consequence to keep in mind, and it is now wider than before: collision
+  # checking will NOT catch a carried part passing through ANY other part.
+  # That has to be caught from physical evidence by the supervisory monitor,
+  # which is where it belongs anyway -- see the note above about the ACM
+  # carrying no task-level permission. If the through-part carry becomes the
+  # dominant failure, the fix is per-step ACM scoping in
+  # set_permitted_contacts(), not re-trimming this list: the two failure
+  # modes cannot both be fixed by one static list.
+  #
+  # kind: frame entries (placement, hole, reorient) are deliberately absent.
+  # They never enter the planning scene as collision objects, so an ACM pair
+  # naming one would reference a body MoveIt does not have.
   - [u_green, base2]
   - [u_green, hex_blue]
   - [u_green, hex_red]
   - [u_green, inverted_u_brown]
+  - [u_green, base1]
+  - [u_green, u_brown]
+  - [u_green, u_orange]
+  - [u_green, inverted_u_yellow]
+  - [u_green, line_green]
   - [base2, hex_blue]
   - [base2, hex_red]
   - [base2, inverted_u_brown]
+  - [base2, base1]
+  - [base2, u_brown]
+  - [base2, u_orange]
+  - [base2, inverted_u_yellow]
+  - [base2, line_green]
   - [hex_blue, hex_red]
   - [hex_blue, inverted_u_brown]
+  - [hex_blue, base1]
+  - [hex_blue, u_brown]
+  - [hex_blue, u_orange]
+  - [hex_blue, inverted_u_yellow]
+  - [hex_blue, line_green]
   - [hex_red, inverted_u_brown]
-
-  # --- fmb_assembly_2 (fmb1 set). Same shape of list as above: every part
-  # against the base1 fixture, and every movable part against every other,
-  # so the crowded-table start state stays plannable. Additive -- the fmb2
-  # pairs above are unaffected, and the two sets never share a table.
-  - [u_brown, base1]
-  - [u_brown, u_orange]
-  - [u_brown, inverted_u_yellow]
-  - [u_brown, line_green]
+  - [hex_red, base1]
+  - [hex_red, u_brown]
+  - [hex_red, u_orange]
+  - [hex_red, inverted_u_yellow]
+  - [hex_red, line_green]
+  - [inverted_u_brown, base1]
+  - [inverted_u_brown, u_brown]
+  - [inverted_u_brown, u_orange]
+  - [inverted_u_brown, inverted_u_yellow]
+  - [inverted_u_brown, line_green]
+  - [base1, u_brown]
   - [base1, u_orange]
   - [base1, inverted_u_yellow]
   - [base1, line_green]
+  - [u_brown, u_orange]
+  - [u_brown, inverted_u_yellow]
+  - [u_brown, line_green]
   - [u_orange, inverted_u_yellow]
   - [u_orange, line_green]
   - [inverted_u_yellow, line_green]
@@ -192,6 +227,7 @@ acm_allowed_object_pairs:
 objects:
   red_cube:
     enabled: false
+    kind: object
     object_id: red_cube
     tf_frame: red_cube
     lookup_frame: world
@@ -247,6 +283,7 @@ objects:
 
   green_cube:
     enabled: false
+    kind: object
     object_id: green_cube
     tf_frame: green_cube
     lookup_frame: world
@@ -305,6 +342,7 @@ objects:
   # mesh collision requires an explicitly authored pose_offset (identity here).
   u_green:
     enabled: true
+    kind: object
     object_id: u_green
     tf_frame: u_green   # matches the scene prim name (/World/u_green) that Isaac publishes into TF
     lookup_frame: world
@@ -374,6 +412,7 @@ objects:
   # they're mutually allowed to touch.
   base2:
     enabled: true
+    kind: object
     object_id: base2
     tf_frame: base2   # matches the scene prim name (/World/base2) that Isaac publishes into TF
     lookup_frame: world
@@ -400,6 +439,7 @@ objects:
   # these are not, yet.
   hex_blue:
     enabled: true
+    kind: object
     object_id: hex_blue
     tf_frame: hex_blue   # matches the scene prim name (/World/hex_blue) that Isaac publishes into TF
     lookup_frame: world
@@ -429,6 +469,7 @@ objects:
 
   hex_red:
     enabled: true
+    kind: object
     object_id: hex_red
     tf_frame: hex_red   # matches the scene prim name (/World/hex_red) that Isaac publishes into TF
     lookup_frame: world
@@ -458,6 +499,7 @@ objects:
 
   inverted_u_brown:
     enabled: true
+    kind: object
     object_id: inverted_u_brown
     tf_frame: inverted_u_brown   # matches the scene prim name (/World/inverted_u_brown) that Isaac publishes into TF
     lookup_frame: world
@@ -516,6 +558,7 @@ objects:
   # ==================================================================
   base1:
     enabled: true
+    kind: object
     object_id: base1
     tf_frame: base1   # matches the scene prim name (/World/base1) that Isaac publishes into TF
     lookup_frame: world
@@ -534,6 +577,7 @@ objects:
 
   u_brown:
     enabled: true
+    kind: object
     object_id: u_brown
     tf_frame: u_brown   # matches the scene prim name (/World/u_brown) that Isaac publishes into TF
     lookup_frame: world
@@ -565,6 +609,7 @@ objects:
 
   u_orange:
     enabled: true
+    kind: object
     object_id: u_orange
     tf_frame: u_orange   # matches the scene prim name (/World/u_orange) that Isaac publishes into TF
     lookup_frame: world
@@ -596,6 +641,7 @@ objects:
 
   inverted_u_yellow:
     enabled: true
+    kind: object
     object_id: inverted_u_yellow
     tf_frame: inverted_u_yellow   # matches the scene prim name (/World/inverted_u_yellow) that Isaac publishes into TF
     lookup_frame: world
@@ -627,6 +673,7 @@ objects:
 
   line_green:
     enabled: true
+    kind: object
     object_id: line_green
     tf_frame: line_green   # matches the scene prim name (/World/line_green) that Isaac publishes into TF
     lookup_frame: world
@@ -657,7 +704,8 @@ objects:
         grasp_effort_floor: 0.05
 
   u_green_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: u_green_placement
     tf_frame: u_green_placement
     lookup_frame: world
@@ -669,7 +717,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   inverted_u_brown_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: inverted_u_brown_placement
     tf_frame: inverted_u_brown_placement
     lookup_frame: world
@@ -681,7 +730,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   hex_blue_hole:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: hex_blue_hole
     tf_frame: hex_blue_hole
     lookup_frame: world
@@ -693,7 +743,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   hex_red_hole:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: hex_red_hole
     tf_frame: hex_red_hole
     lookup_frame: world
@@ -709,7 +760,8 @@ objects:
   # reaches the upper waypoint with a target_offset in the frame's own axes.
 
   u_green_reorient:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: u_green_reorient
     tf_frame: u_green_reorient
     lookup_frame: world
@@ -721,7 +773,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   inverted_u_brown_reorient:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: inverted_u_brown_reorient
     tf_frame: inverted_u_brown_reorient
     lookup_frame: world
@@ -742,7 +795,8 @@ objects:
   # dropped. enabled: false either way, as for the fmb2 frames.
 
   u_brown_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: u_brown_placement
     tf_frame: u_brown_placement
     lookup_frame: world
@@ -754,7 +808,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   u_orange_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: u_orange_placement
     tf_frame: u_orange_placement
     lookup_frame: world
@@ -766,7 +821,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   inverted_u_yellow_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: inverted_u_yellow_placement
     tf_frame: inverted_u_yellow_placement
     lookup_frame: world
@@ -778,7 +834,8 @@ objects:
       dimensions: [0.001, 0.001, 0.001]
 
   line_green_placement:
-    enabled: false
+    enabled: true
+    kind: frame
     object_id: line_green_placement
     tf_frame: line_green_placement
     lookup_frame: world
@@ -789,26 +846,6 @@ objects:
       type: box
       dimensions: [0.001, 0.001, 0.001]
 
-  u_brown_reorient:
-    enabled: false
-    object_id: u_brown_reorient
-    tf_frame: u_brown_reorient
-    lookup_frame: world
-    class_name: placement_frame
-    source: isaac_gt
-    graspable: false
-    collision:
-      type: box
-      dimensions: [0.001, 0.001, 0.001]   # NOT published by the stage yet
 
-  inverted_u_yellow_reorient:
-    enabled: false
-    object_id: inverted_u_yellow_reorient
-    tf_frame: inverted_u_yellow_reorient
-    lookup_frame: world
-    class_name: placement_frame
-    source: isaac_gt
-    graspable: false
-    collision:
-      type: box
-      dimensions: [0.001, 0.001, 0.001]   # NOT published by the stage yet
+
+

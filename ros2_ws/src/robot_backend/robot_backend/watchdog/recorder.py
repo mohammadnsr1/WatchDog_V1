@@ -88,21 +88,31 @@ def _load_registry(path: Path | None = None) -> dict[str, Any]:
 def _sampled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]]:
     """Every registry object with a resolvable TF frame, sampled for evidence.
 
-    Deliberately does NOT filter on `enabled`. That flag is collision-geometry
-    scope, not evidence scope: scene_tf_sync_node skips disabled entries when
-    building collision objects, and the registry says so where the placement
-    frames are defined ("get_object_pose ignores `enabled` and still resolves
-    them"). Reusing it here silently excluded every placement, hole and
-    reorient frame from the watchdog's buffers, so query_snapshot and
-    get_evidence returned null for them and the seating check -- "the part is
-    seated at its placement frame within tolerance", the watchdog's central
-    effect -- had nowhere to get the target except the executor's own report.
-    That is the one measurement the independent channel exists for, so the
-    filter that removed it was the wrong filter.
+    Filters on `enabled` but NOT on `kind`, and the distinction matters.
 
-    A frame that is authored but never published simply yields no samples and
-    shows up in tf_staleness_counters, which is the honest outcome and is
-    already how a missing part frame behaves.
+    `kind` is the wrong filter here. Excluding kind: frame entries would drop
+    every placement, hole and reorient frame from the watchdog's buffers, so
+    query_snapshot and get_evidence would return null for them and the seating
+    check -- "the part is seated at its placement frame within tolerance", the
+    watchdog's central effect -- would have nowhere to get the target except
+    the executor's own report. That is the one measurement the independent
+    channel exists for. Frames are evidence even though they are not bodies.
+
+    `enabled` is the right filter, now that it means "the stage publishes
+    this" rather than "this gets collision geometry". Sampling disabled
+    entries was not merely wasteful: signal_ready(scope="run") requires a
+    buffered pose for every frame this function returns, so a single authored-
+    but-unpublished entry made run-scope readiness permanently unreachable and
+    every executor gate paid its full 90s timeout. Two absent cubes and two
+    unpublished reorient frames cost a one-part run six minutes on
+    2026-09-21. An entry that cannot warm up must therefore not be sampled,
+    and `enabled: false` is how the registry declares that.
+
+    An enabled frame that the stage nonetheless fails to publish still yields
+    no samples and shows up in tf_staleness_counters, which is the honest
+    outcome and is already how a missing part frame behaves -- but it will now
+    also hold up run-scope readiness, which is the intended pressure to keep
+    `enabled` truthful.
     """
     frames: dict[str, dict[str, str]] = {}
     objects = registry.get("objects", {})
@@ -110,6 +120,8 @@ def _sampled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]
         return frames
     for object_id, entry in objects.items():
         if not isinstance(entry, dict):
+            continue
+        if not bool(entry.get("enabled", True)):
             continue
         tf_frame = entry.get("tf_frame")
         lookup_frame = entry.get("lookup_frame")
@@ -119,7 +131,11 @@ def _sampled_object_frames(registry: dict[str, Any]) -> dict[str, dict[str, str]
             and isinstance(lookup_frame, str)
             and lookup_frame
         ):
-            frames[str(object_id)] = {"tf_frame": tf_frame, "lookup_frame": lookup_frame}
+            frames[str(object_id)] = {
+                "tf_frame": tf_frame,
+                "lookup_frame": lookup_frame,
+                "kind": str(entry.get("kind", "object")).strip().lower(),
+            }
     return frames
 
 

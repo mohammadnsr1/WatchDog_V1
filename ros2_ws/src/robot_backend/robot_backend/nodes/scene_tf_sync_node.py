@@ -360,6 +360,9 @@ class SceneTFSyncNode(Node):
             self._registry.raw_dict,
             enabled_only=bool(request.enabled_only),
             graspable_only=bool(request.graspable_only),
+            # Empty string is the ROS-idiomatic "unset" for a string field and
+            # means both kinds here, matching get_object_poses' kind=None.
+            kind=(getattr(request, 'kind', '') or '').strip().lower() or None,
             tf_timeout_sec=self._tf_lookup_timeout_sec,
             clock=self.get_clock(),
             max_tf_age_sec=self._max_tf_age_sec,
@@ -420,6 +423,18 @@ class SceneTFSyncNode(Node):
                     continue
 
             if self._add_only_enabled and not entry.enabled:
+                skipped_ids.append(object_id)
+                continue
+
+            # A kind: frame entry is a pose-only landmark (placement, hole,
+            # reorient target) with no physical body. It is enabled -- the
+            # stage publishes it and its pose is queryable -- but giving it
+            # collision geometry would put a phantom box in the planning
+            # scene exactly where a part is meant to be seated, so every
+            # insertion would plan as a collision. Skipped regardless of
+            # add_only_enabled, since this is about having no body at all
+            # rather than about being switched off.
+            if entry.is_frame:
                 skipped_ids.append(object_id)
                 continue
 

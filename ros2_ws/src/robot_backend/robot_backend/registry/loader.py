@@ -83,6 +83,12 @@ def _parse_object(
     source = _required_string(value, "source", error_id)
     graspable = _required_bool(value, "graspable", error_id)
     enabled = _required_bool(value, "enabled", error_id)
+    kind = _parse_kind(value, error_id)
+    if kind == "frame" and graspable:
+        raise ValueError(
+            f"Object {error_id!r}: kind 'frame' denotes a pose-only landmark "
+            "with no physical body, so graspable must be false."
+        )
 
     raw_spec = value.get("spec", {})
     if not isinstance(raw_spec, dict):
@@ -113,6 +119,7 @@ def _parse_object(
         source=source,
         graspable=graspable,
         enabled=enabled,
+        kind=kind,
         spec=raw_spec,
         collision=collision,
         pose_offset=pose_offset,
@@ -275,3 +282,21 @@ def _required_bool(value: dict[str, Any], field: str, object_id: str) -> bool:
     if not isinstance(item, bool):
         raise ValueError(f"Object {object_id!r}: required field {field!r} must be boolean.")
     return item
+
+
+_VALID_KINDS = ("object", "frame")
+
+
+def _parse_kind(value: dict[str, Any], object_id: str) -> str:
+    """Parse `kind`, defaulting to "object" when the entry does not author it.
+
+    Defaulted rather than required so a registry written before `kind` existed
+    still loads with its previous meaning: every entry was treated as a body.
+    """
+    item = value.get("kind", "object")
+    if not isinstance(item, str) or item.strip().lower() not in _VALID_KINDS:
+        raise ValueError(
+            f"Object {object_id!r}: kind must be one of {list(_VALID_KINDS)} "
+            f"when present, got {item!r}."
+        )
+    return item.strip().lower()

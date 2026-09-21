@@ -1,5 +1,8 @@
 bool graspable_only
 bool enabled_only
+# "object" for physical bodies only, "frame" for pose-only landmarks
+# (placement, hole, reorient targets) only, "" for both.
+string kind
 ---
 bool ok
 string poses_json

@@ -61,9 +61,29 @@ class RegisteredObject:
     source: str
     graspable: bool
     enabled: bool
+    kind: str
     spec: dict[str, Any]
     collision: CollisionVariant
     pose_offset: PoseDict
+
+    @property
+    def is_frame(self) -> bool:
+        """True for a pose-only landmark that must never become collision geometry.
+
+        `enabled` and `kind` are two independent axes and conflating them was a
+        real bug (see the ACM/warm-up notes in model_registry.yaml). `enabled`
+        means "the stage publishes this, so its pose is queryable and the
+        recorder should buffer it". `kind` means "does this entry denote a
+        physical body". A placement/hole/reorient frame is enabled and queryable
+        yet has no body, so it is excluded from the planning scene and from the
+        ACM, while still being available to the seating check.
+        """
+        return self.kind == "frame"
+
+    @property
+    def is_object(self) -> bool:
+        """True for an entry denoting a physical body with collision geometry."""
+        return self.kind == "object"
     _mesh_geometry: MeshGeometry | None = field(
         default=None, init=False, repr=False, compare=False
     )

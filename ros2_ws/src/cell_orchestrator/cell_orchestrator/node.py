@@ -113,6 +113,26 @@ _DEFAULT_GUARD_MODE = "guarded"
 _VALID_GUARD_MODES = {"guarded", "unguarded"}
 
 
+def _wait_any(events: "list[threading.Event]", timeout_sec: float) -> bool:
+    """Block until any of `events` is set, or `timeout_sec` elapses.
+
+    threading has no primitive for "wait on the first of several events", and
+    the alternative -- collapsing the callers' two conditions onto one shared
+    Event -- would lose the ability to tell which one fired. Polling is fine
+    here: the wait is bounded by a gate timeout measured in tens of seconds,
+    so a 20 ms tick is imperceptible next to it and costs nothing on a thread
+    that would otherwise be parked.
+    """
+    deadline = time.monotonic() + timeout_sec
+    while True:
+        if any(event.is_set() for event in events):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.02, remaining))
+
+
 def _gate_key(step_id: str, phase: str) -> tuple[str, str]:
     return (step_id, phase or "")
 
@@ -439,9 +459,25 @@ class OrchestratorNode(Node):
         # of the shared deadline above. This is what lets the very first
         # begin_step of a run wait for the monitor to finish warming up
         # rather than racing it.
+        # Resolved before the run-readiness wait because that wait accepts
+        # this event as an alternative release -- see below.
+        gate_event = self._get_gate_event(step_id, phase)
+
         if not self._run_ready_event.is_set():
             remaining = max(0.0, deadline - time.monotonic())
-            run_ready = self._run_ready_event.wait(remaining)
+            # Either run-scope readiness OR this step/phase's own signal ends
+            # the wait. Waiting on run_ready alone deadlocked a run against a
+            # monitor that was demonstrably present and arming: run-scope
+            # readiness has its own precondition (warm recorder buffers) which
+            # could fail permanently, and when it did, the monitor signalled
+            # step scope for every step while all four gates sat out their
+            # full 90s on a run_ready that was never coming -- six minutes on
+            # a one-part run, with the step signals arriving 35s into gates
+            # that never looked at them. A step signal is strictly stronger
+            # evidence than a run signal for THIS gate anyway: it says this
+            # step's monitor is armed, which is the thing the gate exists to
+            # wait for.
+            run_ready = _wait_any([self._run_ready_event, gate_event], remaining)
             # An abort sets _run_ready_event to wake this wait; a call blocked
             # here when the abort fired must refuse, not fall through to the
             # gate wait.
@@ -498,7 +534,6 @@ class OrchestratorNode(Node):
                 )
                 return response
 
-        gate_event = self._get_gate_event(step_id, phase)
         remaining = max(0.0, deadline - time.monotonic())
         released = gate_event.wait(remaining)
         waited_sec = time.monotonic() - t0
@@ -524,11 +559,14 @@ class OrchestratorNode(Node):
             )
             return response
 
-        # Reaching this point already implies run-scope readiness was
-        # received (the branch above returns early otherwise), so this is
-        # necessarily "a monitor is present but this one step didn't finish
-        # arming in time" -- a coverage failure counted in results, not a
-        # whole-run misconfiguration (that's unguarded_latched, above).
+        # Reaching this point implies the run-readiness wait ended with one of
+        # its two events set (the branch above returns early otherwise) and
+        # that this step's own event was not among them -- had it been, the
+        # gate wait would have returned released immediately. So run-scope
+        # readiness was received and this is necessarily "a monitor is present
+        # but this one step didn't finish arming in time" -- a coverage
+        # failure counted in results, not a whole-run misconfiguration
+        # (that's unguarded_latched, above).
         #
         # Diagnostic only, does not change the outcome: a phase gate timing
         # out is still timeout_gate even when a near-miss name is found --
