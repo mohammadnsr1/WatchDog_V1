@@ -1,9 +1,10 @@
 {
-  "_comment": "WATCHDOG session permissions. Watchdog server only -- no motion/gripper/scene rule, so a config mistake that leaked a command server into this session would still prompt before the arm could be moved. The deny list is the session-level half of the independence guarantee: role_context.py notes that role is derived from the environment and get_rendered_task is hosted only on this role's server, so 'neither role has any tool capable of naming the other's file'. That holds at the MCP layer only. A watchdog session with Read can open agents/tasks/fmb_assembly.executor.yaml directly, and one that can spawn a subagent can have it do the reading under its own permissions -- either way the watchdog learns the executor's rendering, which is the one thing the two-file split exists to prevent. The watchdog observes through its MCP tools (get_execution_state, get_events, get_evidence, wait_for_event) and records through record_verdict, all server-side; it needs no filesystem, shell, or network access to do its job.",
+  "_comment": "WATCHDOG session permissions. Watchdog server only -- no motion/gripper/scene rule, so a config mistake that leaked a command server into this session would still prompt before the arm could be moved. The deny list is the session-level half of the independence guarantee: role_context.py notes that role is derived from the environment and get_rendered_task is hosted only on this role's server, so 'neither role has any tool capable of naming the other's file'. That holds at the MCP layer only. A watchdog session with Read can open agents/tasks/fmb_assembly.executor.yaml directly, and one that can spawn a subagent can have it do the reading under its own permissions -- either way the watchdog learns the executor's rendering, which is the one thing the two-file split exists to prevent. The watchdog observes through its MCP tools (get_execution_state, get_events, get_evidence, wait_for_event) and records through record_verdict, all server-side; it needs no filesystem, shell, or network access to do its job. Workflow is denied for the same reason Agent and Task are: it orchestrates subagents, which read under their own permissions. Artifact and ShareOnboardingGuide are denied as OUTBOUND channels rather than read vectors -- neither can open the executor's file, but both can publish this session's content off the machine, and a scored run's transcript should not leave it. Skill is denied because a skill injects instructions into the session, which is not something a scored watchdog's reasoning should be open to.",
   "permissions": {
     "allow": [
       "mcp__robot-backend-watchdog"
     ],
+    "_deny_comment": "Verified empirically against Claude Code 2.1.280 on 2026-09-22: with these settings a watchdog session asked to read agents/tasks/fmb_assembly_2.executor.yaml reports it has no file-read or shell tool, and a deferred-tool search for one returns nothing. Re-verify after a CLI upgrade -- the tool surface changed between 2.1.88 (which RUN.md was written against) and 2.1.280, and a tool added later is permitted by default. The entries below that name tools not present in a given version are harmless.",
     "deny": [
       "Bash",
       "Read",
@@ -15,7 +16,19 @@
       "WebSearch",
       "Write",
       "Edit",
-      "NotebookEdit"
+      "NotebookEdit",
+      "Workflow",
+      "Skill",
+      "Artifact",
+      "ArtifactComments",
+      "ArtifactData",
+      "ShareOnboardingGuide",
+      "SendMessage",
+      "RemoteTrigger",
+      "CronCreate",
+      "ListMcpResourcesTool",
+      "ReadMcpResourceTool",
+      "ReadMcpResourceDirTool"
     ]
   }
 }

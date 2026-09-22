@@ -22,7 +22,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
       ],
       "env": {
         "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.executor.yaml"
@@ -33,7 +33,7 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
       ],
       "env": {
         "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.executor.yaml"
@@ -44,11 +44,12 @@
       "command": "bash",
       "args": [
         "-lc",
-        "source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
       ],
       "env": {
         "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.executor.yaml"
       }
     }
-  }
+  },
+  "_venv_comment": "unset VIRTUAL_ENV is load-bearing, not tidiness. These servers are launched with bash -lc, a LOGIN shell, which auto-activates agents/.venv. mcp_servers/__init__._find_preferred_venv_python() checks $VIRTUAL_ENV BEFORE walking to the workspace venv, so the login shell silently wins and the server re-execs into agents/.venv -- which carries mcp 2.1.1 (FastMCP removed, renamed MCPServer) and no trimesh. The server then dies on import and the session reports CONNECTION_CLOSED with no hint as to why. Unsetting it lets resolution fall through to ros2_ws/.venv (mcp 1.29.1 with FastMCP, trimesh 5.1.0), which is the interpreter these servers are built against. Verified 2026-09-22."
 }
