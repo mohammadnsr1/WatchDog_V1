@@ -147,8 +147,9 @@ object_ids: |
   u_brown          — FMB U part, graspable. Must end seated at u_brown_placement.
   inverted_u_yellow — FMB inverted-U part, graspable. Must end seated at
                      inverted_u_yellow_placement.
-  u_orange         — hex pin, graspable. Must end seated at u_orange_placement.
-  line_green          — hex pin, graspable. Must end seated at line_green_placement.
+  u_orange         — FMB U part, graspable. Must end seated at u_orange_placement.
+  line_green       — FMB line part, graspable. Must end seated at
+                     line_green_placement.
   base1            — the fixture. NOT graspable, never picked, must stay put.
 
   Registry acm_allowed_object_pairs covers every pair among u_brown, base1,

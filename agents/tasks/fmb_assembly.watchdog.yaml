@@ -38,12 +38,12 @@ instruction_spec: |
   Preconditions: this task has none. Do not look for them and do not treat
   their absence as something missing.
 
-  Note on intermediate handling: u_green and inverted_u_brown cannot be
-  picked in their final orientation, so the executor may legitimately set
-  either part down partway through and re-pick it. A part resting somewhere
-  other than its placement frame partway through the run is therefore NOT by
-  itself a violation. Judge each part against its placement frame at the
-  point the executor closes that part's place step.
+  Note on intermediate handling: u_green cannot be picked in its final
+  orientation, so the executor may legitimately set it down partway through
+  and re-pick it. A part resting somewhere other than its placement frame
+  partway through the run is therefore NOT by itself a violation. Judge each
+  part against its placement frame at the point the executor closes that
+  part's place step.
 
 step_plan: |
   Four parts must end seated at their published placement frames, each
@@ -59,17 +59,17 @@ step_plan: |
     4. hex_red           -> hex_red_hole
 
   A part starts being worked on when the executor begins the first step
-  naming it, and stops when its place step closes. u_green and
-  inverted_u_brown are additionally set down partway through, between their
-  reorient and their re-pick, and stand at the reorient frame in the
-  meantime. begin_step's object_ids names the part being worked on; this
-  ordering is what you fall back on when it does not.
+  naming it, and stops when its place step closes. u_green is additionally
+  set down partway through, between its reorient and its re-pick, and stands
+  at the reorient frame in the meantime; the other three are carried straight
+  from pick to placement. begin_step's object_ids names the part being worked
+  on; this ordering is what you fall back on when it does not.
 
   Each part's effects are judged at one moment: when that part's own place
   step closes. That is the milestone for that part -- the point its end-state
   has come into existence and can be checked. The steps before it in the
-  part's span are transit, pick and reorient; the invariants apply throughout
-  them, but a part is not yet seated at the end of a lift.
+  part's span are transit, pick, and for u_green the reorient; the invariants
+  apply throughout them, but a part is not yet seated at the end of a lift.
 
   The executor is free to reach each end-state however it chooses. Extra
   steps, alternative approaches, and steps this plan does not list are all
@@ -80,54 +80,7 @@ step_plan: |
   the requirements held while it happened, not by whether it was on the plan.
 
 steps:
-  # Mirrors fmb_assembly.executor.yaml's clean step_ids EXACTLY, 1:1, in order.
-  #
-  # This block is NO LONGER get_contract's resolution key. Contracts are
-  # addressed by object_id and carry static per-object bounds; nothing here is
-  # consulted to load one, and no step_id is ever rejected by that path any
-  # more. What this block still is, and its only remaining job, is the
-  # watchdog's MAP OF THE EXPECTED PROCESS: the agent diffs each incoming
-  # begin_step's step_id against these entries, and a step_id not among them is
-  # unplanned and must be named as unplanned in the verdict or run-end rollup.
-  #
-  # That makes accuracy here load-bearing in a way it was not before. Adding a
-  # step_id the executor does not emit on the clean path makes a real
-  # divergence look expected and it goes unnamed; removing one it does emit
-  # makes a normal step look unplanned and the record fills with false
-  # divergence. Do not widen this block "helpfully" with plausible alternates,
-  # recovery steps
-  #      (pick_hex_red_retry and friends), or anything not in the executor
-  #      file's clean sequence -- that would silently swallow exactly the
-  #      divergence the watchdog is supposed to meet as unrecognized. An
-  #      unrecognized step is not an unwatched step: the active-set
-  #      stationarity and in-hand-slippage monitors stay armed across it.
-  #
-  # contract_clause_groups no longer decides what a single call returns -- a
-  # contract is per-object now and carries the union of these across the
-  # object's steps. It stays authored per step because it is the record of
-  # WHERE in the process each group is judged: only the four place milestones
-  # bear effects, since that is where a part's end-state comes into existence.
-  # Transit, pick and reorient steps carry invariants only -- the clamp-effort
-  # bound applies throughout them, but "the part is seated at its placement
-  # frame" is not a thing that can be true at the end of a lift. The agent
-  # cannot read the milestone off a contract call's shape any more, so the
-  # instruction says it in prose and this block keeps it authored.
-  #
-  # This task authors NO preconditions. The machinery still exists for tasks
-  # that want it, but nothing here loads it: the precondition group includes
-  # gripper_is_open, which is false by construction at any step where the
-  # gripper is already holding a part, and a per-object contract has no single
-  # moment at which "before the pick" is true for all of an object's steps.
-  #
-  # grasp_width_m is the conformance bound for the grasp_width_error_m effect
-  # clause, read structurally by get_contract from THIS file (never from the
-  # agent). It must AGREE across every step naming the same object -- it
-  # describes the part's graspable geometry, not the step -- and get_contract
-  # raises if two of an object's steps disagree. grasp_center_offset is intentionally absent throughout: it is
-  # executor command geometry, not a watchdog conformance value. So are the
-  # reorient frames -- an intermediate the executor chooses, not an end-state.
 
-  # --- u_green: picked, reoriented (set down and re-picked), placed ---
   - step_id: pick_u_green
     object_id: u_green
     grasp_width_m: 0.042
@@ -153,21 +106,11 @@ steps:
     grasp_width_m: 0.042
     contract_clause_groups: [effects, invariants]
 
-  # --- inverted_u_brown: same shape as u_green ---
   - step_id: pick_inverted_u_brown
     object_id: inverted_u_brown
     grasp_width_m: 0.08
     contract_clause_groups: [invariants]
 
-  - step_id: reorient_inverted_u_brown
-    object_id: inverted_u_brown
-    grasp_width_m: 0.08
-    contract_clause_groups: [invariants]
-
-  - step_id: repick_inverted_u_brown
-    object_id: inverted_u_brown
-    grasp_width_m: 0.08
-    contract_clause_groups: [invariants]
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown

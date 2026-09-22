@@ -126,7 +126,7 @@ steps:
 
   - step_id: place_approach_u_orange
     object_id: u_orange
-    action_hint: approach the hole from above, stopping clear of contact
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_orange_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:
@@ -139,7 +139,7 @@ steps:
 
   - step_id: place_u_orange
     object_id: u_orange
-    action_hint: descend into the hole, release, retreat
+    action_hint: descend into the placement frame, release, retreat
     target_frame: u_orange_placement
     grasp_width_m: 0.02
     target_offset:
@@ -172,7 +172,7 @@ steps:
 
   - step_id: place_approach_line_green
     object_id: line_green
-    action_hint: approach the hole from above, stopping clear of contact
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: line_green_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. Unlike the other three placement frames, this one's local +Z DOES point up, so the vertical standoff is carried on local Z -- that is why this step offsets on z where u_brown, u_orange and inverted_u_yellow offset on y. Do not "correct" it to y for consistency.
 
@@ -186,7 +186,7 @@ steps:
 
   - step_id: place_line_green
     object_id: line_green
-    action_hint: descend into the hole, release, retreat
+    action_hint: descend into the placement frame, release, retreat
     target_frame: line_green_placement
     grasp_width_m: 0.03
     target_offset:
@@ -220,6 +220,7 @@ steps:
 
   - step_id: place_approach_inverted_u_yellow
     object_id: inverted_u_yellow
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_yellow_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:

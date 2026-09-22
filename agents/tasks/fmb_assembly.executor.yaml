@@ -22,20 +22,20 @@ instruction_spec: |
   base2 is the fixture and is never picked. Its placement locations are
   published as TF frames rather than fixed world coordinates, so query them
   rather than assuming numbers: u_green_placement, inverted_u_brown_placement,
-  hex_blue_hole, hex_red_hole, and for the two reorient stages
-  u_green_reorient and inverted_u_brown_reorient. Query each frame the same
-  way you query an object's pose. A destination frame gives the pose the PART
-  must end up at, not a pose for the gripper.
+  hex_blue_hole, hex_red_hole, and for the one reorient stage
+  u_green_reorient. Query each frame the same way you query an object's pose.
+  A destination frame gives the pose the PART must end up at, not a pose for
+  the gripper.
 
   Order matters. Each part you seat becomes an obstacle for the ones after it,
   so do not reorder without reason.
 
   Move to safe joint pose at the beginning of the task.
 
-  u_green and inverted_u_brown cannot be picked in their final orientation:
-  each must be picked flat, set down at its reorient frame, released,
-  re-picked in the new orientation, and only then carried to its placement.
-  hex_blue and hex_red are picked once and inserted directly.
+  u_green cannot be picked in its final orientation: it must be picked flat,
+  set down at u_green_reorient, released, re-picked in the new orientation,
+  and only then carried to its placement. inverted_u_brown, hex_blue and
+  hex_red are picked once and inserted directly.
 
   Preconditions:
     - All four parts and base2 are present.
@@ -82,11 +82,12 @@ step_plan: |
   Sync the scene first, before any motion, so all five objects are in the
   planning scene as collision objects.
 
-  Four parts, seated in order. u_green and inverted_u_brown each need a
-  reorient stage (pick flat -> set down at the reorient frame -> release ->
-  re-pick -> carry to placement). hex_blue and hex_red are picked once and
-  inserted. Each part ends released, verified against its placement frame,
-  with the TCP retreated clear.
+  Four parts, seated in order. u_green alone needs a reorient stage (pick flat
+  -> set down at u_green_reorient -> release -> re-pick -> carry to
+  placement), because its grasp orientation must change between the pick and
+  the placement. inverted_u_brown, hex_blue and hex_red keep one grasp through
+  the whole span and are picked once and inserted. Each part ends released,
+  verified against its placement frame, with the TCP retreated clear.
 
 steps:
   - step_id: pick_u_green
@@ -167,6 +168,7 @@ steps:
 
   - step_id: place_approach_inverted_u_brown
     object_id: inverted_u_brown
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_brown_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:
@@ -281,7 +283,7 @@ steps:
 
 object_ids: |
   u_green          — FMB U part, graspable. Seated first. Needs a reorient stage.
-  inverted_u_brown — FMB inverted-U part, graspable, 252mm long. Needs a reorient stage.
+  inverted_u_brown — FMB inverted-U part, graspable, 252mm long. Inserted directly.
   hex_blue         — hex pin, graspable, 140mm long. Inserted directly.
   hex_red          — hex pin, graspable, 140mm long. Inserted directly.
   base2            — the fixture. NOT graspable and never picked; it carries
@@ -289,9 +291,14 @@ object_ids: |
 
   Placement/reorient destinations are published as TF frames and queried like
   object poses: u_green_placement, inverted_u_brown_placement, hex_blue_hole,
-  hex_red_hole, u_green_reorient, inverted_u_brown_reorient. They are
-  pose-only markers, not collision geometry, and they move with the fixture --
-  which is why they are queried rather than hardcoded.
+  hex_red_hole, u_green_reorient. They are pose-only markers, not collision
+  geometry, and they move with the fixture -- which is why they are queried
+  rather than hardcoded.
+
+  An inverted_u_brown_reorient frame is also published, but this task does not
+  use it: inverted_u_brown holds one grasp orientation from pick to placement,
+  so it has no reorient stage. Do not treat the frame's existence as a step
+  you are missing.
 
   Registry acm_allowed_object_pairs covers every pair among u_green, base2,
   hex_blue, hex_red and inverted_u_brown -- a planner collision-checking
