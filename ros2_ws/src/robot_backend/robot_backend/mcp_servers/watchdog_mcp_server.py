@@ -353,6 +353,13 @@ _CONTEXT_LOCK = threading.Lock()
 _VALID_VERDICTS = {
     "conformant", "non_conformant", "valid_variation", "inconclusive", "incomplete",
 }
+# Step verdicts that are NOT findings, i.e. do not put their step into the
+# final rollup's findings_during_run. A conformant step went right; a
+# valid_variation went right by an unexpected route, which the scorer counts
+# as correct behaviour. Everything else -- non_conformant, and inconclusive,
+# where WatchDog could not establish that the step was sound -- is something
+# that happened to this run and belongs on its timeline.
+_NON_FINDING_VERDICTS = {"conformant", "valid_variation"}
 # Per-process record of step_ids a verdict has already been published for.
 # Detection, not prevention -- a second verdict for a retried step may be
 # legitimate, and silently dropping it would be worse than recording it as
@@ -390,12 +397,20 @@ class _RunTermination:
 
     observed_terminal_status: str | None = None
     steps_seen: list[str] = None  # type: ignore[assignment]
+    # step_ids a step-scoped finding was recorded for, in order, de-duplicated.
+    # Ordered, unlike _RECORDED_VERDICT_STEP_IDS, because it is reported on the
+    # final run_verdict as the run's finding timeline and the sequence is part
+    # of what a scorer reads. Populated from observed record_verdict calls, not
+    # from anything the agent asserts at the end.
+    findings_recorded: list[str] = None  # type: ignore[assignment]
     consecutive_timeouts: int = 0
     finalized: bool = False
 
     def __post_init__(self) -> None:
         if self.steps_seen is None:
             self.steps_seen = []
+        if self.findings_recorded is None:
+            self.findings_recorded = []
 
 
 _RUN = _RunTermination()
@@ -843,6 +858,24 @@ def _drain_wait(
     return None
 
 
+def _observed_findings() -> list[str]:
+    """step_ids the server saw a step-scoped finding recorded for, in order."""
+    with _RUN_LOCK:
+        return list(_RUN.findings_recorded)
+
+
+def _note_finding(step_id: str) -> None:
+    """Record that a step-scoped finding was published for this step.
+
+    Appended in call order and de-duplicated: a step with two fires produces
+    two verdicts but is one place the run went wrong, and the final rollup
+    reports places, not events.
+    """
+    with _RUN_LOCK:
+        if step_id not in _RUN.findings_recorded:
+            _RUN.findings_recorded.append(step_id)
+
+
 def _publish_run_verdict(
     ctx: WatchDogContext,
     *,
@@ -852,6 +885,7 @@ def _publish_run_verdict(
     explanation: str,
     claimed_outcome: str | None,
     executor_terminal_status: str | None,
+    findings_during_run: list[str] | None = None,
 ) -> Any:
     """Build and publish one run-scoped verdict event. Returns the envelope.
 
@@ -861,6 +895,11 @@ def _publish_run_verdict(
     reading run_verdict events cannot tell -- and should not need to -- which
     of the two wrote it, beyond the explanation saying so.
     """
+    # Both derived from what the server observed, never from an argument. The
+    # caller may pass them only so the two finalize paths can reuse a list they
+    # already read under the lock; omitting them re-reads it here.
+    findings = list(findings_during_run if findings_during_run is not None
+                    else _observed_findings())
     payload = RunVerdictPayload(
         verdict=verdict,
         claimed_outcome=claimed_outcome,
@@ -868,6 +907,12 @@ def _publish_run_verdict(
         steps_covered=steps_covered,
         explanation=explanation,
         executor_terminal_status=executor_terminal_status,
+        findings_during_run=findings,
+        # A run "recovered" only if it went wrong AND ended right. Always
+        # computed, never a parameter: it is a function of the other two
+        # fields, and allowing it to be passed would allow it to disagree
+        # with them.
+        recovered=bool(findings) and verdict == "conformant",
     )
     event = make_event("run_verdict", payload)
     ctx.event_bus.publish(event)
@@ -933,23 +978,43 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
     # aborted through get_events.
     observed = _resolve_observed_terminal_status(ctx)
     terminal_status = observed or _NO_TERMINAL_EVENT
+    findings = _observed_findings()
+    # Findings are stated here rather than left implicit because this
+    # explanation is the only account a server-finalized run gets. Saying "no
+    # clause check failed" unconditionally, as this did, would have been flatly
+    # untrue on a run that recorded findings and then went silent.
+    if findings:
+        findings_note = (
+            f" Findings were recorded during the run at: {findings}. Those step "
+            f"verdicts stand as the run's timeline; this rollup does not "
+            f"re-judge them, and it cannot say whether they were subsequently "
+            f"corrected, because the run stopped before that could be observed."
+        )
+    else:
+        findings_note = (
+            " No monitor fire was adjudicated and no clause check failed on the "
+            "evidence gathered."
+        )
     if observed is None:
         explanation = (
             f"Run terminated on the no-event timeout after "
             f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive waits with no executor "
             f"event and no run_ended: the executor probably crashed. Recorded "
             f"by the server, not the monitoring agent. Steps observed before "
-            f"the silence: {steps or 'none'}. No monitor fire was adjudicated "
-            f"and no clause check failed on the evidence gathered, so this is "
-            f"incomplete rather than non_conformant -- the run stopped before "
-            f"its end-state could exist, not because a violation was seen."
+            f"the silence: {steps or 'none'}.{findings_note} The verdict is "
+            f"incomplete rather than non_conformant because the run stopped "
+            f"before its end-state could exist, which is a statement about "
+            f"reachability, not about whether anything went wrong."
         )
     else:
         explanation = (
             f"Run ended with executor status {observed!r}, and the monitoring "
-            f"agent did not record a rollup before falling silent for "
+            f"agent did not record the final verdict before falling silent for "
             f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive timeouts. Recorded by the "
             f"server as a backstop. Steps observed: {steps or 'none'}."
+            f"{findings_note} The server cannot measure the end-state itself, "
+            f"so this is incomplete: it records that the run terminated without "
+            f"an end-state assessment, not that the end-state was wrong."
         )
 
     try:
@@ -961,6 +1026,7 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
             explanation=explanation,
             claimed_outcome=None,
             executor_terminal_status=terminal_status,
+            findings_during_run=findings,
         )
         recorded = True
     except Exception as exc:  # pragma: no cover - publish failure is not fatal
@@ -978,6 +1044,7 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
         verdict="incomplete",
         executor_terminal_status=terminal_status,
         steps_covered=steps,
+        findings_during_run=findings,
         message=(
             "Run terminated: no executor event across "
             f"{_MAX_CONSECUTIVE_TIMEOUTS} consecutive timeouts. The server has "
@@ -1669,6 +1736,11 @@ if mcp is not None:
             )
             event = make_event("verdict", payload)
             ctx.event_bus.publish(event)
+            if verdict not in _NON_FINDING_VERDICTS:
+                # Tracked here, at the moment of publication, so the final
+                # rollup's findings_during_run is built from what was actually
+                # recorded rather than from what the agent remembers at the end.
+                _note_finding(step_id)
             with _CONTEXT_LOCK:
                 is_duplicate = step_id in _RECORDED_VERDICT_STEP_IDS
                 _RECORDED_VERDICT_STEP_IDS.add(step_id)
@@ -1695,15 +1767,54 @@ if mcp is not None:
         claimed_outcome: str | None = None,
         executor_terminal_status: str | None = None,
     ) -> dict[str, Any]:
-        """Publish one conformance verdict scoped to the whole run.
+        """Publish the run's single final verdict. ALWAYS call this, once.
 
-        For the run that produced no findings: no monitor fire was adjudicated
-        as a physical departure, and no end_step evidence check failed a
-        clause. Instead of a verdict per clean step, evaluate every step's
-        effects together and record them here, once, at the true end of the
-        run. A run that already recorded a finding through record_verdict
-        needs no call here -- those recordings are that run's record, and a
-        rollup alongside them would double-count.
+        Every run ends with exactly one call here, at termination, whether or
+        not you recorded findings along the way. Findings and this rollup are
+        complementary: your step verdicts are the TIMELINE (what went wrong,
+        when), and this is the END-STATE assessment (did the run ultimately
+        succeed). A run with three findings still gets exactly one of these.
+
+        This replaces the old rule that a run with a finding records no
+        rollup. That rule lost a real distinction: a run that misseated a part
+        and then reseated it correctly produced the same record as one that
+        ended broken -- a single non_conformant step verdict and nothing else,
+        with nothing anywhere saying how the run ENDED.
+
+        What the verdict value means here. It is about the END-STATE at
+        termination, not a summary of everything that happened:
+
+          conformant     every part's final pose meets its placement frame
+                         within tolerance, and no invariant violation still
+                         stands at run end. A finding you recorded earlier
+                         that was subsequently corrected does NOT make this
+                         non_conformant -- the run recovered, and that is a
+                         real and different outcome from both a clean run and
+                         a failed one.
+          non_conformant at least one part's end-state is wrong at run end, or
+                         a violation stands uncorrected. The run ended broken.
+          incomplete     the executor aborted or crashed before the end-state
+                         could exist.
+
+        Judge it on YOUR OWN evidence: query each placement frame and compare
+        each part's final pose against it. The executor's run_ended status
+        tells you the run STOPPED, and it is recorded beside your verdict for
+        the independence comparison, but it must not be what decides
+        conformant versus non_conformant. An executor that claims "completed"
+        on a run that ended misseated is precisely the case this separation
+        exists to catch.
+
+        When you recorded findings, explanation must tie the timeline to the
+        end-state -- name what was found and say what became of it. For
+        example: "a non-conformance was recorded at place_u_orange (u_orange
+        misseated by 0.032 m); the executor then ran an unplanned
+        reseat_u_orange and u_orange's final pose is 0.004 m from
+        u_orange_placement, within the 0.02 m tolerance, so the run's
+        end-state is conformant."
+
+        findings_during_run and recovered are filled in by this server from
+        the record_verdict calls it actually saw; you do not pass them and
+        cannot override them.
 
         clause_results carries the same entries record_verdict takes, with one
         addition: every entry must also name its own step_id. clause_id is
@@ -1716,23 +1827,29 @@ if mcp is not None:
         clause_id makes clause coverage checkable.
 
         explanation must summarise the DECISION BASIS, the same as
-        record_verdict's: what you observed across the run and why none of it
-        rose to a finding, including why anything that looked suspicious was
-        judged within bounds. "No findings" is a claim about evidence you
-        examined; this is where that examination is shown. State plainly that
-        the verdict is a whole-run rollup.
+        record_verdict's: what you observed across the run and what it
+        established about the end-state, including why anything that looked
+        suspicious was judged within bounds. On a run with no findings, "no
+        findings" is a claim about evidence you examined, and this is where
+        that examination is shown. State plainly that the verdict is the
+        run's final end-state assessment.
 
         claimed_outcome is optional here and, when given, should summarize the
         executor's claims across the run rather than any single step's.
 
         verdict may be "incomplete" here and only here: the executor stopped
-        before the end-state could exist and nothing fired. That is distinct
-        from "inconclusive" (your own evidence was insufficient to judge) and
-        from "non_conformant" (you observed a violation). Use "incomplete"
-        only when no finding was recorded during the run -- a finding always
-        wins, and an abort that happened BECAUSE you caught something is
-        still non_conformant. Say in explanation which parts were and were
-        not reached.
+        before the end-state could exist. That is distinct from "inconclusive"
+        (your own evidence was insufficient to judge) and from
+        "non_conformant" (the end-state is wrong). Say in explanation which
+        parts were and were not reached.
+
+        A recorded finding no longer forces the run verdict. It used to, on
+        the old cadence where a finding suppressed this call entirely. Now the
+        question here is only what the END-STATE was, so an abort that
+        happened because you caught something is "incomplete" if the remaining
+        parts were never reached, and "non_conformant" if what was reached
+        ended wrong -- the finding itself is already on the record as its own
+        step verdict and is reported here in findings_during_run either way.
 
         executor_terminal_status is the status from the executor's run_ended
         event -- "completed", "aborted", or None if none arrived and you
@@ -1803,11 +1920,19 @@ if mcp is not None:
             )
             with _RUN_LOCK:
                 _RUN.finalized = True
+            # EventEnvelope.payload is a plain dict (typed payloads are dumped
+            # on construction), so read the published values back by key.
+            published = event.payload
             return _ok(
                 command,
                 event=event.model_dump(mode="json"),
                 steps_covered=steps_covered,
                 executor_terminal_status=resolved_status,
+                # Echoed so the agent can see what the server concluded about
+                # its own timeline, and so the call log carries it without a
+                # join to the event stream.
+                findings_during_run=list(published.get("findings_during_run", [])),
+                recovered=bool(published.get("recovered", False)),
             )
         except Exception as exc:
             return _error(command, exc, verdict=verdict)

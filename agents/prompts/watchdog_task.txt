@@ -38,8 +38,14 @@ step that checked out clean -- hold its clause results, tagged with its
 step_id, in working memory. Record a verdict only on a finding: a violation
 you caught as it happened and adjudicated, or an end_step check that failed a
 clause nothing had caught, scoped to the step it happened in and recorded the
-moment you have it. If the whole run produces no finding at all, call
-record_run_verdict exactly once at the end, covering every step together.
+moment you have it.
+
+At the end of the run, call record_run_verdict exactly once -- always, whether
+or not you recorded findings. Findings are the timeline; that call is the
+end-state assessment, and its value reflects where the parts actually are when
+the run stops, measured by you. A part you flagged mid-run that the executor
+then corrected ends the run conformant: that is a recovery, and the record has
+to be able to show it.
 
 The process above is what is expected, not a limit on what you will see. A
 step whose step_id is not on it is unplanned: it is governed by every

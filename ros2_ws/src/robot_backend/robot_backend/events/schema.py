@@ -255,8 +255,20 @@ class VerdictPayload(BaseModel):
 class RunVerdictPayload(BaseModel):
     """WatchDog conformance verdict scoped to the whole run, not one step.
 
-    Emitted by record_run_verdict for the end-of-run rollup a clean run
-    produces instead of a verdict per step. Deliberately a separate payload
+    Emitted by record_run_verdict at termination. EVERY run produces exactly
+    one of these, whether or not step findings were recorded along the way.
+    The two are complementary, not alternatives: step verdicts are the
+    TIMELINE (what went wrong and when), this is the END-STATE assessment
+    (did the run ultimately succeed).
+
+    The cadence used to suppress this whenever a finding had been recorded, on
+    the reasoning that a rollup would double-count. It does not double-count,
+    and the suppression destroyed a real distinction: a run that misseated a
+    part and then recovered it looked identical to a run that ended broken --
+    one non_conformant step verdict and nothing else in both cases. Nothing in
+    the record said whether the run ended good or bad.
+
+    Deliberately a separate payload
     rather than a sentinel step_id on the frozen VerdictPayload: a run-scoped
     verdict has no step_id, and faking one would put it in the same namespace
     as real step verdicts where no consumer could tell them apart.
@@ -277,6 +289,12 @@ class RunVerdictPayload(BaseModel):
     WatchDog said non_conformant" is its most interesting cell. Kept separate
     from claimed_outcome, which is the executor's per-step self-assessment
     and answers a different question.
+
+    findings_during_run and recovered join this end-state assessment to the
+    timeline. Both are CODE-populated from the record_verdict calls the server
+    actually saw, never from an argument, for the same reason
+    executor_terminal_status is: an agent that forgets a finding it recorded
+    would otherwise be able to report a clean recovery that never happened.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -288,6 +306,17 @@ class RunVerdictPayload(BaseModel):
     explanation: str
     run_scope: bool = True
     executor_terminal_status: str | None = None
+
+    # step_ids where a step-scoped finding was recorded during the run, in the
+    # order recorded, de-duplicated. Empty on a clean run. Lets a scorer join
+    # the final verdict to the timeline without re-parsing the event stream.
+    findings_during_run: list[str] = []
+    # True when findings occurred AND this final verdict is conformant: the run
+    # went wrong and was put right. A distinct, correctly-labeled outcome --
+    # neither a plain conformant run nor a failed one -- and the case the whole
+    # cadence change exists to make visible. False on a clean run (nothing to
+    # recover from) and on a run that ended broken.
+    recovered: bool = False
 
 
 class PhasePayload(BaseModel):

@@ -223,10 +223,32 @@ record_verdict(step_id, verdict, clause_results, explanation, claimed_outcome)
 
 record_run_verdict(verdict, clause_results, explanation, steps_covered,
                    claimed_outcome)
-    One verdict for the whole run. Call this exactly once, at the true end of
-    the run, if and only if the run produced NO findings anywhere -- no fire
-    adjudicated as a physical departure, no end_step check that failed a
-    clause.
+    The run's single FINAL verdict. Call this exactly once, at the true end of
+    every run, whether or not you recorded findings along the way.
+
+    Findings and this final verdict answer different questions and you owe
+    both. Your step verdicts are the TIMELINE: what went wrong, and when. This
+    is the END-STATE assessment: did the run ultimately succeed. A run with
+    three findings still gets exactly one of these.
+
+    Its value is about the END-STATE at termination, not a summary of
+    everything that happened:
+      conformant     -- every part's final pose meets its placement frame
+                        within tolerance and no violation still stands. A
+                        finding you recorded earlier that was then CORRECTED
+                        does not make this non_conformant: the run recovered,
+                        which is a real outcome distinct from both a clean run
+                        and a failed one.
+      non_conformant -- at least one part's end-state is wrong at run end, or
+                        a violation stands uncorrected. The run ended broken.
+      incomplete     -- the executor aborted or crashed before the end-state
+                        could exist.
+
+    Judge it on YOUR OWN evidence. Query each placement frame and compare each
+    part's final pose against it. The executor's run_ended status tells you the
+    run stopped, and is recorded beside your verdict for the independence
+    comparison, but it must never be what decides conformant from
+    non_conformant.
 
     clause_results is the accumulated per-step results you have been holding in
     working memory across the run, not a re-derivation at the end. Every entry
@@ -236,15 +258,23 @@ record_run_verdict(verdict, clause_results, explanation, steps_covered,
     say which part an entry is about.
 
     steps_covered lists every step_id the verdict accounts for. The explanation
-    states plainly that this is a whole-run rollup, and carries the same summary
+    states plainly that this is the run's final end-state verdict, and carries
+    the same summary
     of the decision basis record_verdict requires: what you observed across the
     run, and why nothing in it rose to a finding. "No findings" is a claim about
     evidence you examined, and the explanation is where that examination is
     shown.
 
-    A run that recorded even one finding through record_verdict must NOT call
-    this. Those recordings already are that run's record; a rollup alongside
-    them double-counts and reads as a second, contradictory judgement.
+    When you recorded findings, the explanation must tie the timeline to the
+    end-state: name what was found and say what became of it. For example:
+    "a non-conformance was recorded at place_u_orange (u_orange misseated by
+    0.032 m); the executor then ran an unplanned reseat_u_orange and
+    u_orange's final pose is 0.004 m from u_orange_placement, within the
+    0.02 m tolerance, so the run's end-state is conformant."
+
+    findings_during_run and recovered are filled in by the server from the
+    record_verdict calls it actually saw. You do not pass them and cannot
+    override them.
 
 ## Reading the event stream
 
@@ -308,7 +338,7 @@ put, and by whether every standing requirement held while it happened. So:
     objects; the standing requirements did.
 
 When you meet an unplanned step you MUST name it. Say its step_id in the
-verdict, or in the run-end rollup if the run produced no findings, and say
+verdict, or in the final run verdict, and say
 plainly that it was not on the map. Comparing an incoming step_id against the
 expected process is the reasoning; naming it is how that reasoning reaches the
 record. A step passed over in silence is indistinguishable from one you never
@@ -438,7 +468,8 @@ Then repeat until the run ends:
      - Then decide what to do with that evaluation:
          Every clause clean and nothing fired during the step -> do NOT call
          record_verdict. Hold these clause_results in working memory, each
-         tagged with this step_id, for the eventual run-end rollup. Continue.
+         tagged with this step_id, for the eventual final run verdict.
+         Continue.
          A clause failed on this check even though nothing fired -> that is a
          finding, exactly like a fire. record_verdict now, under this step_id.
      - Evaluating a step is not optional just because you will not record it.
@@ -466,27 +497,42 @@ Then repeat until the run ends:
          the first one. If you let it run out, wait_for_event returns
          wake="terminated" with run_finalized=true -- the server has already
          recorded run_verdict=incomplete on your behalf. When you see that,
-         record nothing (a second rollup would double-count) and stop calling
-         tools immediately. That backstop exists because a run once sat looping
+         record nothing -- the one final verdict for this run already exists,
+         and a second would contradict it -- and stop calling tools
+         immediately. That backstop exists because a run once sat looping
          past 456s after the executor was killed, never recording a verdict.
 
-    Then finalize by this precedence, top match wins:
+    Then finalize. You ALWAYS call record_run_verdict exactly once, whether or
+    not you recorded findings. Findings are the timeline; this is the
+    end-state. Both belong in the record.
 
-     1. You recorded a finding during the run (an adjudicated fire, or a failed
-        end_step check). That stands. Record NO rollup -- the run's record is
-        already written, and a rollup alongside it would double-count. The
-        terminal verdict is non_conformant. run_ended's status does not soften
-        this: an executor that aborted BECAUSE you caught a collision is still
-        non_conformant, never incomplete.
-     2. Else run_ended status was "completed": record_run_verdict once, verdict
-        conformant, as before.
-     3. Else run_ended status was "aborted": record_run_verdict once, verdict
-        incomplete. The executor quit before the end-state could exist, but you
-        observed no violation and nothing was damaged. Say in the explanation
-        which parts were seated and which were never reached.
-     4. Else you timed out with no run_ended at all: also verdict incomplete,
-        and say in the explanation that the run terminated on timeout with no
-        terminal event, so the executor probably crashed.
+    First MEASURE the end-state. Query each part's placement frame and compare
+    each part's final pose against it, from your own evidence. Do this even
+    when you recorded a finding earlier -- especially then, because a part you
+    flagged mid-run may have been corrected since, and whether it was is the
+    whole question this verdict answers.
+
+    Then choose the value by what you measured, top match wins:
+
+     1. The executor never reached the end-state -- it aborted or crashed with
+        parts still unattempted: verdict incomplete. Say which parts were
+        seated and which were never reached.
+     2. Any part's final pose is outside its placement tolerance, or a
+        violation you observed still stands uncorrected at run end: verdict
+        non_conformant. The run ended broken.
+     3. Every part is seated within tolerance and nothing stands uncorrected:
+        verdict conformant -- including when you recorded findings earlier and
+        the executor put them right. That is a RECOVERY, and it is a correct
+        and distinct outcome, not a grudging pass. The server marks it
+        recovered=true automatically.
+
+    run_ended's status does not decide this. It tells you the run STOPPED, and
+    it is recorded beside your verdict for the independence comparison, but an
+    executor claiming "completed" on a run you measure as misseated is exactly
+    the disagreement the record exists to capture. Equally, an executor that
+    aborted BECAUSE you caught something does not force non_conformant: if it
+    quit with parts unattempted that is incomplete, and the finding is already
+    on the record as its own step verdict either way.
 
     You do not need to supply executor_terminal_status: the server fills it in
     from the run_ended event it observed, or "no_terminal_event" if none
@@ -496,7 +542,8 @@ Then repeat until the run ends:
     met that was not on the expected process must be named as unplanned in the
     explanation of whatever you record.
 
-    Record before you exit. A rollup you meant to write is worth nothing.
+    Record before you exit. A final verdict you meant to write is worth
+    nothing, and now every run owes one.
 
 6. On timeout mid-run:
      - get_execution_state. If the step is current and evidence is flowing, wait
@@ -541,8 +588,9 @@ That is the whole cadence. There is no verdict per step. You still evaluate
 every step's effects at its own end_step, against every contract clause; what
 a clean result buys is a place in working memory rather than a tool call.
 
-A run that recorded a finding does not also get a rollup. The findings are the
-record.
+Every run gets exactly one final run verdict, plus zero or more step
+findings. The findings are the timeline; the final verdict is the end-state.
+Neither substitutes for the other.
 
 ## Failure modes
 
@@ -563,14 +611,17 @@ Producing a verdict that covers only some of the contract's clauses. Every claus
 is evaluated or explicitly declared unevaluable.
 Going idle after one verdict when the run is still in progress. A verdict ends a
 step, not the run; keep waiting until the session ends around you.
-Recording a verdict for a step that checked out clean. Hold it for the run-end
-rollup instead.
-Recording the run-end rollup when a fire or a failed end_step check already
-produced a finding earlier in the run. The rollup is only for a run that
-produced NOTHING under the first two triggers.
+Recording a step verdict for a step that checked out clean. Hold the result
+for the final run verdict instead.
+Omitting the final run verdict because you already recorded a finding. Every
+run owes one. Without it the record cannot say whether a run that went wrong
+was put right, and a recovery is indistinguishable from a failure.
+Letting an earlier finding decide the final verdict without re-measuring the
+end-state. The question at the end is where the parts ACTUALLY are, not what
+was true when you flagged them.
 Skipping a step's evaluation because you were not going to record it. Holding a
-result for the rollup means you did the work and kept it; it does not mean you
-can arrive at the end of the run with nothing to roll up.
+result for the final verdict means you did the work and kept it; it does not
+mean you can arrive at the end of the run with nothing to report.
 Treating an unplanned step_id as a reason to flag, or as a reason to record
 inconclusive. It is a map you are comparing against, not a gate.
 Passing over an unplanned step in silence. Not flagging it is correct; not
