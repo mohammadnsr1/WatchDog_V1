@@ -95,6 +95,24 @@ class MonitorPrimitive:
     reference_capture: str = "none"
     param_schema: list[dict[str, Any]] = []
 
+    # --- threshold provenance -------------------------------------------
+    # Which agent-supplied param carries this family's threshold, and which
+    # registry field under an object's `spec` that threshold is supposed to
+    # come from. Declared per family here, next to the param_schema that
+    # defines the param, so the two cannot drift apart.
+    #
+    # These declare the EXPECTED source, never the actual one. Monitors are
+    # armed with agent-supplied params -- the server does not resolve the
+    # threshold from the registry -- so whether a given arm actually used the
+    # registry value is a question about that call, answered by comparing the
+    # passed value against the registry at arm time. See
+    # _resolve_threshold_provenance in watchdog_mcp_server.
+    #
+    # None on both means the family has no registry-backed threshold, which
+    # is a real answer (region's threshold is structurally 0.0), not a gap.
+    threshold_param: str | None = None
+    threshold_registry_field: str | None = None
+
     def __init__(
         self,
         monitor_type: str,
@@ -126,6 +144,14 @@ class MonitorPrimitive:
         self.threshold = float("nan")
         self.comparison = ""
         self.reference_values: dict[str, Any] = {}
+        # Filled in by the server immediately after construction, before the
+        # monitor is armed. Left at this "not yet resolved" default rather
+        # than an empty dict so an arm event that somehow bypassed resolution
+        # says so instead of silently looking like a clean non-registry arm.
+        self.provenance: dict[str, Any] = {
+            "threshold_source": "unresolved",
+            "threshold_verified": False,
+        }
 
     @property
     def subject_object_id(self) -> str | None:
@@ -152,6 +178,8 @@ class RelativeFrameMonitor(MonitorPrimitive):
     """Relative-frame predicate driven by TF; serves retention/alignment clauses."""
 
     feed = "tf"
+    threshold_param = "max_delta_m"
+    threshold_registry_field = "tolerances.grasp_slip_tolerance_m"
     description = (
         "Fires when the straight-line distance between two TF frames departs "
         "from its armed reference by more than max_delta_m. Parameters express "
@@ -224,6 +252,8 @@ class StationarityMonitor(MonitorPrimitive):
     """Stationarity predicate driven by TF samples; serves scene invariants."""
 
     feed = "tf"
+    threshold_param = "epsilon_m"
+    threshold_registry_field = "tolerances.disturbance_tolerance_m"
     description = (
         "Fires when an object's position displaces more than epsilon_m from its "
         "armed reference position. Parameters express the condition that must "
@@ -283,6 +313,11 @@ class RegionMonitor(MonitorPrimitive):
     """Region predicate driven by TF samples; serves pose-corridor clauses."""
 
     feed = "tf"
+    # No registry-backed threshold: a region is defined by its bounds, and
+    # self.threshold is structurally 0.0 (the predicate is inside/outside,
+    # not a magnitude comparison). Nothing to trace to the registry.
+    threshold_param = None
+    threshold_registry_field = None
     description = (
         "Fires when an object leaves an axis-aligned box (stay_inside) or "
         "enters one (stay_outside). Parameters express the condition that must "
@@ -348,6 +383,8 @@ class EffortEventMonitor(MonitorPrimitive):
     """Effort-event predicate driven by /joint_states; serves contact/load clauses."""
 
     feed = "joint_states"
+    threshold_param = "threshold"
+    threshold_registry_field = "limits.max_clamp_effort"
     description = (
         "Watches the absolute effort reported for a named joint against a "
         "condition that must hold. Fires when that condition is violated on "

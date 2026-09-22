@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import math
 import os
 import re
 import sys
@@ -677,6 +678,128 @@ def _object_spec(ctx: WatchDogContext, object_id: str) -> dict[str, Any] | None:
     return None
 
 
+# Prefix for the dotted paths in threshold_source. "raw_spec" is the key
+# get_contract returns an object's spec under, so a source string names the
+# path the agent itself was handed -- the same convention the agent already
+# uses in prose ("Threshold from registry raw_spec.tolerances.position_m").
+_SPEC_PATH_PREFIX = "raw_spec"
+# Relative tolerance for calling an agent-passed threshold equal to the
+# registry's. Not exact equality: the value makes a JSON round trip between
+# two processes, and a scorer must not see a spurious mismatch from a float
+# repr. Far tighter than any real difference between a registry value and a
+# hand-picked default.
+_THRESHOLD_MATCH_REL_TOL = 1e-9
+
+
+def _lookup_spec_field(spec: dict[str, Any] | None, dotted: str) -> Any:
+    """Walk a dotted path (e.g. "tolerances.grasp_slip_tolerance_m") in a spec."""
+    node: Any = spec
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _resolve_arm_object_id(ctx: WatchDogContext, monitor: Any) -> str | None:
+    """The object an arm is about, resolved exactly as a fire's object_id is.
+
+    A monitor that is intrinsically about an object answers for itself via
+    subject_object_id. effort_event watches a joint and has none, so the
+    object is whatever the gripper holds -- asked of the engine at ARM time
+    here, as the fire path asks it at fire time. The two can legitimately
+    differ (a monitor armed on an empty gripper that fires while holding a
+    part), and that difference is information, not an inconsistency.
+    """
+    subject = getattr(monitor, "subject_object_id", None)
+    if subject:
+        return subject
+    held = getattr(ctx.engine, "held_object_id", None)
+    return held() if callable(held) else held
+
+
+def _resolve_threshold_provenance(
+    ctx: WatchDogContext, monitor: Any, object_id: str | None
+) -> dict[str, Any]:
+    """Establish where this monitor's threshold actually came from.
+
+    Monitors are armed from agent-supplied params; nothing in the arm path
+    reads the registry. So provenance cannot be asserted from the code path --
+    it has to be MEASURED, by comparing the value the agent passed against
+    what the registry holds for this object and this family's field.
+
+    The rule the whole field rests on: threshold_source names a registry path
+    only when the values actually agree. Any other outcome says what happened
+    instead. A source string that claimed the registry for a value that did
+    not come from there would make the field worse than absent -- it reads as
+    valid, so nothing downstream would question it, and the Class 4 mechanism
+    (corrupt a registry value, prove the watchdog armed from the corrupted
+    one) would report success for a watchdog that had ignored the registry
+    entirely.
+
+    On a Class 4 run the registry value IS the corrupted one, so a monitor
+    armed from it verifies true against it. That is the intended result: the
+    claim being checked is "armed from the registry as it stands", not "armed
+    from a correct value".
+    """
+    field = getattr(monitor, "threshold_registry_field", None)
+    param = getattr(monitor, "threshold_param", None)
+
+    if not field or not param:
+        # No registry-backed threshold for this family (region). A real
+        # answer, distinct from a failure to look.
+        return {
+            "threshold_source": "structural",
+            "threshold_verified": False,
+            "threshold_registry_field": None,
+            "threshold_registry_value": None,
+        }
+
+    qualified = f"{_SPEC_PATH_PREFIX}.{field}"
+
+    if not object_id:
+        # An effort monitor armed on an empty gripper: there is no object, so
+        # no per-object registry field to check against. Not a mismatch.
+        return {
+            "threshold_source": "object_unresolved",
+            "threshold_verified": False,
+            "threshold_registry_field": qualified,
+            "threshold_registry_value": None,
+        }
+
+    registry_value = _lookup_spec_field(_object_spec(ctx, object_id), field)
+    try:
+        registry_float = float(registry_value)
+    except (TypeError, ValueError):
+        registry_float = None
+
+    try:
+        passed = float(monitor.threshold)
+    except (TypeError, ValueError):
+        passed = None
+
+    if registry_float is None:
+        return {
+            "threshold_source": "no_registry_field",
+            "threshold_verified": False,
+            "threshold_registry_field": qualified,
+            "threshold_registry_value": None,
+        }
+
+    matches = (
+        passed is not None
+        and math.isfinite(passed)
+        and math.isclose(passed, registry_float, rel_tol=_THRESHOLD_MATCH_REL_TOL)
+    )
+    return {
+        # The one place a registry path is asserted, and only behind `matches`.
+        "threshold_source": qualified if matches else "agent_literal",
+        "threshold_verified": bool(matches),
+        "threshold_registry_field": qualified,
+        "threshold_registry_value": registry_float,
+    }
+
+
 def _build_monitor(
     ctx: WatchDogContext,
     monitor_type: str,
@@ -1034,7 +1157,18 @@ if mcp is not None:
             monitor = _build_monitor(
                 ctx, monitor_type, params, clause, halt_on_fire, monitor_id
             )
+            # Resolve before arming: engine.arm emits the arm event, and the
+            # event is the artifact the scorer reads, so provenance has to be
+            # on the monitor by then rather than attached afterwards.
+            arm_object_id = _resolve_arm_object_id(ctx, monitor)
+            monitor.provenance = {
+                "object_id": arm_object_id,
+                **_resolve_threshold_provenance(ctx, monitor, arm_object_id),
+            }
             result = ctx.engine.arm(monitor)
+            # Returned in the tool result as well as published on the event,
+            # so mcp_calls_watchdog.jsonl carries the object, threshold and
+            # source without the scorer having to join to events_watchdog.
             return _ok(command, **result)
         except ValueError as exc:
             return _error(command, exc, monitor_type=monitor_type)

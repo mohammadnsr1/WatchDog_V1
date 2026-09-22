@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+import math
 import threading
 from typing import Any
 
@@ -15,6 +16,40 @@ from robot_backend.events.schema import (
 
 from .monitors import MonitorPrimitive
 from .timebase import wall_ns
+
+
+def _finite_or_none(value: Any) -> float | None:
+    """Float for JSON, or None for a non-finite/absent threshold.
+
+    The base MonitorPrimitive initialises threshold to NaN, and NaN is not
+    representable in strict JSON -- it would reach the scorer as the literal
+    NaN token or as a parse error depending on the reader. None says "this
+    family has no scalar threshold" unambiguously.
+    """
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if math.isfinite(out) else None
+
+
+_PROVENANCE_FIELDS = (
+    "threshold_source",
+    "threshold_verified",
+    "threshold_registry_field",
+    "threshold_registry_value",
+)
+
+
+def _fire_provenance(monitor: Any) -> dict[str, Any]:
+    """The arm-time provenance fields, for restating on the fire payload.
+
+    Only the four provenance keys: provenance also carries the arm-time
+    object_id, which must not overwrite the fire's own object_id (for
+    effort_event the two are resolved at different moments and can differ).
+    """
+    provenance = getattr(monitor, "provenance", None) or {}
+    return {k: provenance[k] for k in _PROVENANCE_FIELDS if k in provenance}
 
 
 class MonitorEngine:
@@ -51,20 +86,39 @@ class MonitorEngine:
             if not monitor.armed_wall_ns:
                 monitor.armed_wall_ns = wall_ns()
             self.monitors[monitor.monitor_id] = monitor
-        self._publish(make_event(
-            "monitor_armed",
-            MonitorArmedPayload(
-                monitor_id=monitor.monitor_id,
-                monitor_type=monitor.monitor_type,
-                params=monitor.params,
-                clause=monitor.clause,
-                halt_on_fire=monitor.halt_on_fire,
-            ),
-        ))
+        provenance = dict(getattr(monitor, "provenance", None) or {})
+        # provenance["object_id"] is the arm-time resolution done by the
+        # server (which owns the registry and the held-part question); fall
+        # back to the monitor's own subject so an arm that bypassed the
+        # server still attributes as well as it can.
+        object_id = provenance.pop("object_id", None) or monitor.subject_object_id
+        payload = MonitorArmedPayload(
+            monitor_id=monitor.monitor_id,
+            monitor_type=monitor.monitor_type,
+            params=monitor.params,
+            clause=monitor.clause,
+            halt_on_fire=monitor.halt_on_fire,
+            object_id=object_id,
+            threshold=_finite_or_none(monitor.threshold),
+            comparison=monitor.comparison or "",
+            reference_values=dict(monitor.reference_values),
+            **provenance,
+        )
+        self._publish(make_event("monitor_armed", payload))
+        # The tool result mirrors the event so mcp_calls_watchdog.jsonl is
+        # self-sufficient for the arming sub-scores -- object, threshold and
+        # provenance all readable without joining to events_watchdog.jsonl.
         return {
             "monitor_id": monitor.monitor_id,
             "monitor_type": monitor.monitor_type,
+            "object_id": object_id,
+            "threshold": _finite_or_none(monitor.threshold),
+            "comparison": monitor.comparison or "",
             "reference_values": dict(monitor.reference_values),
+            "threshold_source": payload.threshold_source,
+            "threshold_verified": payload.threshold_verified,
+            "threshold_registry_field": payload.threshold_registry_field,
+            "threshold_registry_value": payload.threshold_registry_value,
         }
 
     def disarm(self, monitor_id: str, reason: str) -> bool:
@@ -234,6 +288,9 @@ class MonitorEngine:
             comparison=monitor.comparison,
             clause=self._clause_with_object_id(monitor.clause, object_id),
             object_id=object_id,
+            # Carried from the arm, not re-derived: the audit question is
+            # where the ARMED value came from.
+            **_fire_provenance(monitor),
             action_taken=action_taken,
             halt_result=halt_result,
         )

@@ -126,6 +126,57 @@ class MonitorArmedPayload(BaseModel):
     clause: dict[str, Any] | None
     halt_on_fire: bool
 
+    # Structural attribution of the arm to an object, resolved the same way
+    # MonitorFirePayload.object_id is: the monitor's own subject
+    # (relative_frame's child_frame, stationarity's and region's object_id),
+    # or for joint-scoped effort_event the part held at ARM time. None means
+    # genuinely no object. params still carries the raw parameters; this is
+    # the field to join arms and fires on without knowing each family's
+    # parameter names.
+    object_id: str | None = None
+
+    # The threshold this monitor will actually compare against, lifted out of
+    # params so it is readable without per-family knowledge. None when the
+    # family has no scalar threshold, or when it is not finite.
+    threshold: float | None = None
+    comparison: str = ""
+
+    # --- threshold provenance -------------------------------------------
+    # Where the threshold above actually came from. Monitors are armed with
+    # AGENT-SUPPLIED params: the server does not read the registry to build
+    # them. So "the watchdog read the registry" is a claim about a particular
+    # arm call, and these four fields are the evidence for it, established by
+    # comparing the passed value against the registry at arm time.
+    #
+    # threshold_source is the dotted registry path ONLY when the passed value
+    # actually matches what the registry holds for this object and field
+    # (e.g. "raw_spec.tolerances.grasp_slip_tolerance_m"). Otherwise it names
+    # what happened instead -- "agent_literal", "object_unresolved",
+    # "no_registry_field", "structural", "unresolved". It must never assert a
+    # registry path for a value that did not come from there: the field is
+    # only worth anything to a scorer if it can distinguish a genuine
+    # registry read from a default that happens to coincide.
+    threshold_source: str = "unresolved"
+    # True only when the comparison above succeeded. Redundant with
+    # threshold_source by construction, and deliberately so: a scorer should
+    # not have to parse a string to learn whether verification passed.
+    threshold_verified: bool = False
+    # Which registry field WAS checked, kept even on a mismatch so the audit
+    # trail shows what the value was measured against rather than only that
+    # it failed.
+    threshold_registry_field: str | None = None
+    # What the registry actually held, so a mismatch shows the delta. On a
+    # Class 4 run this is the CORRUPTED value, and a monitor armed from it
+    # verifies true against it -- which is exactly how arming-from-the-
+    # corrupted-registry is proven.
+    threshold_registry_value: float | None = None
+
+    # The reference captured at arm time for families that freeze one
+    # (relative_frame's parent->child translation, stationarity's position).
+    # Empty for families that do not. Previously returned only in the arm
+    # tool result, so it was absent from the event stream the scorer reads.
+    reference_values: dict[str, Any] = {}
+
 
 class MonitorFirePayload(BaseModel):
     """WatchDog monitor violation event."""
@@ -146,6 +197,17 @@ class MonitorFirePayload(BaseModel):
     # the part the gripper was holding at fire time. None means genuinely no
     # object -- an effort fire on an empty gripper, which is itself a finding.
     object_id: str | None = None
+    # Provenance of `threshold` above, carried over verbatim from the arm so a
+    # fire is auditable on its own without joining back to the arm event. Same
+    # semantics and same vocabulary as MonitorArmedPayload -- see the long note
+    # there. Copied at arm time rather than re-derived at fire time: the
+    # question is where the armed value came from, and re-resolving against a
+    # registry that could have been reloaded in between would answer a
+    # different question.
+    threshold_source: str = "unresolved"
+    threshold_verified: bool = False
+    threshold_registry_field: str | None = None
+    threshold_registry_value: float | None = None
     action_taken: str
     # HaltClient.halt()'s full return dict ({"ok", "detail", "goals_cancelled"})
     # when halt_on_fire triggered a cancel attempt; None when this fire was

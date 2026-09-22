@@ -329,6 +329,41 @@ def _redact(value: Any, _depth: int = 0) -> Any:
     return repr(value)
 
 
+# Cap on the serialized result recorded per call. Results are recorded because
+# a scorer reading mcp_calls_*.jsonl needs what a tool ANSWERED, not only that
+# it was asked -- arm_monitor's object/threshold/threshold_source being the
+# case that motivated this. But some results are unbounded: get_evidence
+# returns whole sample windows and capture_frames returns encoded images, and
+# writing those inline would grow the call log by orders of magnitude and bury
+# the fields anyone actually reads. 16 KiB holds every small structured result
+# whole; anything larger is replaced by a summary that says so.
+_MAX_LOGGED_RESULT_BYTES = 16384
+
+
+def _summarize_result(result: Any) -> Any:
+    """JSON-safe result for the call log, truncated with an explicit marker.
+
+    Never raises and never silently drops: a result too large to record is
+    replaced by a dict that names its keys and its size, so the log says "this
+    was omitted and here is its shape" rather than appearing to have no result.
+    """
+    try:
+        redacted = _redact(result)
+        encoded = json.dumps(redacted)
+    except Exception as exc:  # pragma: no cover - logging must never break a call
+        return {"_result_unloggable": f"{type(exc).__name__}: {exc}"}
+    if len(encoded) <= _MAX_LOGGED_RESULT_BYTES:
+        return redacted
+    return {
+        "_result_truncated": True,
+        "_result_bytes": len(encoded),
+        "_result_keys": sorted(redacted)[:40] if isinstance(redacted, dict) else None,
+        # ok is the one field worth keeping whatever the size, since it is the
+        # call's outcome.
+        "ok": redacted.get("ok") if isinstance(redacted, dict) else None,
+    }
+
+
 def _append_call_record(record: dict[str, Any]) -> None:
     """Append one JSON line to mcp_calls_<role>.jsonl. Never raises.
 
@@ -393,6 +428,7 @@ def log_tool_call(server_name: str, func: Callable) -> Callable:
                 record["error"] = result.get("error")
         else:
             record["ok"] = True
+        record["result"] = _summarize_result(result)
         _append_call_record(record)
         return result
 
