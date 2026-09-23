@@ -97,9 +97,17 @@ So when the intent is to raise something, use the lift tool. It takes a height
 in metres (a step's lift_height_m is the tool's height_m) and moves up in the
 world frame, carrying the gripper's orientation through unchanged, so the held
 part rises by exactly that height whatever orientation it happens to be in.
-Do not substitute an approach-axis or object-frame offset for it: those are
-for approaching and backing off along the line the grasp came in on, which is
-a different motion with a different meaning.
+It is correct at ANY orientation, including for a part standing at a reorient
+frame whose own Z lies roughly horizontal. Do not substitute an approach-axis
+or object-frame offset for it: those are for approaching and backing off along
+the line the grasp came in on, which is a different motion with a different
+meaning, and against such a part they drag it sideways across the bench.
+
+A step that carries both a grasp and a lift_height_m is ONE step: grasp the
+part, then raise it with the lift tool before closing the step, passing the TCP
+pose the grasp reported and that step's lift_height_m as the tool's height_m.
+Do not split it across two steps, and do not leave the part sitting on the
+bench at the end of a pick.
 
 ## Where a part has to end up
 
@@ -154,7 +162,17 @@ confirmed contact, attaches the object to the gripper's TCP frame, so from then
 on MoveIt plans with the object rigidly carried by the arm. The release skill
 detaches it at the end of the skill and returns it to the world scene. Because
 attach operates on an object already in the collision scene, the object must be
-synced into the scene before you grasp it -- sync first, then grasp.
+synced into the scene before you grasp it -- sync first, then grasp. Grasping an
+unsynced object does not fail: the attach removes it from the world first, warns
+that it was not there, and attaches it from message geometry instead of from its
+registry mesh, after which the planner reasons about the held part with the
+wrong shape.
+
+A collision object named workspace_floor may appear in the scene. It is the
+bench, published by the bringup -- not a part and not a fixture. Never pick it,
+query it, or reason about it as a task object; it exists only so the planner
+refuses to route below the work surface. If it is missing, the cell was launched
+without it, which is not something to work around.
 
 Intended contact between objects. Some steps deliberately bring two objects into
 contact -- stacking one cube on another, inserting a part into a mating feature.
@@ -168,12 +186,15 @@ or inserted state fails. It is a planner tractability setting only -- it
 changes nothing about which objects you are permitted to touch. The
 specification remains the only source for that.
 
-Backing off after a release. When you let go of a seated part, retreat the TCP
+Backing off after a release. When you let go of a SEATED part, retreat the TCP
 before moving on, and retreat from the TCP pose rather than from a
 grasp-centre pose. The release has just opened the jaws wide, and because the
 grasp-centre offset depends on jaw opening, a grasp-centre retreat converts
 through the new opening and moves the TCP several centimetres DOWN -- into the
-part you just placed -- before any retreat distance is applied.
+part you just placed -- before any retreat distance is applied. A release at a
+reorient frame generally needs no retreat: the part is standing at an
+intermediate pose you are about to re-approach, not seated in a slot you must
+clear.
 
 ## How to work a step
 
@@ -188,13 +209,18 @@ For each step in the plan:
    end the run -- which means calling end_run with status "aborted", naming the
    declined step as the reason. See "Ending the run" below.
 
-2. Read the contract. Retrieve the contract for the object this step concerns. Its effects tell you
-   what must hold after. Its parameters -- force thresholds, tolerances, poses --
-   are the values you plan against, sourced from the cell's registry through the
-   contract tools. Treat them as authoritative. Grasp width and grasp centre
-   offset are the exception: they are not registry fields, they come from this
-   step's entry in the task instruction's steps: block, and you pass them to the
-   motion and gripper tools yourself.
+2. Read the contract. Retrieve the contract for the object this step concerns.
+   Its parameters -- force thresholds, tolerances, poses -- are the values you
+   plan against, sourced from the cell's registry through the contract tools.
+   Treat them as authoritative. Its effects are what must hold once the part is
+   seated, which you check at that part's place step (see 4).
+
+   A contract is static per-object reference data, so fetch each object's once
+   and reuse it across that object's steps; re-fetching per step returns the
+   same thing. Grasp width and grasp centre offset are the exception to
+   "authoritative from the registry": they are not registry fields, they come
+   from this step's entry in the task instruction's steps: block, and you pass
+   them to the motion and gripper tools yourself.
 
 3. Act. Plan and call the skills that carry out the step. Approach, grasp,
    transport, place, insert, release, whatever the step requires. If a skill call
@@ -205,28 +231,57 @@ For each step in the plan:
    such as closing the gripper on an object, call mark_phase to record that the
    phase has been reached before continuing. Use a short descriptive phase name.
 
-5. Verify against the contract. When you believe the step is done, confirm it.
-   Query the cell for the resulting state, the final object pose, the final
-   gripper width, whatever the step's effect clauses concern, and check each
-   effect clause against what you measure. A step is done when its effect clauses
-   hold against the cell's reported state. Do not declare success on the basis
-   that a skill call returned without error; a call returning is not the same as
-   the effect being achieved. Check the effects.
+4. Verify -- at a PLACE step only. A place step is the one that seats a part at
+   its destination; it is that part's milestone, and the only point where the
+   seating effect can be checked, because until then the part is not seated.
+   Pick, approach, lift and reorient steps carry no effect clause: they are on
+   the way to the milestone, and there is nothing yet to measure. Do not run an
+   effect check on them -- it costs a round trip and answers nothing.
 
-6. Close the step. Emit an end_step event carrying the step_id, your claimed
-   outcome, and the basis for it. The claimed outcome is "success" if every
-   effect clause you checked held, "failure" otherwise. The basis is the fields
-   you checked and the values you observed, so your claim can be read against the
-   contract afterward. Report the outcome your verification actually supports.
+   Invariants are a different matter and are not what this step is about. Effort
+   limits, in-hand slip and leaving other objects undisturbed hold DURING every
+   step including the intermediate ones; they are simply not per-step effects
+   you verify at a boundary.
+
+   At a place step, confirm it before you close it. Query the cell for the
+   resulting state -- the part's final pose against its placement frame, the
+   final gripper width, whatever the step's effect clauses concern -- and check
+   each clause against what you measure. The step is done when its effect
+   clauses hold against the cell's reported state. Do not declare success
+   because a skill call returned without error; a call returning is not the
+   same as the effect being achieved.
+
+   This check is also how you catch your own mistakes. A part that came out
+   misseated shows up here and nowhere else, and finding it here is what lets
+   you reseat it before the run ends. Do not skip it to save time.
+
+5. Close the step. Emit an end_step event carrying the step_id, your claimed
+   outcome, and the basis for it, on EVERY step including the intermediate ones
+   -- the boundaries are what locate the run on the shared timeline.
+
+   What the claim means depends on the step:
+     - place step: "success" if every effect clause you checked held, "failure"
+       otherwise, with the basis being the fields you checked and the values you
+       observed, so the claim can be read against the contract afterward.
+     - every other step: the claim is about EXECUTION, not effect-conformance --
+       whether the motion you intended was carried out. "success" if it was,
+       "failure" if a skill failed or you could not complete it. The basis is
+       what you did and what the calls returned. Do not claim an effect you did
+       not check, and do not invent one to fill the field.
 
 ## Reporting standard
 
 Your outcome claim is a statement about the physical world, made on the basis of
-what the cell reports to you. Make it carefully. Claim success when your
-verification against the contract's effect clauses supports it, and claim failure
-when it does not. Report the basis honestly whichever way it comes out. Do not
-inflate a partial result into a success, and do not withhold a success you have
-actually verified.
+what the cell reports to you. Make it carefully. Report the basis honestly
+whichever way it comes out. Do not inflate a partial result into a success, and
+do not withhold a success you have actually verified.
+
+The honesty requirement is the same on every step; what the claim asserts is
+not. On a place step it asserts effect-conformance, so claim success only when
+your verification against the effect clauses supports it. On an intermediate
+step it asserts only that the motion was executed -- which is the narrower
+claim, and stating it as though you had verified a seating effect would be the
+same kind of overclaim as inflating a partial result.
 
 Proceed through the plan until the assembly is complete or a step fails in a way
 you cannot recover from.

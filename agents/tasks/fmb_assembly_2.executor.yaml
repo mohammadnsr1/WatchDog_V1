@@ -1,24 +1,20 @@
 # EXECUTOR instruction for fmb_assembly_2.
 #
 
-
 name: fmb_assembly_2
 instruction_spec: |
   Assemble the FMB board: seat u_brown, u_orange, line_green and
   inverted_u_yellow into their places on base1, in that order.
 
-  base1 is the fixture and is never picked. Its placement locations are
-  published as TF frames rather than fixed world coordinates, so query them
-  rather than assuming numbers: u_brown_placement, u_orange_placement,
-  line_green_placement, inverted_u_yellow_placement. Query each frame the same
-  way you query an object's pose. A destination frame gives the pose the PART
-  must end up at, not a pose for the gripper.
+  base1 is the fixture and is never picked. Its destinations are published
+  as TF frames, queried live rather than hardcoded:
+  u_brown_placement, u_orange_placement,
+  line_green_placement, inverted_u_yellow_placement.
 
   Order matters. Each part you seat becomes an obstacle for the ones after it,
   so do not reorder without reason.
 
   Move to safe joint pose at the beginning of the task.
-
 
   Preconditions:
     - All four parts and base1 are present.
@@ -38,33 +34,8 @@ instruction_spec: |
       outside the intended seating contact.
     - Only the parts involved in each step should be manipulated, and touched. the rest of the parts and objects should remain undisturbed. 
 
-  Working notes:
-
-    - Sync the scene BEFORE the first pick, and again after any release, so
-      every part exists as a world collision object before you grasp it.
-      Attaching a part removes it from the world first; if it was never synced
-      in, that removal warns that the object does not exist and the part is
-      attached from message geometry rather than from its registry mesh. The
-      planner then reasons about the held part with the wrong shape. 
-
-    - A collision object named workspace_floor may appear in the scene. It is
-      the bench, published by the bringup, not a part and not a fixture. Never
-      pick it, query it or reason about it as a task object; it exists only so
-      the planner refuses to route below the work surface. If it is missing
-      the cell was launched without it, which is not something to work around.
-
-
-
-    - After releasing a seated part, back the TCP straight out before moving
-      on. Retreat from the TCP pose, not from a grasp-centre pose: the
-      release has just opened the jaws, and a grasp-centre retreat converts
-      through the new opening and drives the TCP down into the part you just
-      placed. no retreat needed for reorientation steps in general.
-
+  Working notes: none beyond the general rules in your standing instructions.
 step_plan: |
-  Sync the scene first, before any motion, so all five objects are in the
-  planning scene as collision objects.
-
   Four parts, seated in order. Each is picked once and carried straight to its
   placement -- there is no reorient stage anywhere in this task. Each part ends
   released, verified against its placement frame, with the TCP retreated clear.
@@ -72,21 +43,18 @@ step_plan: |
 steps:
   - step_id: pick_u_brown
     object_id: u_brown
-    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
+    action_hint: grasp, then lift
     grasp_width_m: 0.02
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
-    lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
-
 
   - step_id: place_approach_u_brown
     object_id: u_brown
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_brown_placement
-    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -114,21 +82,18 @@ steps:
 
   - step_id: pick_u_orange
     object_id: u_orange
-    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
+    action_hint: grasp, then lift
     grasp_width_m: 0.02
     approach_distance_m: -0.1
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
-    lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
-
 
   - step_id: place_approach_u_orange
     object_id: u_orange
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_orange_placement
-    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:
       position: {x: 0.001, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -157,18 +122,15 @@ steps:
       orientation_tolerance_rad: 0.001
 
   # ---- line_green: single pick, direct insertion -----------------------------
-  # Grasp and lift are ONE step -- see pick_u_orange.
   - step_id: pick_line_green
     object_id: line_green
-    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
+    action_hint: grasp, then lift
     grasp_width_m: 0.03
     approach_distance_m: -0.1
     grasp_center_offset:
       position: {x: 0.0, y: 0.0, z: 0.01}
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     lift_height_m: 0.3
-    lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
-
 
   - step_id: place_approach_line_green
     object_id: line_green
@@ -203,26 +165,20 @@ steps:
       position_tolerance_m: 0.0001
       orientation_tolerance_rad: 0.001
 
-
-
-
   - step_id: pick_inverted_u_yellow
     object_id: inverted_u_yellow
-    action_hint: grasp the part, then raise it straight up with the lift tool in the same step, passing the TCP pose the grasp reported and lift_height_m as height_m
+    action_hint: grasp, then lift
     grasp_width_m: 0.04
     approach_distance_m: -0.10
     grasp_center_offset:
       position: {x: 0.0, y: -0.02, z: 0.0}
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
     lift_height_m: 0.3
-    lift_note: lift goes up in the WORLD frame, so this is a height, not a signed offset along any local axis. It is correct whatever orientation the part is in -- including a part standing at a reorient frame, whose own Z lies roughly horizontal and which an approach-axis or object-frame offset would drag sideways across the bench instead of raising.
-
 
   - step_id: place_approach_inverted_u_yellow
     object_id: inverted_u_yellow
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_yellow_placement
-    axis_note: target_offset is expressed in the destination frame's OWN axes, not world. This frame's local +Z does not point up, so the vertical standoff is carried on local Y; adding it in world coordinates stages the approach sideways instead of above.
     target_offset:
       position: {x: 0.00, y: -0.1200, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}

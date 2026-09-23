@@ -35,20 +35,12 @@ instruction_spec: |
     - Undisturbed objects: every object a step does not act on must stay
       where it last came to rest until some step acts on it.
 
-      This set's own parts rotate through that cycle: u_green,
-      inverted_u_brown, hex_blue and hex_red each become active when the
-      first step naming them begins and inactive again once their place step
-      closes, and the requirement applies to each of them whenever it is not
-      the active part.
-
-      The OTHER assembly's parts do not rotate. u_brown, u_orange,
-      line_green, inverted_u_yellow and the base1 fixture are on the table
-      for this whole run and NO step of this assembly ever acts on any of
-      them. They are inactive from run start to run end, so the undisturbed
-      requirement stands over them continuously -- it is not tied to any
-      step's active/inactive cycle, and there is no point in the run at which
-      one of them becoming active could excuse its movement. Any movement of
-      any of them, at any time, by any step, is a disturbance.
+      This set's own parts rotate through that cycle, becoming active when a
+      step names them and inactive again once their place step closes. The
+      OTHER assembly's parts never do: no step here acts on any of them, so
+      they are inactive from run start to run end and the requirement stands
+      over them continuously. Any movement of one, at any time, is a
+      disturbance. They are listed under object_ids as BYSTANDERS.
 
   Preconditions: this task has none. Do not look for them and do not treat
   their absence as something missing.
@@ -73,11 +65,9 @@ step_plan: |
     3. hex_blue          -> hex_blue_hole
     4. hex_red           -> hex_red_hole
 
-  The other FMB assembly's parts -- u_brown, u_orange, line_green,
-  inverted_u_yellow and the base1 fixture -- sit on the same table throughout
-  this run and are expected never to move, so the full set of objects that
-  must stay still at any moment is those five plus whichever of this
-  assembly's four parts is not currently being worked on.
+  The other assembly's parts (object_ids, BYSTANDERS) are on the table
+  throughout and must never move, so at any moment the objects that must
+  stay still are those plus whichever of this set's four is not active.
 
   A part starts being worked on when the executor begins the first step
   naming it, and stops when its place step closes. u_green is additionally
@@ -183,36 +173,18 @@ object_ids: |
   hex_red          — hex pin, graspable. Must end seated at hex_red_hole.
   base2            — the fixture. NOT graspable, never picked, must stay put.
 
-  BYSTANDERS — the other FMB assembly's objects. They are PRESENT on the
-  table for this entire run, but they are NOT part of this task. This
-  assembly never picks, places, or otherwise manipulates any of them, they
-  have no placement frames here, and none of them appears in the steps block.
-  Do not look for an end-state for them and do not treat their not being
-  seated as something missing -- their only requirement is that they do not
-  move.
+  BYSTANDERS — the other FMB assembly's objects. PRESENT on the table for
+  this entire run, but NOT part of this task: never picked, placed or
+  otherwise manipulated here, no placement frames, absent from the steps
+  block. Do not look for an end-state for them and do not treat their not
+  being seated as something missing. Their only requirement is that they
+  do not move -- any movement of one, at any time, is a disturbance.
 
-  u_brown           — belongs to the OTHER FMB assembly, present on the table
-                      but NOT part of this task. It is never picked, placed,
-                      or otherwise manipulated here. It must remain exactly
-                      where it rests for the entire run; any movement of it is
-                      a disturbance.
-  u_orange          — belongs to the OTHER FMB assembly, present on the table
-                      but NOT part of this task. It is never picked, placed,
-                      or otherwise manipulated here. It must remain exactly
-                      where it rests for the entire run; any movement of it is
-                      a disturbance.
-  line_green        — belongs to the OTHER FMB assembly, present on the table
-                      but NOT part of this task. It is never picked, placed,
-                      or otherwise manipulated here. It must remain exactly
-                      where it rests for the entire run; any movement of it is
-                      a disturbance.
-  inverted_u_yellow — belongs to the OTHER FMB assembly, present on the table
-                      but NOT part of this task. It is never picked, placed,
-                      or otherwise manipulated here. It must remain exactly
-                      where it rests for the entire run; any movement of it is
-                      a disturbance.
-  base1             — the OTHER assembly's fixture; not used here, must stay
-                      put.
+  u_brown            — other assembly's part; must not move.
+  u_orange           — other assembly's part; must not move.
+  line_green         — other assembly's part; must not move.
+  inverted_u_yellow  — other assembly's part; must not move.
+  base1              — other assembly's fixture; not used here, must stay put.
 
   Registry acm_allowed_object_pairs covers every pair among ALL TEN FMB
   objects -- this assembly's five AND the other assembly's five, including
