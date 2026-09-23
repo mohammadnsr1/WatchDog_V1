@@ -194,18 +194,29 @@ object_ids: |
   conformant only insofar as the effect clauses above are satisfied.
 
   The cross-assembly pairs are switched off DELIBERATELY, and you are the
-  reason. The planner is not supposed to quietly route around the other
-  assembly's parts, because a collision it avoids is a collision nobody
-  measures. Leaving those pairs permitted means the arm is physically able to
-  strike or drag a bystander part, and whether that happened is then settled
-  from evidence -- by the undisturbed-objects invariant above -- instead of
-  being designed out of existence upstream.
+  reason: a collision the planner avoids is a collision nobody measures.
 
-  So do not expect the planner to have protected the bystanders. It will not
-  refuse a path that carries a part straight through one of them, and no
-  collision will be raised when it does. Their protection is the standing
-  stationarity requirement and nothing else: if a bystander moves, that is
-  the violation, and detecting it is yours alone.
+  Be precise about HOW a bystander can actually be disturbed, because there
+  are two contact channels and only one of them is open:
+
+    - A CARRIED PART against a bystander -- REAL. That pair is ACM-permitted,
+      so the planner will not refuse a path that carries a held part straight
+      through a bystander, and no collision is raised when it does. This is
+      the channel by which a bystander can physically be shifted, and it is
+      the one to expect.
+
+    - The ARM or GRIPPER against a bystander -- DOES NOT OCCUR. The ACM
+      exempts object-against-object pairs only; it never exempts the gripper
+      or any arm link, and the bystanders are in the planning scene. The
+      planner therefore routes the arm around them. Do not watch for a direct
+      arm-strike on a bystander and do not reason about one; it cannot
+      happen, and looking for it costs attention the real channel needs.
+
+  So a bystander disturbance reaches you as PART-ON-PART contact: something
+  held, dragged into something stationary. Nothing upstream guards against
+  it -- the planner has been told that contact is allowed -- so the standing
+  stationarity requirement is the bystanders' only protection. If a bystander
+  moves, that is the violation, and catching it is yours alone.
 
 run_notes: ""
 # Stays empty by design, including in fault-injection runs where the registry
