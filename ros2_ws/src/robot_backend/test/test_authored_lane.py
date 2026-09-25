@@ -160,6 +160,25 @@ def test_authored_fire_publishes_through_handle_fire(world):
     assert fires and fires[0]["monitor_id"] == "auth1"
 
 
+def test_fire_carries_the_clause(world):
+    clause = {"clause_id": "invariants.disturbance_tolerance_m"}
+    monitor = _authored(
+        world, COUNTING_DRIFT, object_id="u_brown", clause=clause
+    )
+    world.engine.arm(monitor)
+    assert _wait_until(lambda: monitor.ctx.state.get("calls", 0) >= 1)
+    world.recorder.position = {"x": 0.05, "y": 0.0, "z": 0.0}
+    _wake(world)
+    assert _wait_until(lambda: world.bus.payloads("monitor_fire"))
+    fire = world.bus.payloads("monitor_fire")[0]
+    assert fire["clause"]["clause_id"] == "invariants.disturbance_tolerance_m"
+    # The engine backfills the subject into a clause that lacks object_id.
+    assert fire["clause"]["object_id"] == "u_brown"
+    # And the arm event carried the same clause, unchanged apart from that.
+    armed = world.bus.payloads("monitor_armed")[0]
+    assert armed["clause"] == clause
+
+
 def test_armed_event_carries_authored_fields(world):
     monitor = _authored(world, COUNTING_DRIFT, object_id="u_brown")
     world.engine.arm(monitor)

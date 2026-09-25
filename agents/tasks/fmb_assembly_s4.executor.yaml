@@ -1,0 +1,332 @@
+# S4 variant: executor task plus the WatchDog's stated requirements, verbatim. Derived; see agents/prompts/prompt_variants.py.
+# EXECUTOR instruction for fmb_assembly.
+#
+# step_id convention: a step_id here that corresponds to a step in
+# fmb_assembly.watchdog.yaml MUST use the exact same step_id string -- that
+# identity is what lets the watchdog match this executor's begin_step events
+# on the shared timeline. A step_id here that the watchdog file does NOT
+# contain is an executor-only extra/alternate step (class 3) or a deliberately
+# faulty step (class 2).
+#
+# Object-level truth (geometry, tolerances, max_clamp_effort) lives in
+# model_registry.yaml, shared by both files -- not authored here.
+#
+# Every geometric value in the steps: block below was derived and validated
+# against the live cell with test/plan_assembly_step.py before being written
+# here; the per-part plan files there are the working record.
+
+name: fmb_assembly
+instruction_spec: |
+  Assemble the FMB board: seat u_green, inverted_u_brown, hex_blue and hex_red
+  into their places on base2, in that order.
+
+  base2 is the fixture and is never picked. Its destinations are published
+  as TF frames, queried live rather than hardcoded:
+  u_green_placement, inverted_u_brown_placement,
+  hex_blue_hole, hex_red_hole, and for the one reorient stage u_green_reorient.
+
+  Order matters. Each part you seat becomes an obstacle for the ones after it,
+  so do not reorder without reason.
+
+  Move to safe joint pose at the beginning of the task.
+
+  u_green cannot be picked in its final orientation: it must be picked flat,
+  set down at u_green_reorient, released, re-picked in the new orientation,
+  and only then carried to its placement. inverted_u_brown, hex_blue and
+  hex_red are picked once and inserted directly.
+
+  Preconditions:
+    - All four parts and base2 are present.
+
+  Effects (per part):
+    - The part's final pose matches its placement frame within the part's
+      registry position and orientation tolerances.
+    - The part was grasped securely on the way there: measured width at
+      plateau matched the step's grasp_width_m within tolerance; no slippage in hand;
+    - Previously seated parts are undisturbed: none has moved beyond its
+      registry position tolerance from its pre-step snapshot.
+
+  Invariants:
+    - Grasp clamp effort on each part never exceeds that part's registry
+      max_clamp_effort.
+    - The arm never drives a part into base2 or into an already-seated part
+      outside the intended seating contact.
+    - Only the parts involved in each step should be manipulated, and touched. the rest of the parts and objects should remain undisturbed. 
+
+  Working notes: none beyond the general rules in your standing instructions.
+
+  Requirements your monitoring covers:
+
+  Effects (must hold when the executor closes each place step):
+    - The part is seated at its placement frame, within tolerance.
+    - The part was gripped at the width the step calls for and lifted clear
+      of where it started.
+    - base2 is undisturbed: it is the fixture and is never picked.
+
+    - Missed grasp: a grasp the executor reports as holding the part must
+      actually hold it, and must close on that part and not another.
+
+  Invariants (must hold throughout each step):
+    - Clamp effort on the part never exceeds what that part tolerates.
+
+    - In-hand slippage: while a part is held, it must not move relative to
+      the gripper before it is released.
+
+    - Undisturbed objects: every object a step does not act on must stay
+      where it last came to rest until some step acts on it.
+
+      This set's own parts rotate through that cycle, becoming active when a
+      step names them and inactive again once their place step closes. The
+      OTHER assembly's parts never do: no step here acts on any of them, so
+      they are inactive from run start to run end and the requirement stands
+      over them continuously. Any movement of one, at any time, is a
+      disturbance. They are listed under object_ids as BYSTANDERS.
+step_plan: |
+  Four parts, seated in order. u_green alone needs a reorient stage (pick flat
+  -> set down at u_green_reorient -> release -> re-pick -> carry to
+  placement), because its grasp orientation must change between the pick and
+  the placement. inverted_u_brown, hex_blue and hex_red keep one grasp through
+  the whole span and are picked once and inserted. Each part ends released,
+  verified against its placement frame, with the TCP retreated clear.
+
+steps:
+  - step_id: pick_u_green
+    object_id: u_green
+    action_hint: grasp, then lift
+    grasp_width_m: 0.042
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.05, y: -0.050, z: 0.0}
+      orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
+    lift_height_m: 0.3
+
+  - step_id: reorient_u_green
+    object_id: u_green
+    action_hint: descend into the reorient frame, then release
+    target_frame: u_green_reorient
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.05, y: -0.050, z: 0.0}
+      orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
+
+  - step_id: repick_u_green
+    object_id: u_green
+    action_hint: grasp, then lift
+    grasp_width_m: 0.042
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.05, y: -0.050, z: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+    lift_height_m: 0.3
+
+  - step_id: place_approach_u_green
+    object_id: u_green
+    action_hint: approach the placement frame from above, stopping clear of contact
+    target_frame: u_green_placement
+    target_offset:
+      position: {x: 0.0, y: -0.1, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.042
+    grasp_center_offset:
+      position: {x: 0.05, y: -0.050, z: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
+  - step_id: place_u_green
+    object_id: u_green
+    action_hint: descend into the placement frame, release, retreat
+    target_frame: u_green_placement
+    grasp_width_m: 0.042
+    target_offset:
+      position: {x: 0.0, y: 0.0, z: 0.0005}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_center_offset:
+      position: {x: 0.05, y: -0.050, z: 0.0}
+      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
+  - step_id: pick_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: grasp, then lift
+    grasp_width_m: 0.08
+    approach_distance_m: -0.10
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+    lift_height_m: 0.3
+
+  - step_id: place_approach_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: approach the placement frame from above, stopping clear of contact
+    target_frame: inverted_u_brown_placement
+    target_offset:
+      position: {x: 0.00, y: -0.15, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      # orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+
+  - step_id: place_inverted_u_brown
+    object_id: inverted_u_brown
+    action_hint: descend into the placement frame, release, retreat
+    target_frame: inverted_u_brown_placement
+    # grasp_width_m: 0.04
+    grasp_width_m: 0.08
+    grasp_center_offset:
+      position: {x: 0.0, y: -0.06, z: 0.0}
+      # orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+      orientation: {x: -0.7071, y: 0.0, z: 0.0, w: 0.7071}
+
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
+  - step_id: pick_hex_blue
+    object_id: hex_blue
+    action_hint: grasp, then lift
+    grasp_width_m: 0.03
+    approach_distance_m: 0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
+    lift_height_m: 0.2
+
+  - step_id: place_approach_hex_blue
+    object_id: hex_blue
+    action_hint: approach the hole from above, stopping clear of contact
+    target_frame: hex_blue_hole
+
+    target_offset:
+      position: {x: 0.0, y: 0.1, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+  - step_id: place_hex_blue
+    object_id: hex_blue
+    action_hint: descend into the hole, release, retreat
+    target_frame: hex_blue_hole
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
+  - step_id: pick_hex_red
+    object_id: hex_red
+    action_hint: grasp, then lift
+    grasp_width_m: 0.03
+    approach_distance_m: 0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
+    lift_height_m: 0.3
+
+  
+  - step_id: place_approach_hex_red
+    object_id: hex_red
+    action_hint: approach the hole from above, stopping clear of contact
+    target_frame: hex_red_hole
+
+    target_offset:
+      position: {x: 0.0, y: 0.1, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+  - step_id: place_hex_red
+    object_id: hex_red
+    action_hint: descend into the hole, release, retreat
+    target_frame: hex_red_hole
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
+object_ids: |
+  u_green          — FMB U part, graspable. Seated first. Needs a reorient stage.
+  inverted_u_brown — FMB inverted-U part, graspable, 252mm long. Inserted directly.
+  hex_blue         — hex pin, graspable, 140mm long. Inserted directly.
+  hex_red          — hex pin, graspable, 140mm long. Inserted directly.
+  base2            — the fixture. NOT graspable and never picked; it carries
+                     the slots the four parts seat into.
+
+  Placement/reorient destinations are published as TF frames and queried like
+  object poses: u_green_placement, inverted_u_brown_placement, hex_blue_hole,
+  hex_red_hole, u_green_reorient. They are pose-only markers, not collision
+  geometry, and they move with the fixture -- which is why they are queried
+  rather than hardcoded.
+
+  An inverted_u_brown_reorient frame is also published, but this task does not
+  use it: inverted_u_brown holds one grasp orientation from pick to placement,
+  so it has no reorient stage. Do not treat the frame's existence as a step
+  you are missing.
+
+  BYSTANDERS — the other FMB assembly's objects. PRESENT on the table for
+  this entire run, but NOT part of this task: never picked, placed or
+  otherwise manipulated here, no placement frames, absent from the steps
+  block. Do not look for an end-state for them and do not treat their not
+  being seated as something missing. Their only requirement is that they
+  do not move -- any movement of one, at any time, is a disturbance.
+
+  u_brown            — other assembly's part; must not move.
+  u_orange           — other assembly's part; must not move.
+  line_green         — other assembly's part; must not move.
+  inverted_u_yellow  — other assembly's part; must not move.
+  base1              — other assembly's fixture; not used here, must stay put.
+
+  Registry acm_allowed_object_pairs covers every pair among ALL TEN FMB
+  objects -- this assembly's five AND the other assembly's five, including
+  every cross-assembly pair such as u_green against u_brown, or hex_red
+  against base1. That is a planner collision-checking setting, not a
+  statement of task permission: contact between any of those parts is
+  conformant only insofar as the effect clauses above are satisfied.
+
+  The cross-assembly pairs are switched off DELIBERATELY, and you are the
+  reason: a collision the planner avoids is a collision nobody measures.
+
+  Be precise about HOW a bystander can actually be disturbed, because there
+  are two contact channels and only one of them is open:
+
+    - A CARRIED PART against a bystander -- REAL. That pair is ACM-permitted,
+      so the planner will not refuse a path that carries a held part straight
+      through a bystander, and no collision is raised when it does. This is
+      the channel by which a bystander can physically be shifted, and it is
+      the one to expect.
+
+    - The ARM or GRIPPER against a bystander -- DOES NOT OCCUR. The ACM
+      exempts object-against-object pairs only; it never exempts the gripper
+      or any arm link, and the bystanders are in the planning scene. The
+      planner therefore routes the arm around them. Do not watch for a direct
+      arm-strike on a bystander and do not reason about one; it cannot
+      happen, and looking for it costs attention the real channel needs.
+
+  So a bystander disturbance reaches you as PART-ON-PART contact: something
+  held, dragged into something stationary. Nothing upstream guards against
+  it -- the planner has been told that contact is allowed -- so the standing
+  stationarity requirement is the bystanders' only protection. If a bystander
+  moves, that is the violation, and catching it is yours alone.
+
+run_notes: ""
+# Stays empty by design, including for fault-injection runs later. The agent
+# must never be told the registry is corrupted, or the class-4 result proves
+# nothing.

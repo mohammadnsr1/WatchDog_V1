@@ -46,6 +46,14 @@ fail loudly on their own; the rest are still on you.
 | 4 | `registry_install_matches_source` is true | **manual** — bringup warns, never blocks |
 | 5 | Launch watchdog, then executor | manual |
 
+S2/S3 runs may be collected now but must not be scored until the scorer
+recognises authored monitors.
+
+> **ON HOLD.** This procedure corrupts the single shared registry, which the
+> WatchDog also reads, so the WatchDog would arm from the corrupted value.
+> Class 4 runs wait for the executor-only registry override. Do not run
+> Class 4 in any scenario until then.
+
 **Step 1 is the one with no guard.** The servers load the registry from install
 space via `get_package_share_directory`, so editing
 `ros2_ws/src/robot_backend/config/model_registry.yaml` without rebuilding means
@@ -195,13 +203,25 @@ calling `get_rendered_task`.
 Then call `get_rendered_task` (hosted on the motion server for this role) and
 load both returned fields the same way.
 
-### Selecting the scenario
+### Scenarios
 
-Both configs currently point at `fmb_assembly`. To run a different scenario,
-edit the `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` values in the two config
-files — they must name the *same scenario*, one `.executor.yaml` and one
-`.watchdog.yaml`. Each server reads only its own role's variable, so a wrong
-pairing gives one role the wrong task rather than leaking the other's file.
+The scenario is selected by which watchdog config you launch with; the config
+carries `WATCHDOG_SCENARIO` (which tools the server registers) and
+`WATCHDOG_AGENT_CONFIG` (which system prompt renders).
+
+| Scenario | Watchdog config (fmb_assembly / fmb_assembly_2) | Monitors |
+|---|---|---|
+| S1 | `watchdog.mcp.json` / `watchdog_2.mcp.json` | library monitors |
+| S2 | `watchdog_s2.mcp.json` / `watchdog_2_s2.mcp.json` | library + authored |
+| S3 | `watchdog_s3.mcp.json` / `watchdog_2_s3.mcp.json` | authored only |
+| S4 | not yet runnable (executor-side monitor server pending) | — |
+
+The executor uses `executor.mcp.json` / `executor_2.mcp.json` unchanged in
+S1–S3. The task pairing rule still applies: both sides must name the same
+assembly — the plain configs pair with each other, the `_2` configs pair with
+each other. Each server reads only its own role's task-path variable, so a
+wrong pairing gives one role the wrong task rather than leaking the other's
+file. Always pass `--settings watchdog.settings.json` regardless of scenario.
 
 ---
 
@@ -213,7 +233,15 @@ In each session, list the MCP tools:
   `grasp`, `begin_step` or `lift` appear, `--strict-mcp-config` was missing or
   you are in an extension window. The run is not scoreable — relaunch.
 - **Executor session** must contain **zero** watchdog tools (`arm_monitor`,
-  `record_verdict`, `halt_execution`, `get_evidence`).
+  `record_verdict`, `halt_execution`, `get_evidence`). This holds for S1–S3;
+  S4 (executor-side monitoring) is not yet runnable and will change it.
+- **Scenario matches the launch.** The watchdog's `get_rendered_task` result
+  carries `scenario` and `sources.system_prompt_path`, which must agree with
+  the config you launched: `watchdog_system.txt` (S1),
+  `watchdog_system_s2.txt` (S2) or `watchdog_system_s3.txt` (S3). The
+  watchdog tool list must match too: S1 has `arm_monitor` and
+  `available_monitor_definitions` and no `arm_custom_monitor`; S2 has all
+  three; S3 has `arm_custom_monitor` and neither of the other two.
 - **Watchdog still sees executor activity.** After the executor has made a call,
   `get_execution_state` on the watchdog side must show `last_executor_event`
   populated. This is the check that matters: it proves observation is arriving

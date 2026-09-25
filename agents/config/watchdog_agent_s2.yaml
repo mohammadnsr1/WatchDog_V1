@@ -1,0 +1,43 @@
+agent: watchdog
+provider: openai
+model: gpt-5
+api_key_env: OPENAI_API_KEY
+max_tokens: 8192
+context_budget_tokens: 150000      # elide when the estimate exceeds this
+context_keep_recent_turns: 5       # never elide within this many turns
+
+# reasoning_effort: openai only (minimal | low | medium | high), ignored by
+# the anthropic provider. thinking_budget_tokens: anthropic only, ignored by
+# the openai provider. WatchDog's reasoning burden (arming discipline,
+# trigger-vs-bound judgment) differs from the executor's, so these are tuned
+# independently per agent even though both default to the same value here.
+reasoning_effort: medium
+thinking_budget_tokens: 4096
+
+system_prompt: prompts/watchdog_system_s2.txt
+task_template: prompts/watchdog_task.txt
+
+mcp_servers:
+  - name: watchdog
+    command: /usr/bin/python3
+    args: ["-m", "robot_backend.mcp_servers.watchdog_mcp_server"]
+    cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+    # No WATCHDOG_MONITOR_LOG override: with it unset the server falls through
+    # to the session-resolved default (session_helper.monitor_log_default()),
+    # so WatchDog's own event log lands in the session directory alongside the
+    # three executor servers' events_*.jsonl. Set WATCHDOG_MONITOR_LOG here only
+    # to deliberately divert the log outside the session (an escape hatch).
+
+loop:
+  max_turns: 200
+  stop_after_consecutive_timeouts: 2
+
+transcript_dir: transcripts
+
+# No gate_timeout_sec here: WatchDog never calls request_go, so there is no
+# gate timeout on this side of the handshake to order against. Still keep
+# this comfortably above the longest blocking call this agent makes: the
+# agent chooses its own per-call timeout_sec on wait_for_event (clamped to
+# [0, 600] server-side -- see watchdog_mcp_server.py's wait_for_event), not
+# a value from this config.
+mcp_client_timeout_sec: 180.0

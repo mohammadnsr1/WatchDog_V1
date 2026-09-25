@@ -1,0 +1,66 @@
+agent: executor
+provider: openai
+model: gpt-5
+api_key_env: OPENAI_API_KEY
+max_tokens: 8192
+context_budget_tokens: 150000      # elide when the estimate exceeds this
+context_keep_recent_turns: 5       # never elide within this many turns
+
+# reasoning_effort: openai only (minimal | low | medium | high), ignored by
+# the anthropic provider. thinking_budget_tokens: anthropic only, ignored by
+# the openai provider. Both are validated at config load -- see
+# agent_harness/config.py -- so a bad value here fails loudly before any
+# provider call rather than with an opaque request-time error.
+#
+# FROZEN EVAL PARAMETER: reasoning_effort is low here, not medium. The
+# executor's turns are mechanical (one contract-driven skill call at a time),
+# unlike WatchDog's conformance judgment calls -- see watchdog_agent.yaml,
+# which stays at medium deliberately. Do not raise this without re-running
+# the eval suite; it is a latency/behavior tradeoff decided for this study,
+# not a default to drift back toward "medium" out of habit.
+reasoning_effort: low
+thinking_budget_tokens: 4096
+
+system_prompt: prompts/executor_system_s4.txt
+task_template: prompts/executor_task.txt
+
+mcp_servers:
+  - name: gripper
+    command: /usr/bin/python3
+    args: ["-m", "robot_backend.mcp_servers.gripper_mcp_server"]
+    cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+  - name: motion
+    command: /usr/bin/python3
+    args: ["-m", "robot_backend.mcp_servers.motion_mcp_server"]
+    cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+  - name: scene
+    command: /usr/bin/python3
+    args: ["-m", "robot_backend.mcp_servers.scene_mcp_server"]
+    cwd: "~/watchdog/WatchDog_V1/ros2_ws"
+    env:
+      # Read by robot_backend.cell.gate as the default timeout_sec for
+      # begin_step/mark_phase's request_go calls. Must equal gate_timeout_sec
+      # below -- config.py checks this at load time and refuses to start if
+      # they've drifted apart.
+      CELL_GATE_TIMEOUT_SEC: "90.0"
+
+loop:
+  # Budget the whole task, not one part. fmb_assembly is 24 steps; a run that
+  # got through u_green's 8 steps burned the old 60, i.e. ~7.5 turns per step
+  # once frame queries, clear-and-move retries and verification are counted.
+  # 24 x 7.5 ~= 180, and a step that needs two or three planning attempts is
+  # normal rather than exceptional, so carry headroom on top of that.
+  max_turns: 250
+
+transcript_dir: transcripts
+
+# Timeout ordering (enforced at config load, not just documented here):
+# mcp_client_timeout_sec > gate_timeout_sec > expected agent arming turn.
+# begin_step/mark_phase can block for as long as the monitoring agent takes
+# to arm (up to gate_timeout_sec, at the orchestrator). If mcp_client_timeout_sec
+# were <= gate_timeout_sec, this process's own MCP client would abort the
+# call while the orchestrator is still legitimately holding it open -- an
+# mcp_error that looks like a transport bug and is actually a configuration
+# mismatch. Keep this comfortably above gate_timeout_sec (here: +60s).
+gate_timeout_sec: 90.0
+mcp_client_timeout_sec: 150.0

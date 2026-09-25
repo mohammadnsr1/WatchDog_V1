@@ -1347,6 +1347,7 @@ if mcp is not None:
         code: str,
         description: str,
         params: dict[str, Any],
+        clause: dict[str, Any] | None = None,
         object_id: str | None = None,
         threshold_param: str | None = None,
         monitor_id: str | None = None,
@@ -1425,7 +1426,8 @@ if mcp is not None:
         numeric); that param's source feeds threshold verification exactly as
         a library monitor's is verified, and every param with a raw_spec
         source is verified the same way and reported in param_provenance.
-        Without threshold_param the recorded threshold is 0.0.
+        Without threshold_param the recorded threshold is 0.0. clause is
+        carried unchanged onto the arm and fire events.
 
         object_id, when given, is the object this monitor is about and is
         used for fire attribution and provenance lookup; when omitted, the
@@ -1446,6 +1448,7 @@ if mcp is not None:
                     params=params,
                     recorder=ctx.recorder,
                     engine=ctx.engine,
+                    clause=clause,
                     object_id=object_id,
                     threshold_param=threshold_param,
                     monitor_id=monitor_id,

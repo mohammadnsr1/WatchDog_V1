@@ -208,6 +208,51 @@ def test_non_str_detail_raises_authored_return_error():
         monitor.evaluate(None)
 
 
+# --- reference_values and clause ------------------------------------------------
+
+def test_reference_values_mirror_state_after_first_call():
+    source = (
+        "def check(ctx):\n"
+        "    if 'ref' not in ctx.state:\n"
+        "        ctx.state['ref'] = ctx.object_pose('u_brown')['pose']['position']\n"
+        "        ctx.state['axes'] = ('x', 'y', 'z')\n"
+        "        ctx.state['bad'] = math.inf\n"
+        "        ctx.state['count'] = 1\n"
+        "    return None\n"
+    )
+    monitor = _monitor(source)
+    assert monitor.reference_values == {
+        "ref": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "axes": ["x", "y", "z"],   # tuple -> list
+        "bad": None,               # non-finite float -> None
+        "count": 1,
+    }
+    # Strictly JSON-serialisable: engine.arm publishes this on monitor_armed.
+    import json
+
+    json.dumps(monitor.reference_values, allow_nan=False)
+
+
+def test_reference_values_replace_non_json_values_with_repr():
+    source = (
+        "def check(ctx):\n"
+        "    ctx.state['names'] = set()\n"
+        "    return None\n"
+    )
+    monitor = _monitor(source)
+    assert monitor.reference_values == {"names": repr(set())}
+
+
+def test_empty_state_yields_empty_reference_values():
+    assert _monitor(PASSIVE).reference_values == {}
+
+
+def test_clause_reaches_the_monitor():
+    clause = {"clause_id": "invariants.disturbance_tolerance_m", "object_id": "u_brown"}
+    monitor = _monitor(PASSIVE, clause=clause)
+    assert monitor.clause == clause
+
+
 # --- channels_read ------------------------------------------------------------
 
 def test_channels_read_records_methods_and_first_args():

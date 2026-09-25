@@ -261,6 +261,25 @@ def run_with_budget(
     return result, time.perf_counter() - started
 
 
+def _json_safe(value: Any) -> Any:
+    """A JSON-safe deep copy of an arm-time ctx.state value.
+
+    int/float/str/bool/None are kept, except that a non-finite float becomes
+    None (NaN/inf are not representable in strict JSON). Tuples and lists
+    become lists, dicts recurse with keys coerced to str, and anything else
+    is replaced by its repr().
+    """
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return repr(value)
+
+
 def _xyz_copy(value: Any) -> dict[str, float]:
     return {axis: float(value[axis]) for axis in ("x", "y", "z")}
 
@@ -458,7 +477,8 @@ class AuthoredMonitor(MonitorPrimitive):
     The first check(ctx) call happens at construction, before the monitor is
     armed. It is the arm-time reference capture: authored code that needs a
     frozen reference stores it in ctx.state on that call, and its return
-    value (kept as first_call_result) never fires.
+    value (kept as first_call_result) never fires. ctx.state as it stands
+    after the arm-time call is returned as reference_values.
     """
 
     feed = "authored"
@@ -534,6 +554,10 @@ class AuthoredMonitor(MonitorPrimitive):
             raise AuthoredCodeError(
                 "first_call", f"{type(exc).__name__}: {exc}"
             ) from exc
+        # The arm-time reference capture, in the same field the library
+        # primitives use: engine.arm already returns and publishes
+        # reference_values, so no new plumbing is needed for it.
+        self.reference_values = _json_safe(dict(self.ctx.state))
 
     @staticmethod
     def _parse_params(

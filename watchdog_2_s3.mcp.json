@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "WATCHDOG session MCP config for fmb_assembly_2. The watchdog server ONLY.",
+    "WATCHDOG session MCP config for fmb_assembly_2, scenario S3 (authored monitors only). The watchdog server ONLY.",
     "",
     "motion, gripper and scene are absent by design, and this is the core",
     "architectural rule of the whole setup: a watchdog that can command the arm",
@@ -29,7 +29,8 @@
       ],
       "env": {
         "WATCHDOG_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.watchdog.yaml",
-        "WATCHDOG_SCENARIO": "S3"
+        "WATCHDOG_SCENARIO": "S3",
+        "WATCHDOG_AGENT_CONFIG": "/home/mohammad/watchdog/WatchDog_V1/agents/config/watchdog_agent_s3.yaml"
       }
     }
   },
