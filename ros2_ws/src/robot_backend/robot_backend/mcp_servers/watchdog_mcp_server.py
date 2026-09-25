@@ -34,6 +34,7 @@ from robot_backend.events.schema import (
     available_event_type_definitions,
     make_event,
 )
+from robot_backend.watchdog.authored import AuthoredCodeError, AuthoredMonitor
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.utils.png_encode import encode_png
@@ -317,6 +318,29 @@ mcp = FastMCP("robot_backend_watchdog") if _MCP_SERVABLE else _UnservableToolReg
 # on the shim -- there is no run to log, and the wrapper would try to open a
 # session file during a unit test.
 role_context.install_call_logging(mcp if _MCP_SERVABLE else None, "watchdog")
+
+# --- scenario gating --------------------------------------------------------
+# Which tool surface this server exposes. Read once at import, like the role
+# env vars: the scenario is a property of the launch, not of any call.
+_SCENARIO = os.environ.get("WATCHDOG_SCENARIO")
+_VALID_SCENARIOS = {"S1", "S2", "S3"}
+
+
+def _tool_for(*scenarios: str):
+    """mcp.tool() when this scenario serves the tool, else a no-op decorator.
+
+    The no-op keeps the function defined at module scope, so unit tests can
+    call it whatever WATCHDOG_SCENARIO is; it just is not registered with the
+    live server. On the shim (FastMCP unimportable) everything registers,
+    since the shim registers nothing anyway and main() refuses to serve it.
+    """
+    if not _MCP_SERVABLE or _SCENARIO in scenarios:
+        return mcp.tool()
+
+    def _unregistered(func: Any) -> Any:
+        return func
+
+    return _unregistered
 
 
 @dataclass
@@ -602,6 +626,7 @@ def _ensure_watchdog() -> WatchDogContext:
             node=node,
             event_bus=event_bus,
             callback_group=client_cb_group,
+            scenario=_SCENARIO,
         )
         engine = MonitorEngine(
             event_bus=event_bus,
@@ -610,6 +635,11 @@ def _ensure_watchdog() -> WatchDogContext:
             logger=node.get_logger(),
         )
         recorder.engine = engine
+        # The authored lane runs whatever the scenario: arming is what the
+        # scenario gates, and a lane with nothing armed just sleeps on its
+        # wake event.
+        engine.attach_recorder(recorder)
+        engine.start_authored_lane()
         thread = threading.Thread(target=executor.spin, daemon=True)
         thread.start()
         # Prewarm client construction outside recorder callbacks. Left lazy,
@@ -651,6 +681,10 @@ def _shutdown_watchdog() -> None:
         _CONTEXT = None
     if ctx is None:
         return
+    try:
+        ctx.engine.stop_authored_lane()
+    except Exception:
+        pass
     try:
         ctx.executor.shutdown()
     except Exception:
@@ -813,6 +847,70 @@ def _resolve_threshold_provenance(
         "threshold_registry_field": qualified,
         "threshold_registry_value": registry_float,
     }
+
+
+def _resolve_param_provenance(
+    ctx: WatchDogContext, monitor: Any, object_id: str | None
+) -> list[dict[str, Any]]:
+    """Verify every registry-sourced authored param against the registry.
+
+    One entry per param whose declared source starts "raw_spec.": the same
+    measurement _resolve_threshold_provenance makes for the one threshold
+    param, applied to each of them, with the same tolerance and the same rule
+    -- verified is True only when the passed value matches what the registry
+    holds for this object and field.
+    """
+    entries: list[dict[str, Any]] = []
+    sources = getattr(monitor, "param_sources", None) or {}
+    spec = _object_spec(ctx, object_id) if object_id else None
+    prefix = _SPEC_PATH_PREFIX + "."
+    for name, source in sources.items():
+        if not isinstance(source, str) or not source.startswith(prefix):
+            continue
+        raw = monitor.params.get(name)
+        value = raw.get("value") if isinstance(raw, dict) else raw
+        registry_value = _lookup_spec_field(spec, source[len(prefix):])
+        try:
+            registry_float = float(registry_value)
+        except (TypeError, ValueError):
+            registry_float = None
+        try:
+            passed = float(value)
+        except (TypeError, ValueError):
+            passed = None
+        verified = (
+            registry_float is not None
+            and passed is not None
+            and math.isfinite(passed)
+            and math.isclose(passed, registry_float, rel_tol=_THRESHOLD_MATCH_REL_TOL)
+        )
+        entries.append({
+            "name": name,
+            "value": value,
+            "source": source,
+            "verified": bool(verified),
+            "registry_value": registry_float,
+        })
+    return entries
+
+
+def _save_authored_source(session_dir: Path, monitor_id: str, source: str) -> Path:
+    """Write authored source under <session_dir>/authored_monitors/.
+
+    Never overwrites: an existing file gets a numeric suffix instead, so two
+    arms with the same monitor_id (a re-arm after a fire, or a collision)
+    both leave their exact source on the record.
+    """
+    out_dir = session_dir / "authored_monitors"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(monitor_id)).strip("_") or "monitor"
+    path = out_dir / f"{safe}.py"
+    suffix = 1
+    while path.exists():
+        path = out_dir / f"{safe}_{suffix}.py"
+        suffix += 1
+    path.write_text(source, encoding="utf-8")
+    return path
 
 
 def _build_monitor(
@@ -1079,7 +1177,9 @@ if mcp is not None:
 
         command = "get_rendered_task"
         try:
-            return role_context.build_rendered_task(role_context.WATCHDOG_ROLE)
+            result = role_context.build_rendered_task(role_context.WATCHDOG_ROLE)
+            result["scenario"] = _SCENARIO
+            return result
         except Exception as exc:
             return _error(command, exc)
 
@@ -1190,7 +1290,7 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc)
 
-    @mcp.tool()
+    @_tool_for("S1", "S2")
     def arm_monitor(
         monitor_type: str,
         params: dict[str, Any],
@@ -1241,6 +1341,144 @@ if mcp is not None:
             return _error(command, exc, monitor_type=monitor_type)
         except Exception as exc:
             return _error(command, exc, monitor_type=monitor_type)
+
+    @_tool_for("S2", "S3")
+    def arm_custom_monitor(
+        code: str,
+        description: str,
+        params: dict[str, Any],
+        object_id: str | None = None,
+        threshold_param: str | None = None,
+        monitor_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Arm one monitor whose predicate is the supplied Python source.
+
+        Code contract. `code` must define exactly one top-level function
+        check(ctx) taking one positional argument. Its return value is read
+        as: None -- the monitored condition holds; a dict with a finite
+        numeric "value" key and an optional str "detail" key -- a violation,
+        which fires with that value; anything else disarms the monitor with
+        reason authored_bad_return. Top level may contain only function
+        definitions (helper functions are allowed) and assignments of literal
+        constants, at most 8000 characters in total.
+
+        First call. check(ctx) runs once during this call, with ctx.state an
+        empty dict. Its return value is stored and returned here as
+        first_call_result; it does NOT fire. State written to ctx.state on
+        that call persists across every later evaluation of the same monitor.
+
+        Evaluation. After arming, check(ctx) runs on a dedicated thread, woken
+        by incoming samples: TF ticks arrive at 20 Hz and joint-state messages
+        at the publisher's rate, and the monitor is evaluated at most once per
+        wake. A monitor fires at most once and is then disarmed.
+
+        Budgets and disarm reasons. Each call has a 20000-line execution
+        budget and a 20 ms wall-time budget. Exceeding either counts one
+        strike (a line-budget overrun also suppresses any fire from that
+        call); at 5 strikes the monitor is disarmed with reason
+        authored_timeout. A return outside the contract disarms with
+        authored_bad_return. Any other exception disarms with authored_error.
+
+        The ctx object. check receives a MonitorContext and nothing else:
+          ctx.params -- dict of the plain param values passed here.
+          ctx.state -- dict, persists across calls of this monitor.
+          ctx.object_ids() / ctx.frame_ids() -> list[str].
+          ctx.joint_names() -> list[str], names in the latest joint sample.
+          ctx.object_pose(object_id) -> {"wall_ns", "object_id", "pose":
+              {"position": {x,y,z}, "orientation": {x,y,z,w}}} or None.
+              Positions in meters.
+          ctx.frame_pose(frame_id) -> same shape with "frame_id", or None.
+          ctx.transform(parent, child) -> {"translation": {x,y,z},
+              "rotation": {x,y,z,w}}. Meters; raises if the TF lookup fails.
+          ctx.joint(name) -> {"wall_ns", "position", "effort"} or None.
+              Effort in the units reported on /joint_states, not newtons.
+          ctx.joint_window(name, seconds) -> list of {"wall_ns", "position",
+              "effort"} over [now-seconds, now], at most 1000 samples.
+          ctx.object_pose_window(object_id, seconds) /
+          ctx.frame_pose_window(frame_id, seconds) -> lists of the pose
+              sample shape above, at most 1000 samples.
+          ctx.held_object() -> object_id the gripper holds, or None.
+          ctx.now_wall_ns() -> int wall-clock nanoseconds.
+          ctx.dist(a, b) -> float, Euclidean distance between two {x,y,z}
+              dicts, meters.
+        All returned dicts are fresh copies. wall_ns values are wall-clock
+        nanoseconds, the same axis every event and evidence buffer uses.
+
+        Allowed names. Builtins: abs, all, any, bool, dict, enumerate, float,
+        int, len, list, max, min, range, reversed, round, set, sorted, str,
+        sum, tuple, zip, isinstance, ValueError, ZeroDivisionError. The
+        stdlib `math` module is provided as `math`. Nothing else -- no
+        imports and no numpy.
+
+        Forbidden constructs, rejected before compiling (the error names the
+        stage and line): import, while, class, async def, await, yield,
+        global, nonlocal; any name or attribute starting with "_"; eval,
+        exec, compile, open, getattr, setattr, delattr, globals, locals,
+        vars, dir, input, breakpoint, help, memoryview, type, super, object.
+
+        Params and provenance. params is {name: {"value": v, "source": s}}
+        where source is a dotted path like
+        "raw_spec.tolerances.disturbance_tolerance_m" naming where the value
+        was read from, or null for a value with no registry source. The plain
+        values reach check as ctx.params. threshold_param, when given, names
+        the param whose value is this monitor's threshold (it must be finite
+        numeric); that param's source feeds threshold verification exactly as
+        a library monitor's is verified, and every param with a raw_spec
+        source is verified the same way and reported in param_provenance.
+        Without threshold_param the recorded threshold is 0.0.
+
+        object_id, when given, is the object this monitor is about and is
+        used for fire attribution and provenance lookup; when omitted, the
+        part currently held by the gripper is used, as for effort_event.
+
+        The source is saved verbatim under the session directory
+        (authored_monitors/<monitor_id>.py) and its sha256 is on the arm and
+        fire events as code_sha256. channels_read lists the ctx methods the
+        first call actually used.
+        """
+        command = "arm_custom_monitor"
+        try:
+            ctx = _ensure_watchdog()
+            try:
+                monitor = AuthoredMonitor(
+                    source=code,
+                    description=description,
+                    params=params,
+                    recorder=ctx.recorder,
+                    engine=ctx.engine,
+                    object_id=object_id,
+                    threshold_param=threshold_param,
+                    monitor_id=monitor_id,
+                    armed_wall_ns=wall_ns(),
+                )
+            except AuthoredCodeError as exc:
+                return _error(
+                    command, exc, stage=exc.stage, lineno=exc.lineno
+                )
+            arm_object_id = _resolve_arm_object_id(ctx, monitor)
+            monitor.provenance = {
+                "object_id": arm_object_id,
+                **_resolve_threshold_provenance(ctx, monitor, arm_object_id),
+                "param_provenance": _resolve_param_provenance(
+                    ctx, monitor, arm_object_id
+                ),
+            }
+            saved_path = _save_authored_source(
+                ctx.session_dir, monitor.monitor_id, monitor.source
+            )
+            result = dict(ctx.engine.arm(monitor))
+            # The arm dict already carries code_sha256/channels_read for an
+            # authored monitor; update() rather than kwargs so the merge can
+            # never raise on the duplicates.
+            result.update(
+                first_call_result=monitor.first_call_result,
+                channels_read=monitor.channels_read,
+                code_sha256=monitor.code_sha256,
+                saved_path=str(saved_path),
+            )
+            return _ok(command, **result)
+        except Exception as exc:
+            return _error(command, exc)
 
     @mcp.tool()
     def disarm_monitor(monitor_id: str) -> dict[str, Any]:
@@ -1350,7 +1588,7 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc)
 
-    @mcp.tool()
+    @_tool_for("S1", "S2")
     def available_monitor_definitions() -> dict[str, Any]:
         """Return the type, feed, semantics, and parameter schema of every monitor primitive."""
         command = "available_monitor_definitions"
@@ -1968,6 +2206,17 @@ def main() -> None:
             "mcp.server.mcpserver.MCPServer. Pin 'mcp<2' in the workspace "
             "virtualenv or migrate this module to the 2.x API."
         ) from _MCP_IMPORT_ERROR
+
+    if _SCENARIO not in _VALID_SCENARIOS:
+        # Refuse to serve rather than default: an unset scenario would
+        # silently serve a tool surface nobody chose, and which tools a run
+        # had is exactly what the scenarios exist to control.
+        raise RuntimeError(
+            f"WATCHDOG_SCENARIO={_SCENARIO!r} is not a valid scenario. Set the "
+            f"WATCHDOG_SCENARIO environment variable to one of "
+            f"{sorted(_VALID_SCENARIOS)} (the watchdog*.mcp.json env block is "
+            f"where the launch sets it)."
+        )
 
     try:
         _ensure_watchdog()

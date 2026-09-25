@@ -28,7 +28,8 @@
         "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend watchdog_mcp_server"
       ],
       "env": {
-        "WATCHDOG_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.watchdog.yaml"
+        "WATCHDOG_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly.watchdog.yaml",
+        "WATCHDOG_SCENARIO": "S1"
       }
     }
   },

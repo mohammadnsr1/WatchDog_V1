@@ -25,11 +25,15 @@ class ReadyClient:
         event_bus: Any,
         callback_group: Any,
         timeout_sec: float = 5.0,
+        scenario: str | None = None,
     ) -> None:
         self.node = node
         self.event_bus = event_bus
         self._callback_group = callback_group
         self.timeout_sec = timeout_sec
+        # Stamped on every watchdog_ready event so the session record carries
+        # which scenario (tool surface) this server was serving.
+        self.scenario = scenario
         self._client: Any | None = None
         self._SignalReady: Any | None = None
         self._lock = threading.Lock()
@@ -106,7 +110,12 @@ class ReadyClient:
             if self.event_bus is not None:
                 self.event_bus.publish(make_event(
                     "watchdog_ready",
-                    WatchDogReadyPayload(scope=scope, step_id=step_id, phase=phase),
+                    WatchDogReadyPayload(
+                        scope=scope,
+                        step_id=step_id,
+                        phase=phase,
+                        scenario=self.scenario,
+                    ),
                 ))
         except Exception:
             pass

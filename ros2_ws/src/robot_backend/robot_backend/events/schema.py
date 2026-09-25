@@ -177,6 +177,22 @@ class MonitorArmedPayload(BaseModel):
     # tool result, so it was absent from the event stream the scorer reads.
     reference_values: dict[str, Any] = {}
 
+    # --- authored monitors ------------------------------------------------
+    # All defaulted so every existing log line still parses. origin says
+    # whether this monitor is a library primitive ("library") or agent-written
+    # code ("authored"). The rest are null on library arms: code_sha256 hashes
+    # the authored source, description is the author's one-line statement of
+    # what the monitor checks, channels_read lists the context methods (and
+    # first arguments) the authored code actually called, and
+    # param_provenance carries the per-param registry verification entries
+    # ({name, value, source, verified, registry_value}) for every param whose
+    # declared source is a raw_spec path.
+    origin: str = "library"
+    code_sha256: str | None = None
+    description: str | None = None
+    channels_read: list[str] | None = None
+    param_provenance: list[dict[str, Any]] | None = None
+
 
 class MonitorFirePayload(BaseModel):
     """WatchDog monitor violation event."""
@@ -214,6 +230,16 @@ class MonitorFirePayload(BaseModel):
     # flag-only (halt_on_fire=False). action_taken alone cannot say whether a
     # halt actually stopped anything active -- this is that detail.
     halt_result: dict[str, Any] | None = None
+
+    # --- authored monitors ------------------------------------------------
+    # Same fields and semantics as MonitorArmedPayload's authored block, all
+    # defaulted so every existing log line still parses. detail is the
+    # optional string the firing check() returned beside its value.
+    origin: str = "library"
+    code_sha256: str | None = None
+    description: str | None = None
+    channels_read: list[str] | None = None
+    detail: str | None = None
 
 
 class MonitorDisarmedPayload(BaseModel):
@@ -356,6 +382,10 @@ class WatchDogReadyPayload(BaseModel):
     scope: str
     step_id: str | None = None
     phase: str | None = None
+    # The serving scenario (WATCHDOG_SCENARIO), stamped on every readiness
+    # signal so the session record says which tool surface was live.
+    # Defaulted so pre-scenario logs still parse.
+    scenario: str | None = None
 
 
 class FramesCapturedPayload(BaseModel):
