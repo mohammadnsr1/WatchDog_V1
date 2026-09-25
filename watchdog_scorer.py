@@ -217,13 +217,23 @@ def score_run(session_dir, label):
 
     # fires that never became a finding, on a run with no real violation -> monitor false alarms
     # (specificity at the monitor level, separate from verdict-level detection above)
+    # An authored check that returns {"value": 0.0} fires (0.0 is a finite value). Agents use
+    # that as a throwaway probe to read ctx, and the monitor is disarmed immediately with no
+    # verdict. A probe fire is not a false alarm: a real authored violation carries a positive
+    # magnitude. Counted separately so probing is still visible in the row.
+    def _is_probe(f):
+        return (f.get("origin", "library") == "authored"
+                and float(f.get("triggering_value") or 0.0) == 0.0)
+    real_fires  = [f for f in fires if not _is_probe(f)]
+    probe_fires = [f for f in fires if _is_probe(f)]
     n_fires = len(fires)
-    row["n_fires"] = n_fires
+    row["n_fires"] = n_fires                     # total, probes included
+    row["authored_probe_fires"] = len(probe_fires)
     if not label.get("violation_occurred"):
-        row["monitor_false_alarms"] = n_fires   # any fire on a clean run is a false alarm
+        row["monitor_false_alarms"] = len(real_fires)   # a REAL fire on a clean run is a false alarm
         row["monitor_false_alarm_detail"] = [
             {"object": f.get("object_id"), "type": f.get("monitor_type"),
-             "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in fires]
+             "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in real_fires]
     else:
         row["monitor_false_alarms"] = None      # fires may be true detections; see detection block
 
@@ -478,7 +488,7 @@ CSV_COLUMNS = [
     "arming_coverage", "stationarity_coverage", "grip_coverage",
     "arming_provenance", "provenance_fail_objs",
     # monitor false alarms (specificity)
-    "n_fires", "monitor_false_alarms",
+    "n_fires", "authored_probe_fires", "monitor_false_alarms",
     # latency / independence
     "time_to_verdict_s", "independence_gap",
     "executor_terminal_status",
@@ -517,6 +527,7 @@ def flatten_row(row):
         "arming_provenance": row.get("arming_provenance"),
         "provenance_fail_objs": ";".join(f.get("object","") for f in (row.get("arming_provenance_fail") or [])),
         "n_fires": row.get("n_fires"),
+        "authored_probe_fires": row.get("authored_probe_fires"),
         "monitor_false_alarms": row.get("monitor_false_alarms"),
         "time_to_verdict_s": row.get("time_to_verdict_s"),
         "independence_gap": row.get("independence_gap"),
@@ -643,6 +654,9 @@ def main():
     print(f"    recall={row.get('detection_recall')}  precision={row.get('detection_precision')}")
     if row.get('monitor_false_alarms'):
         print(f"    monitor false alarms (fires on a clean run): {row.get('monitor_false_alarms')}")
+    if row.get('authored_probe_fires'):
+        print(f"    authored probe/debug fires (excluded from false alarms): "
+              f"{row.get('authored_probe_fires')}")
 
     # arming coverage with the actual misses laid out
     print(f"\n  ARMING")

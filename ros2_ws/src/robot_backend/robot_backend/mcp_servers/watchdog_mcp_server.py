@@ -1415,14 +1415,20 @@ if mcp is not None:
         authored_timeout. A return outside the contract disarms with
         authored_bad_return. Any other exception disarms with authored_error.
 
-        The ctx object. check receives a MonitorContext and nothing else:
-          ctx.params[name] -> {"value": ..., "source": ...}, the exact
-              mapping passed here for that param.
+        ctx API. This is the COMPLETE surface of the ctx object check
+        receives; nothing else exists on it.
+          ctx.params -- dict. ctx.params[name] is the exact {"value": ...,
+              "source": ...} mapping passed here for that param.
           ctx.value(name) -> the plain number inside params[name] ("value"
               if the entry is a mapping, else the entry itself).
-          ctx.state -- dict, persists across calls of this monitor.
-          ctx.object_ids() / ctx.frame_ids() -> list[str].
-          ctx.joint_names() -> list[str], names in the latest joint sample.
+          ctx.state -- dict, persists across every call of this monitor.
+              Empty on the arm-time first call.
+          ctx.channels_read -- list[str], the ctx methods (and first
+              arguments) called so far, as "method:arg" strings.
+          ctx.object_ids() -> list[str].
+          ctx.frame_ids() -> list[str].
+          ctx.joint_names() -> list[str], names in the latest joint sample;
+              [] before the first sample.
           ctx.object_pose(object_id) -> {"object_id", "pose": {"position":
               {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns"}
               or None. Positions in meters.
@@ -1436,15 +1442,18 @@ if mcp is not None:
               Effort in the units reported on /joint_states, not newtons.
           ctx.joint_window(name, seconds) -> list of {"wall_ns", "position",
               "effort"} over [now-seconds, now], at most 1000 samples.
-          ctx.object_pose_window(object_id, seconds) /
-          ctx.frame_pose_window(frame_id, seconds) -> lists of the
-              object_pose / frame_pose shapes above, at most 1000 samples.
+          ctx.object_pose_window(object_id, seconds) -> list of the
+              object_pose shape above, at most 1000 samples.
+          ctx.frame_pose_window(frame_id, seconds) -> list of the
+              frame_pose shape above, at most 1000 samples.
           ctx.held_object() -> object_id the gripper holds, or None.
           ctx.now_wall_ns() -> int wall-clock nanoseconds.
           ctx.dist(a, b) -> float, Euclidean distance between two
               {"x","y","z"} dicts, meters.
-        All returned dicts are fresh copies. wall_ns values are wall-clock
-        nanoseconds, the same axis every event and evidence buffer uses.
+        A pose accessor returns None when that frame or object has no
+        buffered sample yet; code must guard for it. All returned dicts are
+        fresh copies. wall_ns values are wall-clock nanoseconds, the same
+        axis every event and evidence buffer uses.
 
         Allowed names. Builtins: abs, all, any, bool, dict, enumerate, float,
         int, len, list, max, min, range, reversed, round, set, sorted, str,

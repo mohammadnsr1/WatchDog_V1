@@ -68,9 +68,9 @@ steps:
     action_hint: descend into the placement frame, release, retreat
     target_frame: u_brown_placement
     grasp_width_m: 0.02
-    # target_offset:
-    #   position: {x: 0.02, y: 0.0, z: 0.0}
-    #   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    target_offset:
+      position: {x: 0.02, y: 0.0, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
