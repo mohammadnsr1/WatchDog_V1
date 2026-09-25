@@ -210,6 +210,7 @@ def test_budget_overruns_disarm_after_strike_limit(world):
     assert _wait_until(lambda: world.bus.payloads("monitor_disarmed"))
     disarm = world.bus.payloads("monitor_disarmed")[-1]
     assert disarm["reason"] == "authored_timeout"
+    assert disarm["detail"]  # the budget overrun is named on the event
     assert not world.bus.payloads("monitor_fire")
 
 
@@ -225,7 +226,9 @@ def test_bad_return_disarms(world):
     world.engine.arm(monitor)
     _wake(world)
     assert _wait_until(lambda: world.bus.payloads("monitor_disarmed"))
-    assert world.bus.payloads("monitor_disarmed")[-1]["reason"] == "authored_bad_return"
+    disarm = world.bus.payloads("monitor_disarmed")[-1]
+    assert disarm["reason"] == "authored_bad_return"
+    assert disarm["detail"]  # names the offending return shape
     assert not world.bus.payloads("monitor_fire")
     assert monitor.first_call_result is None
 
@@ -243,6 +246,24 @@ def test_runtime_error_disarms(world):
     _wake(world)
     assert _wait_until(lambda: world.bus.payloads("monitor_disarmed"))
     assert world.bus.payloads("monitor_disarmed")[-1]["reason"] == "authored_error"
+
+
+def test_error_disarm_carries_the_exception_message(world):
+    source = (
+        "def check(ctx):\n"
+        "    if 'armed' not in ctx.state:\n"
+        "        ctx.state['armed'] = True\n"
+        "        return None\n"
+        "    raise ValueError('boom on tick 2')\n"
+    )
+    monitor = _authored(world, source)
+    world.engine.arm(monitor)
+    _wake(world)
+    assert _wait_until(lambda: world.bus.payloads("monitor_disarmed"))
+    disarm = world.bus.payloads("monitor_disarmed")[-1]
+    assert disarm["reason"] == "authored_error"
+    assert "ValueError" in disarm["detail"]
+    assert "boom on tick 2" in disarm["detail"]
 
 
 def test_library_monitors_are_untouched_by_a_broken_authored_monitor(world):

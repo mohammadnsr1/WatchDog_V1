@@ -25,6 +25,21 @@ from .timebase import wall_ns
 # are untouched by both: they run on the recorder callbacks, not this lane.
 _AUTHORED_WALL_BUDGET_SEC = 0.020
 _AUTHORED_STRIKE_LIMIT = 5
+# Ceiling on the failure detail carried on an authored monitor_disarmed
+# event: enough for an exception type plus message, small enough that a
+# pathological repr cannot bloat the event log.
+_AUTHORED_DETAIL_MAX_CHARS = 300
+
+
+def _failure_detail(exc_or_text: Any) -> str:
+    """Short, truncated description of an authored failure for the record."""
+    if isinstance(exc_or_text, BaseException):
+        text = f"{type(exc_or_text).__name__}: {exc_or_text}"
+    else:
+        text = str(exc_or_text)
+    if len(text) > _AUTHORED_DETAIL_MAX_CHARS:
+        return text[: _AUTHORED_DETAIL_MAX_CHARS - 3] + "..."
+    return text
 
 
 def _finite_or_none(value: Any) -> float | None:
@@ -157,29 +172,38 @@ class MonitorEngine:
             for monitor in monitors:
                 try:
                     value = monitor.evaluate(None)
-                except AuthoredBudgetExceeded:
+                except AuthoredBudgetExceeded as exc:
                     # A budget overrun is a strike and never a fire.
-                    self._authored_strike(monitor)
+                    self._authored_strike(monitor, _failure_detail(exc))
                     continue
                 except AuthoredReturnError as exc:
                     self._log_warn(
                         f"authored monitor {monitor.monitor_id} bad return: {exc}"
                     )
-                    self.disarm(monitor.monitor_id, "authored_bad_return")
+                    self.disarm(
+                        monitor.monitor_id, "authored_bad_return",
+                        _failure_detail(exc),
+                    )
                     continue
                 except Exception as exc:
                     self._log_warn(
                         f"authored monitor {monitor.monitor_id} raised: {exc}"
                     )
-                    self.disarm(monitor.monitor_id, "authored_error")
+                    self.disarm(
+                        monitor.monitor_id, "authored_error", _failure_detail(exc)
+                    )
                     continue
                 if getattr(monitor, "last_wall_time_sec", 0.0) > _AUTHORED_WALL_BUDGET_SEC:
-                    if self._authored_strike(monitor):
+                    overrun = self._authored_strike(monitor, _failure_detail(
+                        f"wall time {monitor.last_wall_time_sec:.4f}s exceeded "
+                        f"the {_AUTHORED_WALL_BUDGET_SEC}s per-call budget"
+                    ))
+                    if overrun:
                         continue
                 if value is not None:
                     self._handle_fire(monitor, float(value))
 
-    def _authored_strike(self, monitor: Any) -> bool:
+    def _authored_strike(self, monitor: Any, detail: str | None = None) -> bool:
         """Count one budget strike; True when it disarmed the monitor."""
         monitor.strikes = getattr(monitor, "strikes", 0) + 1
         if monitor.strikes >= _AUTHORED_STRIKE_LIMIT:
@@ -187,7 +211,7 @@ class MonitorEngine:
                 f"authored monitor {monitor.monitor_id} exceeded its evaluation "
                 f"budget {monitor.strikes} times; disarming."
             )
-            self.disarm(monitor.monitor_id, "authored_timeout")
+            self.disarm(monitor.monitor_id, "authored_timeout", detail)
             return True
         return False
 
@@ -241,12 +265,12 @@ class MonitorEngine:
             ),
         }
 
-    def disarm(self, monitor_id: str, reason: str) -> bool:
+    def disarm(self, monitor_id: str, reason: str, detail: str | None = None) -> bool:
         with self.lock:
             monitor = self.monitors.pop(monitor_id, None)
         if monitor is None:
             return False
-        self._emit_disarmed(monitor, reason)
+        self._emit_disarmed(monitor, reason, detail)
         return True
 
     def disarm_all(self, reason: str) -> list[str]:
@@ -469,12 +493,15 @@ class MonitorEngine:
         enriched["object_id"] = object_id
         return enriched
 
-    def _emit_disarmed(self, monitor: MonitorPrimitive, reason: str) -> None:
+    def _emit_disarmed(
+        self, monitor: MonitorPrimitive, reason: str, detail: str | None = None
+    ) -> None:
         self._publish(make_event(
             "monitor_disarmed",
             MonitorDisarmedPayload(
                 monitor_id=monitor.monitor_id,
                 reason=reason,
+                detail=detail,
             ),
         ))
 

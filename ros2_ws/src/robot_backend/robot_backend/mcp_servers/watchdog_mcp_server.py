@@ -1416,27 +1416,33 @@ if mcp is not None:
         authored_bad_return. Any other exception disarms with authored_error.
 
         The ctx object. check receives a MonitorContext and nothing else:
-          ctx.params -- dict of the plain param values passed here.
+          ctx.params[name] -> {"value": ..., "source": ...}, the exact
+              mapping passed here for that param.
+          ctx.value(name) -> the plain number inside params[name] ("value"
+              if the entry is a mapping, else the entry itself).
           ctx.state -- dict, persists across calls of this monitor.
           ctx.object_ids() / ctx.frame_ids() -> list[str].
           ctx.joint_names() -> list[str], names in the latest joint sample.
-          ctx.object_pose(object_id) -> {"wall_ns", "object_id", "pose":
-              {"position": {x,y,z}, "orientation": {x,y,z,w}}} or None.
-              Positions in meters.
-          ctx.frame_pose(frame_id) -> same shape with "frame_id", or None.
-          ctx.transform(parent, child) -> {"translation": {x,y,z},
-              "rotation": {x,y,z,w}}. Meters; raises if the TF lookup fails.
+          ctx.object_pose(object_id) -> {"object_id", "pose": {"position":
+              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns"}
+              or None. Positions in meters.
+          ctx.frame_pose(frame_id) -> {"frame_id", "pose": {"position":
+              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns"}
+              or None.
+          ctx.transform(parent, child) -> {"translation": {"x","y","z"},
+              "rotation": {"x","y","z","w"}}. Meters; raises if the TF
+              lookup fails.
           ctx.joint(name) -> {"wall_ns", "position", "effort"} or None.
               Effort in the units reported on /joint_states, not newtons.
           ctx.joint_window(name, seconds) -> list of {"wall_ns", "position",
               "effort"} over [now-seconds, now], at most 1000 samples.
           ctx.object_pose_window(object_id, seconds) /
-          ctx.frame_pose_window(frame_id, seconds) -> lists of the pose
-              sample shape above, at most 1000 samples.
+          ctx.frame_pose_window(frame_id, seconds) -> lists of the
+              object_pose / frame_pose shapes above, at most 1000 samples.
           ctx.held_object() -> object_id the gripper holds, or None.
           ctx.now_wall_ns() -> int wall-clock nanoseconds.
-          ctx.dist(a, b) -> float, Euclidean distance between two {x,y,z}
-              dicts, meters.
+          ctx.dist(a, b) -> float, Euclidean distance between two
+              {"x","y","z"} dicts, meters.
         All returned dicts are fresh copies. wall_ns values are wall-clock
         nanoseconds, the same axis every event and evidence buffer uses.
 
@@ -1455,8 +1461,9 @@ if mcp is not None:
         Params and provenance. params is {name: {"value": v, "source": s}}
         where source is a dotted path like
         "raw_spec.tolerances.disturbance_tolerance_m" naming where the value
-        was read from, or null for a value with no registry source. The plain
-        values reach check as ctx.params. threshold_param, when given, names
+        was read from, or null for a value with no registry source. Each
+        entry reaches check unchanged as ctx.params[name]; ctx.value(name)
+        returns the plain number. threshold_param, when given, names
         the param whose value is this monitor's threshold (it must be finite
         numeric); that param's source feeds threshold verification exactly as
         a library monitor's is verified, and every param with a raw_spec

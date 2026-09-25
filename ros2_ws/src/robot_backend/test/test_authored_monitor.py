@@ -247,6 +247,52 @@ def test_empty_state_yields_empty_reference_values():
     assert _monitor(PASSIVE).reference_values == {}
 
 
+def test_ctx_params_round_trip_value_and_source():
+    """ctx.params[name] is the exact {value, source} mapping the tool got."""
+    monitor = _monitor(
+        "def check(ctx):\n"
+        "    if 'ref' not in ctx.state:\n"
+        "        ctx.state['ref'] = ctx.params['eps']['value']\n"
+        "        return None\n"
+        "    if ctx.params['eps']['value'] != ctx.state['ref']:\n"
+        "        return {'value': 1.0}\n"
+        "    return None\n",
+        params={
+            "eps": {
+                "value": 0.02,
+                "source": "raw_spec.tolerances.disturbance_tolerance_m",
+            },
+        },
+    )
+    assert monitor.ctx.params["eps"] == {
+        "value": 0.02,
+        "source": "raw_spec.tolerances.disturbance_tolerance_m",
+    }
+    # The second call reads params and the state the first call stored, and
+    # must evaluate without raising -- this is the shape authored code is
+    # actually written against.
+    assert monitor.evaluate(None) is None
+
+
+def test_ctx_value_returns_the_scalar():
+    monitor = _monitor(
+        "def check(ctx):\n"
+        "    if ctx.value('eps') > 1.0:\n"
+        "        return {'value': ctx.value('eps')}\n"
+        "    return None\n",
+        params={"eps": {"value": 0.02, "source": None}},
+    )
+    assert monitor.ctx.value("eps") == 0.02
+    assert monitor.evaluate(None) is None
+
+
+def test_ctx_value_passes_a_plain_entry_through():
+    from robot_backend.watchdog.authored import MonitorContext as Ctx
+
+    ctx = Ctx(FakeRecorder(), FakeEngine(), params={"eps": 0.02}, state={})
+    assert ctx.value("eps") == 0.02
+
+
 def test_clause_reaches_the_monitor():
     clause = {"clause_id": "invariants.disturbance_tolerance_m", "object_id": "u_brown"}
     monitor = _monitor(PASSIVE, clause=clause)
@@ -402,5 +448,5 @@ def test_context_has_no_step_events_or_registry_surface():
         "channels_read", "dist", "frame_ids", "frame_pose", "frame_pose_window",
         "held_object", "joint", "joint_names", "joint_window", "now_wall_ns",
         "object_ids", "object_pose", "object_pose_window", "params", "state",
-        "transform",
+        "transform", "value",
     ]

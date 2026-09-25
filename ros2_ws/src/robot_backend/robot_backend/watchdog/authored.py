@@ -341,6 +341,11 @@ class MonitorContext:
     the recorder/engine objects themselves. Every returned dict is a fresh
     copy. Every method call is noted, and channels_read exposes the sorted
     set as "method:arg" strings (bare "method" for calls with no argument).
+
+    params carries the entries exactly as the monitor was armed with -- for an
+    authored monitor each entry is the {"value": ..., "source": ...} mapping
+    the tool received -- and value(name) is the convenience accessor for the
+    plain scalar inside one.
     """
 
     def __init__(
@@ -367,6 +372,14 @@ class MonitorContext:
             f"{method}:{arg}" if arg is not None else method
             for method, arg in self._channels
         )
+
+    def value(self, name: str) -> Any:
+        """The plain value of params[name]: its "value" entry if the param is
+        a {value, source} mapping, else the entry itself."""
+        entry = self.params[name]
+        if isinstance(entry, dict) and "value" in entry:
+            return entry["value"]
+        return entry
 
     # -- identity listings -------------------------------------------------
 
@@ -543,7 +556,13 @@ class AuthoredMonitor(MonitorPrimitive):
             self.threshold = 0.0
         self.comparison = "authored"
 
-        self.ctx = MonitorContext(recorder, engine, plain, state={})
+        # ctx.params carries the {value, source} entries EXACTLY as armed (a
+        # JSON-safe deep copy), matching the tool docstring authored code is
+        # written against; plain values above serve only the threshold
+        # plumbing. One ctx for the monitor's whole life: the arm-time first
+        # call and every later evaluation share this object, so ctx.state
+        # persists across calls.
+        self.ctx = MonitorContext(recorder, engine, _json_safe(dict(params)), state={})
         try:
             self.first_call_result, self.last_wall_time_sec = run_with_budget(
                 self._check, self.ctx

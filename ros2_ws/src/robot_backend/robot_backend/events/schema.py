@@ -249,6 +249,11 @@ class MonitorDisarmedPayload(BaseModel):
 
     monitor_id: str
     reason: str
+    # Authored-lane failure surface: the exception type and message (or the
+    # offending return's description) behind an authored_* disarm, truncated
+    # to ~300 chars. None on library disarms and every pre-existing reason;
+    # defaulted so existing logs still parse.
+    detail: str | None = None
 
 
 class HaltPayload(BaseModel):
