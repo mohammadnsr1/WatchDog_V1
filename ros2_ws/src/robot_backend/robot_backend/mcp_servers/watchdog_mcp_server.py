@@ -272,11 +272,28 @@ def _write_capture_frames(
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.types import ToolAnnotations
 except ImportError as exc:
     FastMCP = None  # type: ignore[assignment]
+    ToolAnnotations = None  # type: ignore[assignment]
     _MCP_IMPORT_ERROR = exc
 else:
     _MCP_IMPORT_ERROR = None
+
+# Claude Code caps an MCP tool result at roughly 50 KB of characters
+# (independently of MAX_MCP_OUTPUT_TOKENS): anything larger is saved to a
+# session file and the model gets a ~2 KB preview it is expected to Read.
+# These sessions deny Read by design, so an over-limit result is simply LOST
+# to the agent. This vendor annotation is the documented per-tool override.
+# It goes on every tool whose full result the agent must receive inline:
+# get_rendered_task crossed the default at 51.5 KB when the S2 prompt landed
+# (observed 2026-09-25), and get_evidence/get_events can grow past it on a
+# long window. ToolAnnotations(extra="allow") carries the namespaced key.
+_LARGE_RESULT_ANNOTATIONS = (
+    ToolAnnotations(**{"anthropic/maxResultSizeChars": 400_000})
+    if ToolAnnotations is not None
+    else None
+)
 
 
 class _UnservableToolRegistry:
@@ -1158,8 +1175,8 @@ def _timeout_or_finalize(ctx: WatchDogContext, command: str, t0: float) -> dict[
 # what that cost.
 if mcp is not None:
 
-    @mcp.tool()
-    def get_rendered_task() -> dict[str, Any]:
+    @mcp.tool(annotations=_LARGE_RESULT_ANNOTATIONS)
+    def get_rendered_task(part: str | None = None) -> dict[str, Any]:
         """Return the WATCHDOG's system prompt and rendered task. Call first.
 
         Reads WATCHDOG_TASK_PATH only. This tool is hosted here, on the server
@@ -1173,12 +1190,30 @@ if mcp is not None:
         Returns system_prompt and task as separate fields: load system_prompt
         as your standing instructions and task as your opening task, before
         calling any other tool.
+
+        part selects which of the two large fields the result carries:
+        "system_prompt" returns everything except task, "task" returns
+        everything except system_prompt, and omitting it returns both.
+        The combined result is ~50 KB, which some MCP clients truncate to a
+        short preview; the two part results are each safely under that. The
+        remaining fields (role, scenario, sources, session_dir, session_rule,
+        instructions) are identical on every call.
         """
 
         command = "get_rendered_task"
         try:
+            if part not in (None, "system_prompt", "task"):
+                raise ValueError(
+                    'part must be "system_prompt", "task", or omitted.'
+                )
             result = role_context.build_rendered_task(role_context.WATCHDOG_ROLE)
             result["scenario"] = _SCENARIO
+            if part == "system_prompt":
+                result.pop("task", None)
+                result["part"] = part
+            elif part == "task":
+                result.pop("system_prompt", None)
+                result["part"] = part
             return result
         except Exception as exc:
             return _error(command, exc)
@@ -1621,7 +1656,7 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_LARGE_RESULT_ANNOTATIONS)
     def get_events(since_wall_ns: int | None = None) -> dict[str, Any]:
         """Return buffered executor and monitor events from the shared topic tail.
 
@@ -1640,7 +1675,7 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc, since_wall_ns=since_wall_ns)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_LARGE_RESULT_ANNOTATIONS)
     def get_evidence(
         start_wall_ns: int,
         end_wall_ns: int,

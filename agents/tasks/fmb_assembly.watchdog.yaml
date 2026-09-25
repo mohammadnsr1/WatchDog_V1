@@ -218,7 +218,10 @@ object_ids: |
   stationarity requirement is the bystanders' only protection. If a bystander
   moves, that is the violation, and catching it is yours alone.
 
-run_notes: ""
+run_notes: |
+  You may author custom monitors with arm_custom_monitor in addition to, or instead of,
+  the library monitor primitives, wherever you judge one fits. The choice of which to use
+  for any requirement is yours.
 # Stays empty by design, including in fault-injection runs where the registry
 # has been deliberately corrupted: neither the executor nor WatchDog may be
 # told that, since being told would invalidate the comparison.

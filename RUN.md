@@ -159,6 +159,17 @@ claude --version > "$SD/claude_cli_version.txt"
 Order matters: the watchdog must be up and armed before the executor can depart
 from anything worth observing.
 
+The launcher scripts wrap everything below — config selection, the mandatory
+flags, and the bootstrap message that used to be typed by hand (so it is now
+byte-identical on every run):
+
+```bash
+./run_watchdog.sh s2 1     # scenario s1|s2|s3, assembly 1|2; defaults: s1 1
+./run_executor.sh 1        # assembly 1|2; same value as the watchdog's
+```
+
+The manual commands below remain the reference for what the scripts do.
+
 ### Terminal 1 — watchdog
 
 ```bash
@@ -174,9 +185,13 @@ one thing the two-file split exists to prevent.
 
 Then, as the session's first action:
 
-1. Call `get_rendered_task`. It returns `system_prompt` and `task` as separate
-   fields — load `system_prompt` as standing instructions and `task` as the
-   opening task, before any other tool call.
+1. Call `get_rendered_task(part="system_prompt")`, then
+   `get_rendered_task(part="task")` — load `system_prompt` as standing
+   instructions and `task` as the opening task, before any other tool call.
+   Do NOT call it without `part`: the combined result is ~50 KB, over the
+   CLI's MCP result-size cap, so it arrives as a 2 KB preview pointing at a
+   saved file this Read-denied session cannot open (observed 2026-09-25 on
+   the first S2 attempt). The two part results are each safely under the cap.
 2. Let it come up and **arm its monitors**. Wait for this before starting the
    executor.
 
