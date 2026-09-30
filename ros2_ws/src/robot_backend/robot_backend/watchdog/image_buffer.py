@@ -29,10 +29,12 @@ second RGB subscription deserialize every frame twice.
 from __future__ import annotations
 
 import collections
+import functools
 import math
 import os
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from .timebase import wall_ns
@@ -266,10 +268,16 @@ class ImageBufferManager:
         callback_group: Any,
         candidates: tuple[str, ...] | list[str] | None = None,
     ) -> list[str]:
-        """Discover and subscribe to available image topics. Returns chosen topics.
+        """Subscribe to the configured image topics unconditionally. Returns them.
 
-        If no image topic exists, logs once and returns [] -- an empty buffer is
-        a supported configuration, not an error.
+        Subscriptions are no longer gated on get_topic_names_and_types(): that
+        races DDS discovery at server start, and a topic missed in the attach
+        snapshot stayed unsubscribed for the whole run (observed live
+        2026-09-30, alongside the same race in CameraStreams.attach). One topic
+        per base stream is still chosen -- the highest-priority candidate --
+        and a compressed variant is recognised by name or, when discovery has
+        it, by type. An unpublished topic just never delivers, which is the
+        supported empty-buffer configuration.
         """
         try:
             from sensor_msgs.msg import CompressedImage, Image
@@ -278,23 +286,27 @@ class ImageBufferManager:
             return []
 
         cand = tuple(candidates) if candidates is not None else _candidate_topics_from_env()
+        # Diagnostic only (compressed-type detection for discovered topics);
+        # never a condition on subscribing.
         try:
             types_by_topic = {t: types for t, types in node.get_topic_names_and_types()}
-        except Exception as exc:  # pragma: no cover - needs ROS
-            self._log(f"image buffer: topic discovery failed ({exc}); no frames buffered")
-            return []
+        except Exception:  # pragma: no cover - needs ROS
+            types_by_topic = {}
 
-        chosen = self.choose_topics(cand, types_by_topic)
-        if not chosen:
-            self._log(
-                f"image buffer: none of {list(cand)} are published; "
-                "no visual evidence will be buffered (supported configuration)"
-            )
-            return []
+        chosen: list[str] = []
+        seen_bases: set[str] = set()
+        for topic in cand:
+            base = _base_stream(topic)
+            if base in seen_bases:
+                continue
+            seen_bases.add(base)
+            chosen.append(topic)
 
         for topic in chosen:
             type_names = types_by_topic.get(topic, [])
-            is_compressed = any("CompressedImage" in t for t in type_names)
+            is_compressed = topic.endswith("/compressed") or any(
+                "CompressedImage" in t for t in type_names
+            )
             msg_cls = CompressedImage if is_compressed else Image
             kind = "compressed" if is_compressed else "raw"
             self._subs.append(
@@ -396,6 +408,8 @@ class CameraStreams:
     not delay halt latency. The caller passes that group in.
     """
 
+    STREAM_NAMES = ("rgb", "depth", "camera_info", "pointcloud")
+
     def __init__(
         self,
         logger: Any | None = None,
@@ -407,10 +421,49 @@ class CameraStreams:
         self._rgb: _Latest | None = None
         self._depth: _Latest | None = None
         self._info: _Latest | None = None
+        self._info_topic: str | None = None
+        self._info_preferred: str = _DEFAULT_CAMERA_INFO_TOPICS[0]
         self._cloud: _Latest | None = None
         self._subs: list[Any] = []
         self.subscribed_topics: list[str] = []
         self.missing_topics: list[str] = []
+        self.attached_wall_ns: int | None = None
+        # Per-stream receive/error accounting. This is the instrumentation a
+        # live "nothing arrives" failure explains itself with: every callback
+        # counts here, every swallowed exception counts here, and stats()
+        # serves it to look()'s text part. topics is what attach() actually
+        # subscribed for the stream; topic is the one that last FILLED the
+        # slot (they differ for camera_info, which subscribes two candidates).
+        self._stats: dict[str, dict[str, Any]] = {
+            name: {
+                "topics": [], "topic": None, "qos_reliability": "RELIABLE",
+                "received": 0, "last_wall_ns": None,
+                "errors": 0, "first_error": None,
+            }
+            for name in self.STREAM_NAMES
+        }
+
+    # -- receive/error accounting -------------------------------------------
+
+    def _count_received(self, stream: str, topic: str | None = None) -> None:
+        with self._lock:
+            entry = self._stats[stream]
+            entry["received"] += 1
+            entry["last_wall_ns"] = wall_ns()
+            if topic:
+                entry["topic"] = topic
+
+    def _count_error(self, stream: str, exc: BaseException) -> None:
+        """Count a callback/forward failure; log the first, then every 100th."""
+        text = f"{type(exc).__name__}: {exc}"
+        with self._lock:
+            entry = self._stats[stream]
+            entry["errors"] += 1
+            count = entry["errors"]
+            if entry["first_error"] is None:
+                entry["first_error"] = text
+        if count == 1 or count % 100 == 0:
+            self._log(f"camera streams: {stream} callback error #{count}: {text}")
 
     # -- ingest ------------------------------------------------------------
 
@@ -422,8 +475,12 @@ class CameraStreams:
         second time would be the only alternative. The frame carries its own
         receipt wall_ns, so no clock is re-read here.
         """
-        with self._lock:
-            self._rgb = _Latest(msg=frame, stamp_ns=0, wall_ns=int(frame.wall_ns))
+        try:
+            with self._lock:
+                self._rgb = _Latest(msg=frame, stamp_ns=0, wall_ns=int(frame.wall_ns))
+            self._count_received("rgb", getattr(frame, "topic", None))
+        except Exception as exc:
+            self._count_error("rgb", exc)
 
     def attach(
         self,
@@ -440,44 +497,50 @@ class CameraStreams:
         would deserialize every frame twice for nothing. subscribe_rgb=True is
         the executor case, which has no ring buffer and needs its own.
 
-        A topic that is not currently published is recorded in missing_topics
-        and skipped. Nothing here retries: the Isaac graph is brought up before
-        the agents are, so a topic absent at attach time is absent for the run,
-        and pretending otherwise would hide a misconfigured cell behind a
-        reconnect loop. Returns a dict describing what was wired.
+        Subscriptions are created UNCONDITIONALLY for every configured topic.
+        They used to be gated on get_topic_names_and_types(), which races DDS
+        discovery: a server that attaches milliseconds after its node is
+        created sees an empty graph, skips every topic, and look() is then
+        blind for the whole run even though the camera was publishing all
+        along (observed live 2026-09-30). Discovery is now DIAGNOSTIC only --
+        it feeds missing_topics and the attach log line, never the decision
+        to subscribe. camera_info subscribes BOTH candidate names; whichever
+        fills the slot is recorded, and the namespaced one is preferred.
+        Returns a dict describing what was wired.
         """
         result: dict[str, Any] = {
             "subscribed": [], "missing": [], "errors": [],
         }
+        self.attached_wall_ns = wall_ns()
         try:
-            from sensor_msgs.msg import CameraInfo, CompressedImage, Image, PointCloud2
+            from sensor_msgs.msg import CameraInfo, Image, PointCloud2
         except Exception as exc:  # pragma: no cover - needs ROS
             self._log(f"camera streams: sensor_msgs import failed ({exc}); no views")
             result["errors"].append(f"sensor_msgs import failed: {exc}")
             return result
 
+        # Diagnostic snapshot only. Empty or stale is fine: it changes what is
+        # REPORTED, never what is subscribed.
         try:
             types_by_topic = {t: types for t, types in node.get_topic_names_and_types()}
         except Exception as exc:  # pragma: no cover - needs ROS
-            self._log(f"camera streams: topic discovery failed ({exc}); no views")
-            result["errors"].append(f"topic discovery failed: {exc}")
-            return result
+            types_by_topic = {}
+            result["errors"].append(f"topic discovery failed (diagnostic only): {exc}")
 
-        wanted: list[tuple[str, Any, Any]] = []
+        wanted: list[tuple[str, str, Any, Any]] = []
 
         if subscribe_rgb:
             cand = (
                 tuple(rgb_candidates) if rgb_candidates is not None
                 else _candidate_topics_from_env()
             )
-            for topic in ImageBufferManager.choose_topics(cand, types_by_topic):
-                is_compressed = any(
+            for topic in cand:
+                looks_compressed = topic.rstrip("/").endswith("compressed") or any(
                     "CompressedImage" in t for t in types_by_topic.get(topic, [])
                 )
-                if is_compressed:
+                if looks_compressed:
                     # look() must hand the model real pixels, and decoding JPEG
                     # needs a codec this cell does not ship (see png_encode).
-                    # Skipping is better than buffering frames no view can use.
                     self._log(
                         f"camera streams: skipping compressed RGB topic {topic!r} "
                         "-- no codec in this interpreter to decode it"
@@ -486,19 +549,31 @@ class CameraStreams:
                         {"topic": topic, "reason": "compressed; no codec available"}
                     )
                     continue
-                wanted.append((topic, Image, self._on_rgb_msg))
+                wanted.append(
+                    ("rgb", topic, Image, functools.partial(self._on_rgb_msg, topic=topic))
+                )
 
         depth_topic = os.environ.get("WATCHDOG_DEPTH_IMAGE_TOPIC", _DEFAULT_DEPTH_IMAGE_TOPIC)
         cloud_topic = os.environ.get("WATCHDOG_POINTCLOUD_TOPIC", _DEFAULT_POINTCLOUD_TOPIC)
-        wanted.append((depth_topic, Image, self._on_depth))
-        wanted.append((self._resolve_info_topic(types_by_topic), CameraInfo, self._on_info))
-        wanted.append((cloud_topic, PointCloud2, self._on_cloud))
+        wanted.append(("depth", depth_topic, Image, self._on_depth))
+        info_candidates = self._info_candidates()
+        self._info_preferred = info_candidates[0]
+        for info_topic in info_candidates:
+            wanted.append((
+                "camera_info", info_topic, CameraInfo,
+                functools.partial(self._on_info, topic=info_topic),
+            ))
+        wanted.append(("pointcloud", cloud_topic, PointCloud2, self._on_cloud))
 
-        for topic, msg_cls, handler in wanted:
+        for stream, topic, msg_cls, handler in wanted:
             if topic not in types_by_topic:
+                # Not yet discovered at attach time -- recorded for the log,
+                # but subscribed anyway: DDS delivers once the publisher is
+                # discovered, whenever that happens.
                 self.missing_topics.append(topic)
-                result["missing"].append({"topic": topic, "reason": "not published"})
-                continue
+                result["missing"].append(
+                    {"topic": topic, "reason": "not discovered at attach (subscribed anyway)"}
+                )
             try:
                 self._subs.append(
                     node.create_subscription(
@@ -509,38 +584,36 @@ class CameraStreams:
                 result["errors"].append(f"{topic}: {exc}")
                 continue
             self.subscribed_topics.append(topic)
+            with self._lock:
+                self._stats[stream]["topics"].append(topic)
             result["subscribed"].append(topic)
 
         self._log(
             f"camera streams: subscribed to {result['subscribed']}; "
-            f"missing {[m['topic'] for m in result['missing']]}"
+            f"not discovered yet {[m['topic'] for m in result['missing']]}"
         )
         return result
 
     @staticmethod
-    def _resolve_info_topic(types_by_topic: dict[str, Any]) -> str:
-        """The camera_info topic to use: env override, else first candidate present.
+    def _info_candidates() -> tuple[str, ...]:
+        """camera_info topics to subscribe: env override alone, else both defaults.
 
-        Falls back to the FIRST candidate when none is published, so attach()
-        records a specific missing topic name rather than an empty string and the
-        operator can see which one was looked for.
+        The first entry is the PREFERRED one: when both candidates publish, the
+        slot follows the preferred (namespaced) topic.
         """
         override = os.environ.get("WATCHDOG_CAMERA_INFO_TOPIC")
         if override and override.strip():
-            return override.strip()
-        for topic in _DEFAULT_CAMERA_INFO_TOPICS:
-            if topic in types_by_topic:
-                return topic
-        return _DEFAULT_CAMERA_INFO_TOPICS[0]
+            return (override.strip(),)
+        return tuple(_DEFAULT_CAMERA_INFO_TOPICS)
 
     # Queue depth 1 on every subscription above: this is a latest-only store, so
     # a backlog would only ever be frames it is about to discard.
 
-    def _on_rgb_msg(self, msg: Any) -> None:
+    def _on_rgb_msg(self, msg: Any, topic: str = "rgb") -> None:
         try:
             frame = ImageFrame(
                 wall_ns=wall_ns(),
-                topic="rgb",
+                topic=topic,
                 encoding=str(getattr(msg, "encoding", "") or ""),
                 data=bytes(getattr(msg, "data", b"") or b""),
                 width=int(getattr(msg, "width", 0) or 0),
@@ -550,25 +623,40 @@ class CameraStreams:
                 self._rgb = _Latest(
                     msg=frame, stamp_ns=_header_stamp_ns(msg), wall_ns=frame.wall_ns
                 )
+            self._count_received("rgb", topic)
         except Exception as exc:
-            self._log(f"camera streams: rgb callback failed: {exc}")
+            self._count_error("rgb", exc)
 
     def _on_depth(self, msg: Any) -> None:
-        self._store("_depth", msg)
+        self._store("_depth", "depth", msg)
 
-    def _on_info(self, msg: Any) -> None:
-        self._store("_info", msg)
+    def _on_info(self, msg: Any, topic: str) -> None:
+        """Store camera_info, preferring the namespaced topic when both publish."""
+        try:
+            latest = _Latest(msg=msg, stamp_ns=_header_stamp_ns(msg), wall_ns=wall_ns())
+            with self._lock:
+                if (
+                    topic == self._info_preferred
+                    or self._info is None
+                    or self._info_topic != self._info_preferred
+                ):
+                    self._info = latest
+                    self._info_topic = topic
+            self._count_received("camera_info", topic)
+        except Exception as exc:
+            self._count_error("camera_info", exc)
 
     def _on_cloud(self, msg: Any) -> None:
-        self._store("_cloud", msg)
+        self._store("_cloud", "pointcloud", msg)
 
-    def _store(self, attr: str, msg: Any) -> None:
+    def _store(self, attr: str, stream: str, msg: Any) -> None:
         try:
             latest = _Latest(msg=msg, stamp_ns=_header_stamp_ns(msg), wall_ns=wall_ns())
             with self._lock:
                 setattr(self, attr, latest)
+            self._count_received(stream)
         except Exception as exc:
-            self._log(f"camera streams: {attr} callback failed: {exc}")
+            self._count_error(stream, exc)
 
     # -- age helpers -------------------------------------------------------
 
@@ -665,11 +753,7 @@ class CameraStreams:
         )
         parts: list[str] = []
         if depth_age is None:
-            parts.append(
-                f"no depth image has arrived on "
-                f"{os.environ.get('WATCHDOG_DEPTH_IMAGE_TOPIC', _DEFAULT_DEPTH_IMAGE_TOPIC)} "
-                f"(expected 32FC1 metres; may not be published yet)"
-            )
+            parts.append(self.never_received_text("depth"))
         elif depth_age > self.stale_sec:
             parts.append(f"depth image is {depth_age:.2f}s old (stale > {self.stale_sec}s)")
         else:
@@ -727,12 +811,60 @@ class CameraStreams:
         }
 
     def stats(self) -> dict[str, Any]:
+        """Per-stream receive/error accounting, for look()'s "streams" block.
+
+        One entry per stream: the topic(s) subscribed, QoS reliability, how
+        many messages arrived, when the last one arrived (wall clock), how
+        many callback/forward errors occurred and the first error's text. A
+        live "nothing arrives" failure reads its own explanation out of this.
+        """
+        now = wall_ns()
+        ages = self.ages()
+        with self._lock:
+            streams = {
+                name: dict(entry, topics=list(entry["topics"]))
+                for name, entry in self._stats.items()
+            }
+            info_topic = self._info_topic
+        for name, entry in streams.items():
+            last = entry.get("last_wall_ns")
+            entry["age_sec"] = (
+                round((now - last) / 1e9, 3) if last is not None else ages.get(name)
+            )
+        if info_topic:
+            streams["camera_info"]["topic"] = info_topic
         return {
+            "attached_wall_ns": self.attached_wall_ns,
+            "attached_iso": self._attached_iso(),
             "subscribed_topics": list(self.subscribed_topics),
-            "missing_topics": list(self.missing_topics),
-            "ages_sec": self.ages(),
+            "not_discovered_at_attach": list(self.missing_topics),
+            "ages_sec": ages,
             "stale_sec": self.stale_sec,
+            "streams": streams,
         }
+
+    def _attached_iso(self) -> str | None:
+        if self.attached_wall_ns is None:
+            return None
+        return datetime.fromtimestamp(
+            self.attached_wall_ns / 1e9, tz=timezone.utc
+        ).isoformat()
+
+    def never_received_text(self, stream: str) -> str:
+        """The views_failed sentence for a stream that has never delivered."""
+        with self._lock:
+            entry = dict(self._stats.get(stream) or {})
+            topics = list(entry.get("topics") or [])
+        topic = ", ".join(topics) if topics else f"<no {stream} subscription>"
+        if self.attached_wall_ns is not None:
+            elapsed = f"{(wall_ns() - self.attached_wall_ns) / 1e9:.0f}"
+            since = f"since attach at {self._attached_iso()} ({elapsed} s ago)"
+        else:
+            since = "and no attach has happened"
+        return (
+            f"no message received on {topic} {since}; "
+            f"received={entry.get('received', 0)}, errors={entry.get('errors', 0)}"
+        )
 
     def _log(self, message: str) -> None:
         if self.logger is not None:
@@ -835,7 +967,13 @@ def camera_info_to_intrinsics(msg: Any) -> dict[str, Any] | None:
     infinities rather than an obvious failure.
     """
     try:
-        k = [float(v) for v in (getattr(msg, "k", None) or getattr(msg, "K", []))]
+        # No `k or K`: rosidl exposes CameraInfo.k as a numpy array, whose
+        # truth value raises -- which the except below would silently turn
+        # into "no intrinsics" for every real message.
+        k_raw = getattr(msg, "k", None)
+        if k_raw is None:
+            k_raw = getattr(msg, "K", None)
+        k = [float(v) for v in (k_raw if k_raw is not None else [])]
         width = int(getattr(msg, "width", 0) or 0)
         height = int(getattr(msg, "height", 0) or 0)
     except Exception:
@@ -846,7 +984,10 @@ def camera_info_to_intrinsics(msg: Any) -> dict[str, Any] | None:
     if not all(math.isfinite(v) for v in (fx, fy, cx, cy)) or fx == 0.0 or fy == 0.0:
         return None
     try:
-        d = [float(v) for v in (getattr(msg, "d", None) or getattr(msg, "D", []) or [])]
+        d_raw = getattr(msg, "d", None)
+        if d_raw is None:
+            d_raw = getattr(msg, "D", None)
+        d = [float(v) for v in (d_raw if d_raw is not None else [])]
     except Exception:
         d = []
     return {

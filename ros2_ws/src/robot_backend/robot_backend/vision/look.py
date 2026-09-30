@@ -128,6 +128,10 @@ class LookResult:
     camera: dict[str, Any] | None = None
     step_id: str | None = None
     notes: list[str] = field(default_factory=list)
+    # CameraStreams.stats(): per-stream topic, receive counts, last-receive
+    # time and error counts, so a look whose views failed carries the receive
+    # accounting that explains why.
+    streams: dict[str, Any] | None = None
 
     def text_payload(self) -> dict[str, Any]:
         """The JSON object that becomes look()'s text content part."""
@@ -162,6 +166,7 @@ class LookResult:
             ),
             "camera_frame_id": self.camera_frame_id,
             "camera": self.camera,
+            "streams": self.streams,
             "paths": self.paths,
             "notes": self.notes,
         }
@@ -315,6 +320,10 @@ def perform_look(
         ages = deps.streams.ages()
     except Exception as exc:
         result.notes.append(f"could not read stream ages: {exc}")
+    try:
+        result.streams = deps.streams.stats()
+    except Exception as exc:
+        result.notes.append(f"could not read stream stats: {exc}")
 
     # Camera metadata is reported whether or not any view succeeded: knowing the
     # intrinsics are missing is exactly what explains a missing depth fallback.
@@ -344,15 +353,18 @@ def perform_look(
                 )
                 continue
             if got is None:
-                result.views_failed.append({
-                    "view": "rgb",
-                    "reason": (
-                        "no RGB frame available"
-                        if age is None else
+                if age is None:
+                    try:
+                        reason = deps.streams.never_received_text("rgb")
+                    except Exception:
+                        reason = "no RGB frame available"
+                else:
+                    reason = (
                         f"latest RGB frame is {age:.2f}s old "
                         f"(stale > {deps.stale_sec}s), or its encoding could not be read"
-                    ),
-                    "age_sec": age,
+                    )
+                result.views_failed.append({
+                    "view": "rgb", "reason": reason, "age_sec": age,
                 })
                 continue
             array, stamp_ns = got

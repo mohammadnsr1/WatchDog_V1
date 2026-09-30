@@ -598,6 +598,49 @@ def _validate_run_clause_results(clause_results: list[dict[str, Any]]) -> None:
             )
 
 
+def _build_camera_pipeline(
+    node: Any, image_cb_group: Any
+) -> tuple[ImageRingBuffer, ImageBufferManager, CameraStreams]:
+    """The WatchDog's whole camera path, exactly as _ensure_watchdog wires it.
+
+    Factored out so an in-process test can build the real pipeline against a
+    test node instead of hand-copying the wiring. The ring buffer serves
+    capture_frames; the manager owns the single RGB subscription and forwards
+    each accepted frame into the CameraStreams; the streams additionally own
+    depth/camera_info/pointcloud and are the ONE instance look() reads
+    (reached only through the context this returns into). Subscriptions go in
+    a SEPARATE callback group from the recorder's /joint_states and TF
+    callbacks (D2): image callbacks are slow and must never delay monitor
+    evaluation or halt latency.
+    """
+    image_buffer = ImageRingBuffer(
+        max_frames=_env_int("WATCHDOG_IMAGE_BUFFER_MAX_FRAMES", _DEFAULT_IMAGE_BUFFER_MAX_FRAMES),
+        max_bytes=_env_int("WATCHDOG_IMAGE_BUFFER_BYTES", _DEFAULT_IMAGE_BUFFER_BYTES),
+    )
+    image_hz = _env_float("WATCHDOG_IMAGE_BUFFER_HZ", _DEFAULT_IMAGE_BUFFER_HZ)
+    # look()'s latest-only store. Constructed BEFORE the manager so it can be
+    # handed in: the manager forwards each accepted RGB frame here, which
+    # keeps look() on the same single RGB subscription capture_frames already
+    # pays for instead of deserializing every frame twice.
+    camera_streams = CameraStreams(logger=node.get_logger())
+    image_manager = ImageBufferManager(
+        image_buffer, hz=image_hz, logger=node.get_logger(),
+        streams=camera_streams,
+    )
+    try:
+        image_manager.attach(node, image_cb_group)
+    except Exception as exc:
+        node.get_logger().warning(f"image buffer attach failed (non-fatal): {exc}")
+    try:
+        # subscribe_rgb=False: the manager above owns RGB and forwards it.
+        # The depth/camera_info/pointcloud topics only degrade look()'s depth
+        # view when absent -- same callback group, same halt-latency reason.
+        camera_streams.attach(node, image_cb_group, subscribe_rgb=False)
+    except Exception as exc:
+        node.get_logger().warning(f"camera streams attach failed (non-fatal): {exc}")
+    return image_buffer, image_manager, camera_streams
+
+
 def _ensure_watchdog() -> WatchDogContext:
     global _CONTEXT
     with _CONTEXT_LOCK:
@@ -645,37 +688,9 @@ def _ensure_watchdog() -> WatchDogContext:
             registry=registry,
             wake_event=wake_event,
         )
-        # Image ring buffer for retrospective visual-evidence capture. Its
-        # subscriptions go in a SEPARATE callback group from the recorder's
-        # /joint_states and TF callbacks (D2): image callbacks are slow and
-        # must never delay monitor evaluation or halt latency.
-        image_buffer = ImageRingBuffer(
-            max_frames=_env_int("WATCHDOG_IMAGE_BUFFER_MAX_FRAMES", _DEFAULT_IMAGE_BUFFER_MAX_FRAMES),
-            max_bytes=_env_int("WATCHDOG_IMAGE_BUFFER_BYTES", _DEFAULT_IMAGE_BUFFER_BYTES),
+        image_buffer, image_manager, camera_streams = _build_camera_pipeline(
+            node, ReentrantCallbackGroup()
         )
-        image_hz = _env_float("WATCHDOG_IMAGE_BUFFER_HZ", _DEFAULT_IMAGE_BUFFER_HZ)
-        # look()'s latest-only store. Constructed BEFORE the manager so it can be
-        # handed in: the manager forwards each accepted RGB frame here, which
-        # keeps look() on the same single RGB subscription capture_frames already
-        # pays for instead of deserializing every frame twice.
-        camera_streams = CameraStreams(logger=node.get_logger())
-        image_manager = ImageBufferManager(
-            image_buffer, hz=image_hz, logger=node.get_logger(),
-            streams=camera_streams,
-        )
-        image_cb_group = ReentrantCallbackGroup()
-        try:
-            image_manager.attach(node, image_cb_group)
-        except Exception as exc:
-            node.get_logger().warning(f"image buffer attach failed (non-fatal): {exc}")
-        try:
-            # subscribe_rgb=False: the manager above owns RGB and forwards it.
-            # The depth/camera_info/pointcloud topics are all optional and a
-            # missing one only degrades look()'s depth view -- same callback
-            # group, for the same halt-latency reason.
-            camera_streams.attach(node, image_cb_group, subscribe_rgb=False)
-        except Exception as exc:
-            node.get_logger().warning(f"camera streams attach failed (non-fatal): {exc}")
         halt_client = HaltClient(
             node=node,
             event_bus=event_bus,
@@ -1428,13 +1443,18 @@ if mcp is not None:
 
     @mcp.tool()
     def get_execution_state() -> dict[str, Any]:
-        """Return buffered recorder counts, current step, monitors, and last event."""
+        """Return buffered recorder counts, current step, monitors, and last event.
+
+        now_wall_ns is the current time on the wall-clock nanosecond axis every
+        event's wall_ns and every evidence/capture window argument uses.
+        """
         command = "get_execution_state"
         try:
             ctx = _ensure_watchdog()
             events = ctx.recorder.latest_events(1)
             return _ok(
                 command,
+                now_wall_ns=wall_ns(),
                 current_step_id=ctx.recorder.current_step(),
                 counts=ctx.recorder.counts(),
                 armed_monitors=ctx.engine.snapshot(),
@@ -2186,6 +2206,10 @@ if mcp is not None:
         If the window overlaps no buffered frames, returns an error carrying
         the buffered range and now_wall_ns, matching get_evidence -- an empty
         result is never silently indistinguishable from "nothing happened".
+
+        To build a "last N seconds" window, take now_wall_ns from
+        get_execution_state (the same clock as these arguments) and use
+        [now_wall_ns - N*1e9, now_wall_ns].
         """
         command = "capture_frames"
         try:

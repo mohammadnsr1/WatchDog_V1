@@ -35,6 +35,7 @@ SCENE_ALLOWLIST: dict[str, str] = {
     "end_step": "emits a dedicated end_step event directly, not skill_start/skill_end",
     "end_run": "emits a dedicated run_ended event directly, not skill_start/skill_end",
     "mark_phase": "emits a dedicated phase event directly, not skill_start/skill_end",
+    "look": "emits its own look event",
 }
 
 GRIPPER_ALLOWLIST: dict[str, str] = {
