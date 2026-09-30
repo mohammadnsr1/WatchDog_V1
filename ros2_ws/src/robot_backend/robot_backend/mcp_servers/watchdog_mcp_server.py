@@ -10,6 +10,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,12 @@ from robot_backend.events.schema import (
     make_event,
 )
 from robot_backend.vision.look import LookDeps, look as _run_look
-from robot_backend.watchdog.authored import AuthoredCodeError, AuthoredMonitor
+from robot_backend.watchdog.authored import (
+    AuthoredBudgetExceeded,
+    AuthoredCodeError,
+    AuthoredMonitor,
+    json_safe,
+)
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.utils.png_encode import encode_png
@@ -967,6 +973,106 @@ def _save_authored_source(session_dir: Path, monitor_id: str, source: str) -> Pa
     return path
 
 
+# Dry-run pacing. 50 ms is the TF feed's own period (20 Hz), so consecutive dry
+# calls see consecutive samples -- the same spacing the live authored lane gets
+# woken at. Ticks are clamped because `ticks` is agent-supplied and each one
+# sleeps: unclamped, a large value would block the tool, and with it the run, for
+# as long as the agent asked for.
+_DRY_RUN_TICK_PERIOD_SEC = 0.05
+_DRY_RUN_MAX_TICKS = 20
+
+
+def _would_fire(returned: Any) -> bool:
+    """Whether the live lane would have read this return value as a fire.
+
+    Mirrors AuthoredMonitor.evaluate's contract WITHOUT applying it: a dict
+    carrying a finite numeric "value" is a fire, None is "condition holds", and
+    anything else is a contract violation that would disarm the monitor rather
+    than fire it. Reported for information only -- a dry run never fires.
+    """
+    if not isinstance(returned, dict) or "value" not in returned:
+        return False
+    try:
+        return math.isfinite(float(returned["value"]))
+    except (TypeError, ValueError):
+        return False
+
+
+def _dry_run_error(exc: BaseException) -> dict[str, Any]:
+    """Type, message and last traceback frame for a failed dry call.
+
+    The last frame is the useful part: authored source is compiled under the
+    filename "<authored_monitor>", so the frame names the line number IN THE
+    AUTHOR'S OWN CODE. Without it the author gets "KeyError: 'x'" with no idea
+    which line raised it.
+    """
+    frames = traceback.format_tb(exc.__traceback__)
+    return {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "traceback_last": frames[-1].strip() if frames else None,
+    }
+
+
+def _prepare_authored_monitor(
+    code: str,
+    description: str,
+    params: dict[str, Any],
+    clause: dict[str, Any] | None = None,
+    object_id: str | None = None,
+    threshold_param: str | None = None,
+    monitor_id: str | None = None,
+) -> tuple[Any | None, dict[str, Any] | None]:
+    """Build one AuthoredMonitor and resolve its provenance, WITHOUT arming it.
+
+    Everything arm_custom_monitor does up to, but not including, engine.arm():
+    AuthoredMonitor construction -- which validates the source, compiles it into
+    the restricted namespace, normalises params to {value, source}, and runs the
+    arm-time first call -- followed by threshold and param provenance
+    resolution.
+
+    Returns (monitor, None) on success, or (None, pieces) when the source or the
+    params are bad. `pieces` carries the arguments _error() needs rather than a
+    finished error dict, because the caller must format it under its OWN command
+    name: that is what keeps arm_custom_monitor's result byte-identical to what
+    it returned before this function was extracted.
+
+    Only AuthoredCodeError is caught. Anything else -- a provenance lookup
+    failing, say -- propagates to the caller's outer handler, exactly as it did
+    when this code was inline.
+
+    Shared with dry_run_custom_monitor so a dry run exercises the SAME
+    construction path as a real arm. A preparation step that differed between the
+    two would make the dry run worthless as a pre-arm check, which is its only
+    purpose.
+    """
+    ctx = _ensure_watchdog()
+    try:
+        monitor = AuthoredMonitor(
+            source=code,
+            description=description,
+            params=params,
+            recorder=ctx.recorder,
+            engine=ctx.engine,
+            clause=clause,
+            object_id=object_id,
+            threshold_param=threshold_param,
+            monitor_id=monitor_id,
+            armed_wall_ns=wall_ns(),
+        )
+    except AuthoredCodeError as exc:
+        return None, {"exc": exc, "stage": exc.stage, "lineno": exc.lineno}
+    arm_object_id = _resolve_arm_object_id(ctx, monitor)
+    monitor.provenance = {
+        "object_id": arm_object_id,
+        **_resolve_threshold_provenance(ctx, monitor, arm_object_id),
+        "param_provenance": _resolve_param_provenance(
+            ctx, monitor, arm_object_id
+        ),
+    }
+    return monitor, None
+
+
 def _build_monitor(
     ctx: WatchDogContext,
     monitor_type: str,
@@ -1529,31 +1635,23 @@ if mcp is not None:
         command = "arm_custom_monitor"
         try:
             ctx = _ensure_watchdog()
-            try:
-                monitor = AuthoredMonitor(
-                    source=code,
-                    description=description,
-                    params=params,
-                    recorder=ctx.recorder,
-                    engine=ctx.engine,
-                    clause=clause,
-                    object_id=object_id,
-                    threshold_param=threshold_param,
-                    monitor_id=monitor_id,
-                    armed_wall_ns=wall_ns(),
-                )
-            except AuthoredCodeError as exc:
+            # Construction, validation, params and provenance all live in
+            # _prepare_authored_monitor, which dry_run_custom_monitor shares so
+            # the two cannot diverge. Everything from engine.arm() onwards is
+            # arming and stays here.
+            monitor, err = _prepare_authored_monitor(
+                code,
+                description,
+                params,
+                clause,
+                object_id,
+                threshold_param,
+                monitor_id,
+            )
+            if err is not None:
                 return _error(
-                    command, exc, stage=exc.stage, lineno=exc.lineno
+                    command, err["exc"], stage=err["stage"], lineno=err["lineno"]
                 )
-            arm_object_id = _resolve_arm_object_id(ctx, monitor)
-            monitor.provenance = {
-                "object_id": arm_object_id,
-                **_resolve_threshold_provenance(ctx, monitor, arm_object_id),
-                "param_provenance": _resolve_param_provenance(
-                    ctx, monitor, arm_object_id
-                ),
-            }
             saved_path = _save_authored_source(
                 ctx.session_dir, monitor.monitor_id, monitor.source
             )
@@ -1568,6 +1666,171 @@ if mcp is not None:
                 saved_path=str(saved_path),
             )
             return _ok(command, **result)
+        except Exception as exc:
+            return _error(command, exc)
+
+    # S4 will reuse this on the executor-side monitor host: the executor authors
+    # its own monitors there and needs the same pre-arm check. Both the helper
+    # (_prepare_authored_monitor) and the loop below are deliberately free of
+    # anything WatchDog-specific beyond _ensure_watchdog(), so the executor host
+    # can call them against its own context.
+    @_tool_for("S2", "S3")
+    def dry_run_custom_monitor(
+        code: str,
+        params: dict[str, Any],
+        object_id: str | None = None,
+        ticks: int = 3,
+        description: str = "dry run",
+    ) -> dict[str, Any]:
+        """Run authored code a few times WITHOUT arming it, and show what it saw.
+
+        What this is for: checking that your code runs at all, and that the
+        channels it reads return what you expect, BEFORE you commit it as a
+        monitor. Authoring blind and discovering at the first fire that
+        ctx.object_pose returned None, or that your threshold comparison had the
+        sense inverted, costs a run.
+
+        WHAT THIS IS NOT: it is not monitoring. A dry run arms nothing, watches
+        nothing, and covers no requirement for any part of the time it takes. It
+        cannot fire, it emits no monitor_armed, monitor_fire or monitor_disarmed
+        event, and it leaves no monitor behind. Nothing that happens in the cell
+        during a dry run is being watched by it. The only record it leaves is its
+        own line in the call log. If a requirement needs watching, arm it.
+
+        Mechanics. The code goes through exactly the same preparation as
+        arm_custom_monitor -- same validator, same restricted namespace, same
+        params normalisation, same provenance resolution -- so a dry run that
+        prepares cleanly will arm cleanly. `code` must therefore satisfy the
+        whole contract in arm_custom_monitor's docstring: one top-level
+        check(ctx), the same allowed names, the same forbidden constructs.
+
+        Preparation itself calls check(ctx) ONCE, exactly as arming does: that is
+        the arm-time reference capture, and it is reported separately as
+        first_call. Your `ticks` calls happen after it, so ctx.state arrives at
+        tick 1 already holding whatever the first call put there. This is what
+        the live monitor would see, not an artefact of the dry run.
+
+        Ticks are spaced by 50 ms, the TF feed's own period, so successive calls
+        see genuinely different samples rather than the same buffered tick read
+        `ticks` times. A dry run therefore takes roughly ticks * 50 ms.
+
+        Per call you get back:
+          return_value    -- what check returned, coerced to JSON. None means
+                             "condition holds"; a dict with a numeric "value"
+                             is what WOULD have fired, had this been armed.
+          fired           -- whether a live monitor would have fired on this
+                             return. Informational only; nothing fired.
+          error           -- on an exception: its type, message, and the last
+                             traceback frame, which names the line in your source.
+          lines           -- Python lines executed. Reported even when the call
+                             raised or blew the budget. Note that work inside a C
+                             extension emits no line events, so this undercounts
+                             array work badly; the wall clock is the real bound
+                             there.
+          wall_ms         -- how long the call took. The live lane's budget is
+                             20 ms per call and five overruns disarm a monitor,
+                             so a check sitting near 20 ms here is one that will
+                             be disarmed in production.
+          budget_exceeded -- the line budget was passed; a live fire from such a
+                             call is suppressed and counts a strike.
+          state           -- ctx.state after the call, so you can watch state
+                             accumulate across ticks.
+          channels_read   -- cumulative ctx methods used, as "method:arg".
+
+        params takes the same {name: {"value": v, "source": s}} shape as
+        arm_custom_monitor. object_id behaves the same way. threshold_param is
+        deliberately absent: a dry run judges nothing, so a threshold has nothing
+        to be verified against here -- pass it when you arm.
+        """
+        command = "dry_run_custom_monitor"
+        try:
+            # No _ensure_watchdog() result is needed here -- the helper resolves
+            # the context itself and nothing below touches the engine.
+            monitor, err = _prepare_authored_monitor(
+                code,
+                description,
+                params,
+                None,        # clause: a dry run judges no requirement
+                object_id,
+                None,        # threshold_param: nothing to verify against
+                None,        # monitor_id: this monitor is never registered
+            )
+            if err is not None:
+                return _error(
+                    command, err["exc"], stage=err["stage"], lineno=err["lineno"]
+                )
+
+            # Clamped: ticks is agent-supplied and each one sleeps, so an
+            # unclamped value would block the tool (and the run) for as long as
+            # the agent asked for.
+            requested_ticks = int(ticks)
+            tick_count = max(1, min(requested_ticks, _DRY_RUN_MAX_TICKS))
+
+            results: list[dict[str, Any]] = []
+            first_call = {
+                "call": "first_call",
+                "return_value": json_safe(monitor.first_call_result),
+                "fired": _would_fire(monitor.first_call_result),
+                # None, not 0: AuthoredMonitor's constructor runs this call
+                # through run_with_budget, which does not surface a line count.
+                # Reported as an explicit key so every entry has the same shape
+                # and a consumer is never left guessing whether 0 means "none".
+                "lines": None,
+                "wall_ms": round(monitor.last_wall_time_sec * 1000.0, 3),
+                "state": json_safe(dict(monitor.ctx.state)),
+                "channels_read": list(monitor.channels_read),
+                "note": (
+                    "This call happened during preparation, exactly as it would "
+                    "during arming. Its return value never fires, and its line "
+                    "count is not measured -- the arm path does not record one."
+                ),
+            }
+
+            for index in range(tick_count):
+                # Sleep BEFORE each tick, the first included, so tick 1 reads a
+                # different TF sample from the preparation call rather than the
+                # same buffered one twice.
+                time.sleep(_DRY_RUN_TICK_PERIOD_SEC)
+                usage: dict[str, Any] = {}
+                entry: dict[str, Any] = {"call": index + 1}
+                try:
+                    returned = monitor.dry_call(usage=usage)
+                    entry["return_value"] = json_safe(returned)
+                    entry["fired"] = _would_fire(returned)
+                except AuthoredBudgetExceeded as exc:
+                    entry["error"] = _dry_run_error(exc)
+                    entry["budget_exceeded"] = True
+                    entry["fired"] = False
+                except Exception as exc:
+                    entry["error"] = _dry_run_error(exc)
+                    entry["fired"] = False
+                entry["lines"] = usage.get("lines")
+                wall_sec = usage.get("wall_sec")
+                entry["wall_ms"] = (
+                    round(wall_sec * 1000.0, 3) if wall_sec is not None else None
+                )
+                entry["state"] = json_safe(dict(monitor.ctx.state))
+                entry["channels_read"] = list(monitor.channels_read)
+                results.append(entry)
+
+            return _ok(
+                command,
+                armed=False,
+                code_sha256=monitor.code_sha256,
+                description=monitor.description,
+                object_id=monitor.provenance.get("object_id"),
+                param_provenance=monitor.provenance.get("param_provenance"),
+                tick_period_ms=_DRY_RUN_TICK_PERIOD_SEC * 1000.0,
+                ticks_requested=requested_ticks,
+                ticks_run=tick_count,
+                first_call=first_call,
+                calls=results,
+                note=(
+                    "Nothing was armed and nothing was watched. No monitor_armed, "
+                    "monitor_fire or monitor_disarmed event was emitted and no "
+                    "strike was counted. This run covered no requirement."
+                ),
+            )
         except Exception as exc:
             return _error(command, exc)
 

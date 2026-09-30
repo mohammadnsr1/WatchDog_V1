@@ -38,16 +38,40 @@ _SELF_EMITTED_EVENT_TYPES = frozenset(
     {
         "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict",
         "run_verdict", "halt", "frames_captured",
-        # A look is an agent's own observation act, not something that happened
-        # in the cell, so it must never wake a wait_for_event -- the WatchDog
-        # calling look() and then being woken by its own call would spin. Note
-        # this also suppresses the EXECUTOR's look events for the WatchDog,
-        # since the filter is by type and cannot see LookPayload.role. That is
-        # deliberate for now: whether a WatchDog should be able to wait on the
-        # executor looking is a real design question, not a Stage 1 one.
-        "look",
     }
 )
+# "look" is deliberately NOT in the set above: it is the one event type BOTH
+# roles emit, so type alone cannot say whether this process emitted it.
+# _is_self_emitted() decides it from LookPayload.role instead.
+
+# Types that never wake a bare wait_for_event -- a caller must name them in
+# event_types to receive one. Distinct from self-emitted, which is about who
+# produced the event; this is about whether it is worth interrupting for.
+#
+# An executor look is a real action by the other agent and belongs on the
+# WatchDog's timeline (it lands in self.events, so get_events returns it). But
+# waking the WatchDog every time the executor glanced at the workspace would
+# flood its loop with events it has no decision to make about, and the events it
+# waits on are the ones that change what it must do. So it is available on
+# request and silent otherwise.
+_WAKE_OPT_IN_EVENT_TYPES = frozenset({"look"})
+
+
+def _is_self_emitted(envelope: Any) -> bool:
+    """Whether THIS process produced the event, so it must not wake its own wait.
+
+    Event type answers this for every type except "look", which both the
+    WatchDog and the executor emit. A WatchDog look is self-emitted -- calling
+    look() and then being woken by that same call would spin the loop. An
+    executor look is someone else's action and is not suppressed here; it is
+    gated instead by _WAKE_OPT_IN_EVENT_TYPES, which lets a caller that asks for
+    "look" receive it while a caller that did not is left undisturbed.
+    """
+    event_type = envelope.event_type
+    if event_type == "look":
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        return payload.get("role") == "watchdog"
+    return event_type in _SELF_EMITTED_EVENT_TYPES
 
 
 def _env_int(name: str, default: int) -> int:
@@ -398,7 +422,7 @@ class EvidenceRecorder:
                 if isinstance(envelope.payload, dict)
                 else None
             )
-            is_self_emitted = envelope.event_type in _SELF_EMITTED_EVENT_TYPES
+            is_self_emitted = _is_self_emitted(envelope)
             with self.lock:
                 self.events.append(record)
                 if not is_self_emitted:
@@ -587,7 +611,16 @@ class EvidenceRecorder:
             remaining: collections.deque[dict[str, Any]] = collections.deque(maxlen=1000)
             while self._wait_events:
                 event = self._wait_events.popleft()
-                if event_types is None or event.get("event_type") in event_types:
+                event_type = event.get("event_type")
+                # One decision, two cases: an explicit event_types list is
+                # honoured exactly as given (so naming "look" delivers looks),
+                # while an unfiltered wait takes everything EXCEPT the opt-in
+                # types. Anything not taken stays queued for a later caller.
+                wanted = (
+                    event_type in event_types if event_types is not None
+                    else event_type not in _WAKE_OPT_IN_EVENT_TYPES
+                )
+                if wanted:
                     matched.append(event)
                 else:
                     remaining.append(event)

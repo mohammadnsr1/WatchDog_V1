@@ -228,6 +228,36 @@ def run_with_budget(
     tracer counts too), raising AuthoredBudgetExceeded when max_lines is
     passed. The previous tracer is always restored. Returns (result,
     elapsed_wall_seconds).
+
+    A two-tuple, deliberately: this is the live lane's entry point and its shape
+    is depended on by AuthoredMonitor and by tests. Callers that also need the
+    line count -- the dry run, which reports it to the author -- use
+    run_with_budget_counted below, which this delegates to.
+    """
+    result, elapsed, _lines = run_with_budget_counted(fn, arg, max_lines)
+    return result, elapsed
+
+
+def run_with_budget_counted(
+    fn: Callable[[Any], Any],
+    arg: Any,
+    max_lines: int = MAX_LINES_PER_CALL,
+    usage: dict[str, Any] | None = None,
+) -> tuple[Any, float, int]:
+    """run_with_budget, also returning how many lines were actually executed.
+
+    Returns (result, elapsed_wall_seconds, lines_executed).
+
+    `usage`, when given, is a dict this fills in before returning OR raising:
+    {"lines": int, "wall_sec": float}. That is the only way to learn what a call
+    cost when it ended in AuthoredBudgetExceeded or any other exception, and the
+    dry run needs exactly that -- "your check blew the budget" is far less useful
+    to an author than "it blew the budget after 20001 lines in 41 ms".
+
+    Note what the line count does and does not measure: it counts Python "line"
+    trace events. Work done inside a C extension emits none, so a single numpy
+    call over a large array costs about one line here while taking arbitrary wall
+    time. For anything array-shaped the wall clock is the real bound, not this.
     """
     count = 0
 
@@ -257,8 +287,26 @@ def run_with_budget(
     try:
         result = fn(arg)
     finally:
+        # Restore the tracer FIRST, before any other work in this block, so a
+        # failure while recording usage cannot leave the tracer installed.
         sys.settrace(previous)
-    return result, time.perf_counter() - started
+        elapsed = time.perf_counter() - started
+        if usage is not None:
+            usage["lines"] = count
+            usage["wall_sec"] = elapsed
+    return result, elapsed, count
+
+
+def json_safe(value: Any) -> Any:
+    """Public alias for _json_safe.
+
+    Exists because the dry run reports authored return values and ctx.state
+    snapshots to the model, and both need the same coercion the arm path already
+    applies to reference_values. A tool reaching for the underscored name would
+    be the sort of private-API use this package's own validator forbids in
+    authored code.
+    """
+    return _json_safe(value)
 
 
 def _json_safe(value: Any) -> Any:
@@ -614,6 +662,33 @@ class AuthoredMonitor(MonitorPrimitive):
     def param_sources(self) -> dict[str, str | None]:
         return dict(self._param_sources)
 
+    def dry_call(
+        self,
+        max_lines: int = MAX_LINES_PER_CALL,
+        usage: dict[str, Any] | None = None,
+    ) -> Any:
+        """Run check(ctx) once under budget and return its RAW return value.
+
+        For dry runs only. Three deliberate differences from evaluate():
+
+        - The return contract is NOT applied. evaluate() turns a return into a
+          fire value or raises AuthoredReturnError; here the author gets back
+          exactly what their function returned, because seeing that it returned
+          the wrong SHAPE is half the point of a dry run.
+        - No monitor state is touched. strikes, last_detail and
+          last_wall_time_sec are left alone, so a dry run cannot push a monitor
+          towards the strike limit or leave stale fields behind.
+        - Nothing fires and nothing is recorded. The caller owns the reporting.
+
+        ctx is the monitor's own context, so ctx.state persists across
+        successive dry_call()s exactly as it would across live evaluations --
+        which is what lets an author watch state accumulate tick by tick.
+        """
+        result, _elapsed, _lines = run_with_budget_counted(
+            self._check, self.ctx, max_lines, usage
+        )
+        return result
+
     def evaluate(self, sample: Any) -> float | None:
         """Run check(ctx) under budget and apply the return contract."""
         result, self.last_wall_time_sec = run_with_budget(self._check, self.ctx)
@@ -648,6 +723,8 @@ __all__ = [
     "MAX_LINES_PER_CALL",
     "MAX_SOURCE_CHARS",
     "compile_check",
+    "json_safe",
     "run_with_budget",
+    "run_with_budget_counted",
     "validate_source",
 ]

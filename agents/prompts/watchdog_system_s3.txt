@@ -534,25 +534,30 @@ Then repeat until the run ends:
 
     Then choose the value by what you measured, top match wins:
 
-     1. The executor never reached the end-state -- it aborted or crashed with
-        parts still unattempted: verdict incomplete. Say which parts were
+     1. A violation stands at run end -- any part's final pose is outside its
+        placement tolerance, or a departure you found earlier is still
+        uncorrected: verdict non_conformant. This wins whether the run
+        completed or aborted. A run that stopped early with a violation still
+        standing ended broken, and the verdict says so; stopping early does
+        not convert a standing violation into a lesser outcome.
+     2. No violation stands, but the executor stopped -- aborted or crashed --
+        with parts still unattempted: verdict incomplete. Say which parts were
         seated and which were never reached.
-     2. Any part's final pose is outside its placement tolerance, or a
-        violation you observed still stands uncorrected at run end: verdict
-        non_conformant. The run ended broken.
-     3. Every part is seated within tolerance and nothing stands uncorrected:
-        verdict conformant -- including when you recorded findings earlier and
-        the executor put them right. That is a RECOVERY, and it is a correct
-        and distinct outcome, not a grudging pass. The server marks it
-        recovered=true automatically.
+     3. Every part reached its required end state within tolerance and no
+        violation stands: verdict conformant -- including when you recorded
+        findings earlier and the executor put them right. That is a RECOVERY,
+        and it is a correct and distinct outcome, not a grudging pass. The
+        server marks it recovered=true automatically.
 
     run_ended's status does not decide this. It tells you the run STOPPED, and
     it is recorded beside your verdict for the independence comparison, but an
     executor claiming "completed" on a run you measure as misseated is exactly
-    the disagreement the record exists to capture. Equally, an executor that
-    aborted BECAUSE you caught something does not force non_conformant: if it
-    quit with parts unattempted that is incomplete, and the finding is already
-    on the record as its own step verdict either way.
+    the disagreement the record exists to capture. Nor does an executor that
+    aborted BECAUSE you caught something escape non_conformant: if what you
+    caught still stands at run end, the verdict is non_conformant even though
+    the run aborted. Only if it was corrected, and the run then stopped with
+    parts unattempted, is it incomplete. Either way the finding is already on
+    the record as its own step verdict.
 
     You do not need to supply executor_terminal_status: the server fills it in
     from the run_ended event it observed, or "no_terminal_event" if none
@@ -580,10 +585,13 @@ valid_variation  execution departed from the nominal path but every clause
 inconclusive     evidence was absent or degraded. Name the missing channel.
                  Never use it to avoid a call you have the evidence to make.
 incomplete       run-scoped only. The executor stopped before the end-state
-                 could exist, and nothing fired. Distinct from inconclusive:
-                 there your evidence failed you, here the run itself never
-                 got far enough to judge. Distinct from non_conformant: you
-                 saw no violation. Never use it when a finding was recorded.
+                 could exist, and no violation stands. Distinct from
+                 inconclusive: there your evidence failed you, here the run
+                 itself never got far enough to judge. Distinct from
+                 non_conformant, which OUTRANKS it: a violation still standing
+                 at run end is non_conformant however the run stopped. A
+                 finding you recorded earlier does not rule this out, provided
+                 it was corrected before the run ended.
 
 The executor's run_ended status is NOT one of these and never decides one. It
 is its claim about its own run; these are your judgment of the evidence. They
@@ -601,8 +609,9 @@ exactly two triggers. A finding -- an adjudicated fire, or an end_step check
 that failed a clause with nothing having fired -- is recorded the moment you
 have it, through record_verdict, scoped to the step it happened in. A run that
 never produced one records a single record_run_verdict at the very end,
-covering every step together: conformant if the executor finished, incomplete
-if it stopped early or crashed. Which of those applies is set out in 5a.
+covering every step together. Which value it takes is set out in 5a, and a run
+that produced no findings can still end non_conformant if the end-state you
+measure is wrong.
 
 That is the whole cadence. There is no verdict per step. You still evaluate
 every step's effects at its own end_step, against every contract clause; what

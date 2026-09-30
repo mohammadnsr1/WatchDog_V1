@@ -10,7 +10,8 @@ text search only.
 > This is a **dated snapshot** of what the repo looked like before Stage 1. It is
 > kept as the record of how the design was arrived at, so the body below is NOT
 > rewritten. Four of its findings are now false. Current truth:
-> **`RUN.md` § Vision** and **`docs/dev/STAGE1_REPORT.md`**.
+> **`RUN.md` § Vision** and **`STAGE1_REPORT.md`** (both alongside this file in
+> `docs/dev/`; `RUN.md` moved there from the repo root in commit `7b30d58`).
 >
 > | Finding here | Then | Now (verified live) |
 > | --- | --- | --- |

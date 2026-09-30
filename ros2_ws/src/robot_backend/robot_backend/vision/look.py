@@ -540,6 +540,7 @@ def build_look_event(result: LookResult) -> Any:
         image_size=result.image_size,
         camera_frame_id=result.camera_frame_id,
         step_id=result.step_id,
+        notes=list(result.notes),
     )
     return make_event("look", payload)
 

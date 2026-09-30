@@ -378,10 +378,18 @@ record_verdict(step_id, verdict, clause_results, explanation)
 
 record_run_verdict(verdict, clause_results, explanation, steps_covered)
     Call exactly once, immediately before end_run, however the run ends.
-    verdict describes the end-state you measure for this purpose:
-    conformant (every part seated at its placement frame within tolerance and
-    no violation stands), non_conformant (a part is not, or a violation
-    stands), incomplete (the run stopped before the end-state could exist).
+    verdict describes the end-state you measure for this purpose, and the
+    first match wins:
+      1. non_conformant -- a violation stands at run end: a part is outside
+         its placement tolerance, or a departure you found earlier is still
+         uncorrected. This wins whether the run completed or aborted;
+         stopping early does not convert a standing violation into a lesser
+         outcome.
+      2. incomplete -- no violation stands, but you stopped with parts still
+         unattempted. Say which were seated and which were never reached.
+      3. conformant -- every part reached its required end state within
+         tolerance and no violation stands, including when you recorded a
+         finding earlier and then put it right.
     Every clause_results entry carries its step_id; steps_covered lists every
     step you ran. When you recorded findings, the explanation says what
     became of each.

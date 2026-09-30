@@ -414,15 +414,29 @@ mid-carry planner failures back with it.
 
 ### Current scope
 
-- **Depth is for the WatchDog.** `views=["depth"]` is *implemented* on both
-  servers and the executor can call it, but using it is out of scope for now —
-  the executor's job is `rgb`. This is a convention, not a gate; if it needs
-  enforcing so an executor run cannot reach depth at all, that is a one-line
-  change to the scene server's `look()`.
+- **Both roles look through the same instrument, with the same views.** The
+  WatchDog and the executor call one implementation and both get `rgb` and
+  `depth`. S4 parity requires it: there the executor monitors its own execution,
+  so if the two roles saw the workspace through different instruments their
+  results would not be comparable, and any difference in what they noticed could
+  be an artefact of the tool rather than of the agent.
 - **The planner is not told about unlisted objects.** A Stage 3 injected intruder
   is deliberately invisible to MoveIt: it is not a registry collision object and,
   with the octomap off, no perception path puts it in the planning scene. Noticing
   it is the agent's job, through `look()`.
+- **Executor look events are on the WatchDog's timeline but do not wake it.** An
+  executor `look` is published like any other executor event and is returned by
+  the WatchDog's `get_events`. It does **not** wake a bare `wait_for_event`: the
+  WatchDog must name `"look"` in `event_types` to be woken by one. Waking on every
+  glance the executor took would flood the loop with events it has no decision to
+  make about. A WatchDog's own `look` never wakes it at all.
+- **`dry_run_custom_monitor` (S2/S3)** runs authored code a few times against the
+  live `ctx` *without* arming it, reporting per call the return value, lines
+  executed, wall ms, `ctx.state` and `channels_read`. It is a pre-arm check on
+  whether the code runs and reads what its author expected. It arms nothing,
+  emits no `monitor_armed`/`monitor_fire`/`monitor_disarmed`, counts no strikes,
+  and covers no requirement for the time it takes — a dry run is not monitoring.
+  S4 will reuse it on the executor-side monitor host.
 
 ### What lands on disk
 

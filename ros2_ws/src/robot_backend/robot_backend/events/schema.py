@@ -465,6 +465,14 @@ class LookPayload(BaseModel):
     image_size: list[int] | None = None
     camera_frame_id: str | None = None
     step_id: str | None = None
+    # Non-fatal things that happened during the look: a PNG or .npy that could
+    # not be written, a depth frame returned at full resolution because
+    # downscaling left no valid pixels, or the explicit note that no view came
+    # back at all. On the event as well as in the tool result because a `paths`
+    # dict that is short of a view is otherwise the only on-record sign that a
+    # save failed, and "the file is missing" and "the file was never written"
+    # are not the same finding when someone audits the frames later.
+    notes: list[str] = []
 
 
 class EventEnvelope(BaseModel):
