@@ -36,6 +36,11 @@ SCENE_ALLOWLIST: dict[str, str] = {
     "end_run": "emits a dedicated run_ended event directly, not skill_start/skill_end",
     "mark_phase": "emits a dedicated phase event directly, not skill_start/skill_end",
     "look": "emits its own look event",
+    "get_object_spec": (
+        "read-only registry lookup -- touches no physical state and changes "
+        "nothing the timeline tracks; every call is still recorded in "
+        "mcp_calls_executor.jsonl with its arguments and result"
+    ),
 }
 
 GRIPPER_ALLOWLIST: dict[str, str] = {

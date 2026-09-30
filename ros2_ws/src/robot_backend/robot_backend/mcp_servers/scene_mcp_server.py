@@ -947,6 +947,21 @@ def main() -> None:
             file=sys.stderr,
         )
 
+    # Vision attaches at startup too, for the same reason as the backend: the
+    # camera subscriptions then have the whole idle window before the first
+    # LLM turn to receive their first frames, instead of the first look()
+    # attaching and reading within the same millisecond and failing every
+    # view (observed live 2026-09-30). look()'s lazy _ensure_vision() call
+    # remains the fallback if this fails.
+    try:
+        _ensure_vision()
+    except Exception as exc:
+        print(
+            f"WARNING: scene_mcp_server eager vision init failed ({exc}); "
+            "continuing -- the first look() will retry.",
+            file=sys.stderr,
+        )
+
     try:
         mcp.run()
     finally:

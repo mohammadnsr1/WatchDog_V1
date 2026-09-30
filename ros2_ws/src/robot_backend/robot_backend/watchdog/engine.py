@@ -25,6 +25,11 @@ from .timebase import wall_ns
 # are untouched by both: they run on the recorder callbacks, not this lane.
 _AUTHORED_WALL_BUDGET_SEC = 0.020
 _AUTHORED_STRIKE_LIMIT = 5
+# The ARRAY lane's wall budget. Far looser than the scalar lane's: numpy C
+# work over a full frame is invisible to the line tracer, so the wall clock is
+# the only real bound there, and 150 ms at <= 2 Hz keeps the lane responsive
+# without forbidding whole-frame operations.
+ARRAY_WALL_BUDGET_MS = 150.0
 # Ceiling on the failure detail carried on an authored monitor_disarmed
 # event: enough for an exception type plus message, small enough that a
 # pathological repr cannot bloat the event log.
@@ -90,6 +95,8 @@ def _authored_fields(monitor: Any) -> dict[str, Any]:
         "code_sha256": getattr(monitor, "code_sha256", None),
         "description": getattr(monitor, "description", None),
         "channels_read": list(getattr(monitor, "channels_read", None) or []),
+        "purpose": getattr(monitor, "purpose", "clause"),
+        "threshold_rationale": getattr(monitor, "threshold_rationale", None),
     }
 
 
@@ -128,32 +135,45 @@ class MonitorEngine:
         self._authored_wake = threading.Event()
         self._authored_stop = threading.Event()
         self._authored_thread: threading.Thread | None = None
+        # The ARRAY lane: camera/numpy monitors (feed == "authored_array"),
+        # each with its own period, on a third thread -- so whole-frame numpy
+        # work can never delay the TF/joint callbacks OR the scalar authored
+        # lane. It self-schedules on monitor periods; no wake event needed.
+        self._array_stop = threading.Event()
+        self._array_thread: threading.Thread | None = None
 
     def attach_recorder(self, recorder: Any) -> None:
         """Give the engine the recorder authored contexts observe through."""
         self._recorder = recorder
 
     def start_authored_lane(self) -> None:
-        """Start the authored evaluation thread. Idempotent."""
-        if self._authored_thread is not None and self._authored_thread.is_alive():
-            return
-        self._authored_stop.clear()
-        self._authored_thread = threading.Thread(
-            target=self._authored_worker, name="authored_lane", daemon=True
-        )
-        self._authored_thread.start()
+        """Start the authored evaluation threads (scalar + array). Idempotent."""
+        if self._authored_thread is None or not self._authored_thread.is_alive():
+            self._authored_stop.clear()
+            self._authored_thread = threading.Thread(
+                target=self._authored_worker, name="authored_lane", daemon=True
+            )
+            self._authored_thread.start()
+        if self._array_thread is None or not self._array_thread.is_alive():
+            self._array_stop.clear()
+            self._array_thread = threading.Thread(
+                target=self._array_worker, name="authored_array_lane", daemon=True
+            )
+            self._array_thread.start()
 
     def stop_authored_lane(self) -> None:
-        """Stop the authored evaluation thread and join it."""
+        """Stop the authored evaluation threads and join them."""
         self._authored_stop.set()
         self._authored_wake.set()
-        thread = self._authored_thread
-        if thread is not None:
-            try:
-                thread.join(timeout=2.0)
-            except Exception:
-                pass
+        self._array_stop.set()
+        for thread in (self._authored_thread, self._array_thread):
+            if thread is not None:
+                try:
+                    thread.join(timeout=2.0)
+                except Exception:
+                    pass
         self._authored_thread = None
+        self._array_thread = None
 
     def _authored_worker(self) -> None:
         while not self._authored_stop.is_set():
@@ -214,6 +234,71 @@ class MonitorEngine:
             self.disarm(monitor.monitor_id, "authored_timeout", detail)
             return True
         return False
+
+    def _array_worker(self) -> None:
+        """The array lane: evaluate camera/numpy monitors on their own periods.
+
+        Sleeps until the next due monitor (stop-aware, never past 0.2 s so new
+        arms are picked up promptly). One evaluation per monitor per due tick;
+        a slow monitor delays only this lane. Same strike mechanism and limit
+        as the scalar lane, with the wall budget ARRAY_WALL_BUDGET_MS measured
+        around check(ctx) -- numpy C work never shows up in the line count, so
+        the wall clock is the enforceable bound here.
+        """
+        while not self._array_stop.is_set():
+            with self.lock:
+                monitors = [
+                    m for m in self.monitors.values()
+                    if getattr(m, "feed", "") == "authored_array"
+                ]
+            if not monitors:
+                self._array_stop.wait(0.2)
+                continue
+            now = wall_ns()
+            due = [m for m in monitors if getattr(m, "next_due_ns", 0) <= now]
+            if not due:
+                next_ns = min(getattr(m, "next_due_ns", 0) for m in monitors)
+                self._array_stop.wait(min(max((next_ns - now) / 1e9, 0.005), 0.2))
+                continue
+            for monitor in due:
+                if self._array_stop.is_set():
+                    return
+                # Schedule the next tick from NOW, not from the previous due
+                # time: a slow call skips ticks rather than piling up debt.
+                monitor.next_due_ns = wall_ns() + int(1e9 / float(monitor.rate_hz))
+                try:
+                    value = monitor.evaluate(None)
+                except AuthoredBudgetExceeded as exc:
+                    # A line-budget overrun is a strike and never a fire.
+                    self._authored_strike(monitor, _failure_detail(exc))
+                    continue
+                except AuthoredReturnError as exc:
+                    self._log_warn(
+                        f"array monitor {monitor.monitor_id} bad return: {exc}"
+                    )
+                    self.disarm(
+                        monitor.monitor_id, "authored_bad_return",
+                        _failure_detail(exc),
+                    )
+                    continue
+                except Exception as exc:
+                    self._log_warn(
+                        f"array monitor {monitor.monitor_id} raised: {exc}"
+                    )
+                    self.disarm(
+                        monitor.monitor_id, "authored_error", _failure_detail(exc)
+                    )
+                    continue
+                wall_ms = monitor.last_wall_time_sec * 1000.0
+                if wall_ms > ARRAY_WALL_BUDGET_MS:
+                    overrun = self._authored_strike(monitor, _failure_detail(
+                        f"wall time {wall_ms:.1f} ms exceeded the array lane's "
+                        f"{ARRAY_WALL_BUDGET_MS:.0f} ms per-call budget"
+                    ))
+                    if overrun:
+                        continue
+                if value is not None:
+                    self._handle_fire(monitor, float(value))
 
     def arm(self, monitor: MonitorPrimitive) -> dict[str, Any]:
         with self.lock:

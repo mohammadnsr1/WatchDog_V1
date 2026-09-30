@@ -185,6 +185,40 @@ def test_scene_camera_path_end_to_end(ros, tmp_path):
         sc._shutdown_vision()
 
 
+def test_first_look_right_after_attach_waits_for_first_frames(ros, tmp_path):
+    """A look issued immediately after attach, with the first frames landing
+    ~300 ms later, succeeds by waiting out the first-frame grace instead of
+    failing every view (the live executor first-look failure)."""
+    import robot_backend.mcp_servers.scene_mcp_server as sc
+
+    streams = sc._ensure_vision()
+    assert streams is not None
+    cam = _FakeCamera("fake_isaac_late")
+    publisher = threading.Thread(
+        target=lambda: (time.sleep(0.3), cam.publish_for(seconds=1.5, hz=10.0)),
+        daemon=True,
+    )
+    try:
+        publisher.start()
+        # No wait here: the look happens NOW, like the live session's first call.
+        deps = LookDeps(
+            streams=streams, session_dir=tmp_path, role="executor",
+            file_prefix="test_look_", publish_event=None,
+            current_step_id=None, logger=None,
+        )
+        result = perform_look(deps, reason="first look", views=["rgb", "depth"])
+        assert result.views_ok == ["rgb", "depth"], (
+            f"views_failed={result.views_failed} streams={streams.stats()}"
+        )
+        assert any(
+            "waited" in n and "first frame after attach" in n for n in result.notes
+        ), f"notes={result.notes}"
+    finally:
+        publisher.join(timeout=5.0)
+        cam.destroy()
+        sc._shutdown_vision()
+
+
 # --- 3c: attach never gates on discovery --------------------------------------
 
 class _FakeNode:

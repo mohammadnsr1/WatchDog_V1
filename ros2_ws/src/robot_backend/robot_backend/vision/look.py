@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -166,9 +167,35 @@ class LookResult:
             ),
             "camera_frame_id": self.camera_frame_id,
             "camera": self.camera,
-            "streams": self.streams,
+            # The full receive accounting earns its size only when something
+            # failed; a clean look carries a one-line health summary instead.
+            "streams": self.streams if self.views_failed else None,
+            "streams_ok": None if self.views_failed else self._streams_ok(),
             "paths": self.paths,
             "notes": self.notes,
+        }
+
+    def _streams_ok(self) -> dict[str, Any] | None:
+        """One-line stream health for a look with no failed view."""
+        if not self.streams:
+            return None
+        per_stream = self.streams.get("streams") or {}
+        attached = self.streams.get("attached_wall_ns")
+        elapsed_sec = (
+            max((self.wall_ns - attached) / 1e9, 1e-9)
+            if attached is not None else None
+        )
+
+        def hz(name: str) -> float | None:
+            received = (per_stream.get(name) or {}).get("received") or 0
+            if not received or elapsed_sec is None:
+                return None
+            return round(received / elapsed_sec, 2)
+
+        return {
+            "rgb_hz_est": hz("rgb"),
+            "depth_hz_est": hz("depth"),
+            "camera_info_topic": (per_stream.get("camera_info") or {}).get("topic"),
         }
 
 
@@ -283,6 +310,51 @@ def _normalise_views(views: Any) -> tuple[list[str], list[dict[str, Any]]]:
     return ok, failed
 
 
+# A look issued moments after the camera subscriptions attached may simply be
+# ahead of the first frame (the live executor's first look was 0 s after
+# attach). Within this bound after attach, a view whose slot has NEVER
+# received waits for its first message rather than failing. A slot that HAS
+# received never waits: stale is stale.
+FIRST_FRAME_GRACE_SEC = 3.0
+
+
+def _wait_for_first_frames(streams: Any, requested: list[str]) -> str | None:
+    """Poll (50 ms) until every never-received requested slot fills, bounded
+    to FIRST_FRAME_GRACE_SEC after attach. Returns a note, or None if no wait
+    applied."""
+    view_streams = {"rgb": "rgb", "depth": "depth"}
+    wanted = [view_streams[v] for v in requested if v in view_streams]
+    try:
+        attached = streams.attached_wall_ns
+        if attached is None or not wanted:
+            return None
+        per_stream = streams.stats()["streams"]
+        pending = [s for s in wanted if per_stream[s]["received"] == 0]
+    except Exception:
+        return None
+    if not pending:
+        return None
+    deadline = int(attached) + int(FIRST_FRAME_GRACE_SEC * 1e9)
+    start = wall_ns()
+    if start >= deadline:
+        return None
+    waited = False
+    while wall_ns() < deadline:
+        try:
+            per_stream = streams.stats()["streams"]
+            if all(per_stream[s]["received"] > 0 for s in pending):
+                break
+        except Exception:
+            break
+        waited = True
+        time.sleep(0.05)
+    if not waited:
+        return None
+    return (
+        f"waited {round((wall_ns() - start) / 1e6)} ms for first frame after attach"
+    )
+
+
 def perform_look(
     deps: LookDeps,
     reason: str,
@@ -297,8 +369,11 @@ def perform_look(
     """
     import numpy as np
 
-    now = wall_ns()
     requested, failed = _normalise_views(views)
+    # A first look right after attach beats the first frame; wait it out
+    # (bounded) instead of failing views the camera is about to serve.
+    wait_note = _wait_for_first_frames(deps.streams, requested)
+    now = wall_ns()
     seq = _next_seq()
     result = LookResult(
         look_id=f"{seq:04d}-{uuid.uuid4().hex[:8]}",
@@ -308,6 +383,8 @@ def perform_look(
         wall_ns=now,
         views_failed=failed,
     )
+    if wait_note:
+        result.notes.append(wait_note)
     if deps.current_step_id is not None:
         try:
             result.step_id = deps.current_step_id()

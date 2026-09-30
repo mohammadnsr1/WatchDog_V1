@@ -37,12 +37,15 @@ from robot_backend.events.schema import (
 )
 from robot_backend.vision.look import LookDeps, look as _run_look
 from robot_backend.watchdog.authored import (
+    ARRAY_RATE_MAX_HZ,
+    ARRAY_STATE_MAX_BYTES,
     AuthoredBudgetExceeded,
     AuthoredCodeError,
     AuthoredMonitor,
+    MONITOR_PURPOSES,
     json_safe,
 )
-from robot_backend.watchdog.engine import MonitorEngine
+from robot_backend.watchdog.engine import ARRAY_WALL_BUDGET_MS, MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.utils.png_encode import encode_png
 from robot_backend.watchdog.image_buffer import (
@@ -994,6 +997,16 @@ def _save_authored_source(session_dir: Path, monitor_id: str, source: str) -> Pa
 # sleeps: unclamped, a large value would block the tool, and with it the run, for
 # as long as the agent asked for.
 _DRY_RUN_TICK_PERIOD_SEC = 0.05
+
+
+def _clamp_rate_hz(rate_hz: Any) -> tuple[float, bool]:
+    """(effective_rate, clamped) for an agent-supplied array-lane rate."""
+    rate = float(rate_hz)
+    if not math.isfinite(rate) or rate <= 0:
+        raise ValueError("rate_hz must be a finite number > 0.")
+    if rate > ARRAY_RATE_MAX_HZ:
+        return ARRAY_RATE_MAX_HZ, True
+    return rate, False
 _DRY_RUN_MAX_TICKS = 20
 
 
@@ -1037,6 +1050,10 @@ def _prepare_authored_monitor(
     object_id: str | None = None,
     threshold_param: str | None = None,
     monitor_id: str | None = None,
+    rate_hz: float | None = None,
+    purpose: str = "clause",
+    threshold_rationale: str | None = None,
+    halt_on_fire: bool = False,
 ) -> tuple[Any | None, dict[str, Any] | None]:
     """Build one AuthoredMonitor and resolve its provenance, WITHOUT arming it.
 
@@ -1074,6 +1091,11 @@ def _prepare_authored_monitor(
             threshold_param=threshold_param,
             monitor_id=monitor_id,
             armed_wall_ns=wall_ns(),
+            camera=ctx.camera_streams,
+            rate_hz=rate_hz,
+            purpose=purpose,
+            threshold_rationale=threshold_rationale,
+            halt_on_fire=halt_on_fire,
         )
     except AuthoredCodeError as exc:
         return None, {"exc": exc, "stage": exc.stage, "lineno": exc.lineno}
@@ -1085,6 +1107,15 @@ def _prepare_authored_monitor(
             ctx, monitor, arm_object_id
         ),
     }
+    if purpose == "observation":
+        # An observation threshold is the agent's own choice of when to look,
+        # not a specification bound, and must never read as a verified one.
+        monitor.provenance.update(
+            threshold_source="agent_chosen",
+            threshold_verified=False,
+            threshold_registry_field=None,
+            threshold_registry_value=None,
+        )
     return monitor, None
 
 
@@ -1549,6 +1580,10 @@ if mcp is not None:
         object_id: str | None = None,
         threshold_param: str | None = None,
         monitor_id: str | None = None,
+        rate_hz: float | None = None,
+        purpose: str = "clause",
+        threshold_rationale: str | None = None,
+        halt_on_fire: bool = False,
     ) -> dict[str, Any]:
         """Arm one monitor whose predicate is the supplied Python source.
 
@@ -1566,17 +1601,25 @@ if mcp is not None:
         first_call_result; it does NOT fire. State written to ctx.state on
         that call persists across every later evaluation of the same monitor.
 
-        Evaluation. After arming, check(ctx) runs on a dedicated thread, woken
-        by incoming samples: TF ticks arrive at 20 Hz and joint-state messages
-        at the publisher's rate, and the monitor is evaluated at most once per
-        wake. A monitor fires at most once and is then disarmed.
+        Evaluation. After arming, check(ctx) runs on a dedicated thread. With
+        rate_hz omitted (the scalar lane), it is woken by incoming samples:
+        TF ticks arrive at 20 Hz and joint-state messages at the publisher's
+        rate, and the monitor is evaluated at most once per wake. With
+        rate_hz set (the ARRAY lane), it runs on its own period instead --
+        rate_hz is clamped to at most 2.0 (the result reports rate_hz_clamped
+        when that happened) -- on a third thread, so array work never delays
+        the other lanes. A monitor fires at most once and is then disarmed.
 
         Budgets and disarm reasons. Each call has a 20000-line execution
-        budget and a 20 ms wall-time budget. Exceeding either counts one
-        strike (a line-budget overrun also suppresses any fire from that
-        call); at 5 strikes the monitor is disarmed with reason
-        authored_timeout. A return outside the contract disarms with
-        authored_bad_return. Any other exception disarms with authored_error.
+        budget and a wall-time budget: 20 ms on the scalar lane, 150 ms on
+        the array lane (numpy C work emits no Python lines, so the wall clock
+        is the real bound there). Exceeding either counts one strike (a
+        line-budget overrun also suppresses any fire from that call); at 5
+        strikes the monitor is disarmed with reason authored_timeout. A
+        return outside the contract disarms with authored_bad_return. Any
+        other exception disarms with authored_error. On the array lane,
+        ctx.state may hold ndarrays (a previous frame, an ROI) up to 32 MB in
+        total; exceeding that disarms with authored_bad_return.
 
         ctx API. This is the COMPLETE surface of the ctx object check
         receives; nothing else exists on it.
@@ -1613,6 +1656,26 @@ if mcp is not None:
           ctx.now_wall_ns() -> int wall-clock nanoseconds.
           ctx.dist(a, b) -> float, Euclidean distance between two
               {"x","y","z"} dicts, meters.
+        Camera accessors, available ONLY when the monitor is armed with
+        rate_hz (the array lane); on the scalar lane they raise an error
+        naming rate_hz:
+          ctx.rgb() -> HxWx3 uint8 ndarray (read-only, writeable=False) or
+              None when no frame has arrived or the latest is older than
+              1.0 s.
+          ctx.depth() -> HxW float32 metres, NaN = no return at that pixel
+              (read-only), or None on the same conditions as rgb.
+          ctx.camera() -> {"width", "height", "K": 3x3 list, "frame_id",
+              "world_T_camera": {"translation": [x,y,z],
+              "rotation_xyzw": [x,y,z,w]}} or None without camera_info.
+          ctx.deproject(u, v, z) -> {"x","y","z"} in the world frame, from K
+              and world_T_camera; arrays of u, v, z are accepted and return
+              an Nx3 ndarray.
+          ctx.frame_stamps() -> {"rgb_wall_ns", "depth_wall_ns", "age_ms"}
+              for this call's snapshot (age from the oldest present frame).
+        Snapshot semantics: within ONE check(ctx) call, every camera accessor
+        returns the same frames -- one snapshot is taken per tick. Code must
+        handle None from rgb()/depth().
+
         A pose accessor returns None when that frame or object has no
         buffered sample yet; code must guard for it. All returned dicts are
         fresh copies. wall_ns values are wall-clock nanoseconds, the same
@@ -1621,8 +1684,9 @@ if mcp is not None:
         Allowed names. Builtins: abs, all, any, bool, dict, enumerate, float,
         int, len, list, max, min, range, reversed, round, set, sorted, str,
         sum, tuple, zip, isinstance, ValueError, ZeroDivisionError. The
-        stdlib `math` module is provided as `math`. Nothing else -- no
-        imports and no numpy.
+        stdlib `math` module is provided as `math`. On the array lane numpy
+        is provided as `np` (provided, not imported -- import stays
+        forbidden). Nothing else.
 
         Forbidden constructs, rejected before compiling (the error names the
         stage and line): import, while, class, async def, await, yield,
@@ -1647,6 +1711,35 @@ if mcp is not None:
         used for fire attribution and provenance lookup; when omitted, the
         part currently held by the gripper is used, as for effort_event.
 
+        purpose is "clause" (default: a conformance monitor, exactly as
+        described above) or "observation": a monitor whose threshold only
+        decides when to look, not whether a requirement held. For
+        "observation": halt_on_fire is refused; clause may be null; the
+        threshold is recorded as threshold_source "agent_chosen" with
+        threshold_verified false; and threshold_rationale (a non-empty
+        string saying why this value) is REQUIRED and carried on the arm and
+        fire events. An observation fire wakes wait_for_event like any fire
+        but is not a finding: it is never counted in findings_during_run and
+        cannot make a run "recovered". Either purpose may use either lane.
+
+        Example of an array-lane observation monitor (generic; fill the ROI
+        and the threshold param yourself):
+
+            def check(ctx):
+                d = ctx.depth()
+                if d is None:
+                    return None
+                roi = d[100:160, 200:280]
+                if "ref" not in ctx.state:
+                    ctx.state["ref"] = roi.copy()
+                    return None
+                diff = np.abs(roi - ctx.state["ref"])
+                changed = np.nanmean(diff)
+                if changed > ctx.value("change_m"):
+                    return {"value": float(changed),
+                            "detail": "depth changed inside the ROI"}
+                return None
+
         The source is saved verbatim under the session directory
         (authored_monitors/<monitor_id>.py) and its sha256 is on the arm and
         fire events as code_sha256. channels_read lists the ctx methods the
@@ -1654,6 +1747,25 @@ if mcp is not None:
         """
         command = "arm_custom_monitor"
         try:
+            if purpose not in MONITOR_PURPOSES:
+                raise ValueError(
+                    f"purpose must be one of {list(MONITOR_PURPOSES)}, got {purpose!r}."
+                )
+            if purpose == "observation":
+                if halt_on_fire:
+                    raise ValueError(
+                        "halt_on_fire is refused for purpose=\"observation\": an "
+                        "observation trigger decides when to look, never whether "
+                        "to stop the arm."
+                    )
+                if not isinstance(threshold_rationale, str) or not threshold_rationale.strip():
+                    raise ValueError(
+                        "purpose=\"observation\" requires a non-empty "
+                        "threshold_rationale saying why this threshold value."
+                    )
+            effective_rate, rate_clamped = (None, False)
+            if rate_hz is not None:
+                effective_rate, rate_clamped = _clamp_rate_hz(rate_hz)
             ctx = _ensure_watchdog()
             # Construction, validation, params and provenance all live in
             # _prepare_authored_monitor, which dry_run_custom_monitor shares so
@@ -1667,6 +1779,12 @@ if mcp is not None:
                 object_id,
                 threshold_param,
                 monitor_id,
+                rate_hz=effective_rate,
+                purpose=purpose,
+                threshold_rationale=(
+                    threshold_rationale.strip() if threshold_rationale else None
+                ),
+                halt_on_fire=halt_on_fire,
             )
             if err is not None:
                 return _error(
@@ -1685,6 +1803,12 @@ if mcp is not None:
                 code_sha256=monitor.code_sha256,
                 saved_path=str(saved_path),
             )
+            if effective_rate is not None:
+                result.update(rate_hz=effective_rate, lane="array")
+                if rate_clamped:
+                    result.update(
+                        rate_hz_clamped=True, rate_hz_requested=float(rate_hz)
+                    )
             return _ok(command, **result)
         except Exception as exc:
             return _error(command, exc)
@@ -1701,6 +1825,8 @@ if mcp is not None:
         object_id: str | None = None,
         ticks: int = 3,
         description: str = "dry run",
+        rate_hz: float | None = None,
+        purpose: str = "clause",
     ) -> dict[str, Any]:
         """Run authored code a few times WITHOUT arming it, and show what it saw.
 
@@ -1732,7 +1858,14 @@ if mcp is not None:
 
         Ticks are spaced by 50 ms, the TF feed's own period, so successive calls
         see genuinely different samples rather than the same buffered tick read
-        `ticks` times. A dry run therefore takes roughly ticks * 50 ms.
+        `ticks` times. A dry run therefore takes roughly ticks * 50 ms. With
+        rate_hz set (the array lane; clamped to at most 2.0), ticks are spaced
+        at 1/rate_hz instead -- the monitor's own live period -- still clamped
+        to the same maximum tick count, each tick takes a fresh camera
+        snapshot, and wall_ms is judged against the array lane's 150 ms budget
+        (reported as wall_budget_ms) rather than the scalar lane's 20 ms.
+        purpose is accepted for symmetry with arm_custom_monitor and echoed;
+        a dry run judges nothing either way.
 
         Per call you get back:
           return_value    -- what check returned, coerced to JSON. None means
@@ -1764,6 +1897,20 @@ if mcp is not None:
         """
         command = "dry_run_custom_monitor"
         try:
+            if purpose not in MONITOR_PURPOSES:
+                raise ValueError(
+                    f"purpose must be one of {list(MONITOR_PURPOSES)}, got {purpose!r}."
+                )
+            effective_rate, rate_clamped = (None, False)
+            if rate_hz is not None:
+                effective_rate, rate_clamped = _clamp_rate_hz(rate_hz)
+            tick_period_sec = (
+                1.0 / effective_rate if effective_rate is not None
+                else _DRY_RUN_TICK_PERIOD_SEC
+            )
+            wall_budget_ms = (
+                ARRAY_WALL_BUDGET_MS if effective_rate is not None else 20.0
+            )
             # No _ensure_watchdog() result is needed here -- the helper resolves
             # the context itself and nothing below touches the engine.
             monitor, err = _prepare_authored_monitor(
@@ -1774,6 +1921,8 @@ if mcp is not None:
                 object_id,
                 None,        # threshold_param: nothing to verify against
                 None,        # monitor_id: this monitor is never registered
+                rate_hz=effective_rate,
+                purpose=purpose,
             )
             if err is not None:
                 return _error(
@@ -1810,7 +1959,7 @@ if mcp is not None:
                 # Sleep BEFORE each tick, the first included, so tick 1 reads a
                 # different TF sample from the preparation call rather than the
                 # same buffered one twice.
-                time.sleep(_DRY_RUN_TICK_PERIOD_SEC)
+                time.sleep(tick_period_sec)
                 usage: dict[str, Any] = {}
                 entry: dict[str, Any] = {"call": index + 1}
                 try:
@@ -1840,7 +1989,14 @@ if mcp is not None:
                 description=monitor.description,
                 object_id=monitor.provenance.get("object_id"),
                 param_provenance=monitor.provenance.get("param_provenance"),
-                tick_period_ms=_DRY_RUN_TICK_PERIOD_SEC * 1000.0,
+                tick_period_ms=tick_period_sec * 1000.0,
+                wall_budget_ms=wall_budget_ms,
+                purpose=purpose,
+                **(
+                    {"rate_hz": effective_rate, "lane": "array",
+                     **({"rate_hz_clamped": True} if rate_clamped else {})}
+                    if effective_rate is not None else {}
+                ),
                 ticks_requested=requested_ticks,
                 ticks_run=tick_count,
                 first_call=first_call,

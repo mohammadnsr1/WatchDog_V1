@@ -555,7 +555,10 @@ class CameraStreams:
 
         depth_topic = os.environ.get("WATCHDOG_DEPTH_IMAGE_TOPIC", _DEFAULT_DEPTH_IMAGE_TOPIC)
         cloud_topic = os.environ.get("WATCHDOG_POINTCLOUD_TOPIC", _DEFAULT_POINTCLOUD_TOPIC)
-        wanted.append(("depth", depth_topic, Image, self._on_depth))
+        wanted.append((
+            "depth", depth_topic, Image,
+            functools.partial(self._on_depth, topic=depth_topic),
+        ))
         info_candidates = self._info_candidates()
         self._info_preferred = info_candidates[0]
         for info_topic in info_candidates:
@@ -563,7 +566,10 @@ class CameraStreams:
                 "camera_info", info_topic, CameraInfo,
                 functools.partial(self._on_info, topic=info_topic),
             ))
-        wanted.append(("pointcloud", cloud_topic, PointCloud2, self._on_cloud))
+        wanted.append((
+            "pointcloud", cloud_topic, PointCloud2,
+            functools.partial(self._on_cloud, topic=cloud_topic),
+        ))
 
         for stream, topic, msg_cls, handler in wanted:
             if topic not in types_by_topic:
@@ -627,8 +633,8 @@ class CameraStreams:
         except Exception as exc:
             self._count_error("rgb", exc)
 
-    def _on_depth(self, msg: Any) -> None:
-        self._store("_depth", "depth", msg)
+    def _on_depth(self, msg: Any, topic: str | None = None) -> None:
+        self._store("_depth", "depth", msg, topic)
 
     def _on_info(self, msg: Any, topic: str) -> None:
         """Store camera_info, preferring the namespaced topic when both publish."""
@@ -646,15 +652,17 @@ class CameraStreams:
         except Exception as exc:
             self._count_error("camera_info", exc)
 
-    def _on_cloud(self, msg: Any) -> None:
-        self._store("_cloud", "pointcloud", msg)
+    def _on_cloud(self, msg: Any, topic: str | None = None) -> None:
+        self._store("_cloud", "pointcloud", msg, topic)
 
-    def _store(self, attr: str, stream: str, msg: Any) -> None:
+    def _store(
+        self, attr: str, stream: str, msg: Any, topic: str | None = None
+    ) -> None:
         try:
             latest = _Latest(msg=msg, stamp_ns=_header_stamp_ns(msg), wall_ns=wall_ns())
             with self._lock:
                 setattr(self, attr, latest)
-            self._count_received(stream)
+            self._count_received(stream, topic)
         except Exception as exc:
             self._count_error(stream, exc)
 
@@ -739,6 +747,44 @@ class CameraStreams:
                 if array is not None and np.isfinite(array).any():
                     return array, cloud.stamp_ns, "pointcloud_projection"
         return None
+
+    def array_snapshot(self) -> dict[str, Any]:
+        """One coherent read of rgb + depth + camera for an array-lane tick.
+
+        Returns {"taken_wall_ns", "rgb": (HxWx3 uint8 ndarray, recv_wall_ns) or
+        None, "depth": (HxW float32 metres, recv_wall_ns) or None, "camera":
+        get_camera() or None}. Both slots are read under ONE lock acquisition,
+        so the pair is coherent; a frame older than stale_sec is returned as
+        None, same staleness the view accessors apply. The arrays are fresh
+        decodes with writeable=False -- authored code receives them directly
+        and must not be able to corrupt a frame another monitor's snapshot
+        would share.
+        """
+        import numpy as np  # local, matching get_depth
+
+        now = wall_ns()
+        with self._lock:
+            rgb, depth = self._rgb, self._depth
+        out: dict[str, Any] = {
+            "taken_wall_ns": now, "rgb": None, "depth": None,
+            "camera": self.get_camera(),
+        }
+        rgb_age = self._age_sec(rgb, now)
+        if rgb is not None and rgb_age is not None and rgb_age <= self.stale_sec:
+            frame = rgb.msg
+            array = rgb_to_array(frame.data, frame.width, frame.height, frame.encoding)
+            if array is not None:
+                array = np.ascontiguousarray(array)
+                array.flags.writeable = False
+                out["rgb"] = (array, int(rgb.wall_ns))
+        depth_age = self._age_sec(depth, now)
+        if depth is not None and depth_age is not None and depth_age <= self.stale_sec:
+            array = depth_image_to_metres(depth.msg)
+            if array is not None:
+                array = np.ascontiguousarray(array)
+                array.flags.writeable = False
+                out["depth"] = (array, int(depth.wall_ns))
+        return out
 
     def describe_depth_availability(self) -> str:
         """Why get_depth() returned None, in one sentence for a tool result.

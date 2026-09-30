@@ -31,6 +31,16 @@ MAX_SOURCE_CHARS = 8000
 MAX_LINES_PER_CALL = 20000
 # Window methods on MonitorContext return at most this many samples.
 _MAX_WINDOW_SAMPLES = 1000
+# Array-lane bounds. The rate cap keeps camera monitors from turning into a
+# second render loop; the state cap keeps ctx.state from accumulating
+# full-resolution frame history (a 640x360 float32 depth frame is ~0.9 MB, so
+# 32 MB holds a handful of frames or plenty of ROIs, never a movie).
+ARRAY_RATE_MAX_HZ = 2.0
+ARRAY_STATE_MAX_BYTES = 32 * 1024 * 1024
+# Valid values for a monitor's purpose. "clause" is a conformance monitor
+# exactly as before; "observation" is a trigger for when to look, whose
+# threshold is the agent's own choice rather than a specification bound.
+MONITOR_PURPOSES = ("clause", "observation")
 
 # Node types forbidden anywhere in authored source. Try is deliberately NOT
 # here (a bare except is allowed); While is, because the line budget bounds
@@ -198,17 +208,23 @@ def validate_source(source: str) -> None:
             )
 
 
-def compile_check(source: str) -> Callable[[Any], Any]:
+def compile_check(
+    source: str, extra_namespace: dict[str, Any] | None = None
+) -> Callable[[Any], Any]:
     """Execute validated source in a restricted namespace; return its check().
 
     The namespace's __builtins__ is the whitelist above, plus the stdlib
-    `math` module. Raises AuthoredCodeError(stage="compile") if execution
-    fails or check is not callable afterwards.
+    `math` module. extra_namespace adds provided (not imported) names -- the
+    array lane injects numpy as `np` this way. Raises
+    AuthoredCodeError(stage="compile") if execution fails or check is not
+    callable afterwards.
     """
     namespace: dict[str, Any] = {
         "__builtins__": dict(_ALLOWED_BUILTINS),
         "math": math,
     }
+    if extra_namespace:
+        namespace.update(extra_namespace)
     try:
         exec(compile(source, "<authored_monitor>", "exec"), namespace)
     except Exception as exc:
@@ -309,13 +325,49 @@ def json_safe(value: Any) -> Any:
     return _json_safe(value)
 
 
+def _ndarray_summary(value: Any) -> dict[str, Any] | None:
+    """A JSON-safe summary of an ndarray, or None if value is not one.
+
+    Arrays must never be embedded in reference_values or any event payload --
+    a single frame would dwarf every other record in the run -- so an array
+    is reported as shape/dtype/range instead.
+    """
+    try:
+        import numpy as np
+    except Exception:
+        return None
+    if not isinstance(value, np.ndarray):
+        return None
+    out: dict[str, Any] = {
+        "ndarray": [int(s) for s in value.shape],
+        "dtype": str(value.dtype),
+        "min": None, "max": None, "nan_frac": None,
+    }
+    try:
+        if value.size:
+            if value.dtype.kind == "f":
+                finite = value[np.isfinite(value)]
+                out["nan_frac"] = round(float(1.0 - finite.size / value.size), 6)
+                if finite.size:
+                    out["min"] = float(finite.min())
+                    out["max"] = float(finite.max())
+            elif value.dtype.kind in ("i", "u", "b"):
+                out["nan_frac"] = 0.0
+                out["min"] = float(value.min())
+                out["max"] = float(value.max())
+    except Exception:
+        pass
+    return out
+
+
 def _json_safe(value: Any) -> Any:
     """A JSON-safe deep copy of an arm-time ctx.state value.
 
     int/float/str/bool/None are kept, except that a non-finite float becomes
     None (NaN/inf are not representable in strict JSON). Tuples and lists
-    become lists, dicts recurse with keys coerced to str, and anything else
-    is replaced by its repr().
+    become lists, dicts recurse with keys coerced to str, an ndarray becomes
+    the {"ndarray": [shape], "dtype", "min", "max", "nan_frac"} summary, and
+    anything else is replaced by its repr().
     """
     if value is None or isinstance(value, (bool, int, str)):
         return value
@@ -325,7 +377,22 @@ def _json_safe(value: Any) -> Any:
         return [_json_safe(item) for item in value]
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
+    summary = _ndarray_summary(value)
+    if summary is not None:
+        return summary
     return repr(value)
+
+
+def _state_ndarray_bytes(value: Any) -> int:
+    """Total ndarray bytes held (recursively) in a ctx.state value."""
+    nbytes = getattr(value, "nbytes", None)
+    if nbytes is not None and hasattr(value, "dtype"):
+        return int(nbytes)
+    if isinstance(value, dict):
+        return sum(_state_ndarray_bytes(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_state_ndarray_bytes(v) for v in value)
+    return 0
 
 
 def _xyz_copy(value: Any) -> dict[str, float]:
@@ -402,12 +469,129 @@ class MonitorContext:
         engine: Any,
         params: dict[str, Any],
         state: dict[str, Any] | None = None,
+        camera: Any | None = None,
+        rate_hz: float | None = None,
     ) -> None:
         self._recorder = recorder
         self._engine = engine
         self.params = dict(params)
         self.state: dict[str, Any] = state if state is not None else {}
         self._channels: set[tuple[str, Any]] = set()
+        # Camera access exists only on the array lane (rate_hz set). One
+        # snapshot per tick: _begin_camera_tick clears it before each check
+        # call, and the first camera accessor inside the call takes it, so
+        # every accessor within one call returns the same frames AND the cost
+        # of taking the snapshot lands inside the call's wall budget.
+        self._camera = camera
+        self._rate_hz = rate_hz
+        self._cam_snapshot: dict[str, Any] | None = None
+
+    # -- camera (array lane only) -------------------------------------------
+
+    def _begin_camera_tick(self) -> None:
+        self._cam_snapshot = None
+
+    def _camera_snapshot(self) -> dict[str, Any]:
+        if self._rate_hz is None:
+            raise ValueError(
+                "camera accessors (rgb/depth/camera/deproject/frame_stamps) "
+                "are only available on the array lane: arm the monitor with "
+                "rate_hz to use them."
+            )
+        if self._camera is None:
+            raise ValueError(
+                "no camera streams are attached to this monitor host, so the "
+                "camera accessors cannot serve frames."
+            )
+        if self._cam_snapshot is None:
+            self._cam_snapshot = self._camera.array_snapshot()
+        return self._cam_snapshot
+
+    def rgb(self) -> Any | None:
+        """HxWx3 uint8 RGB (read-only), or None when absent/stale (>1 s)."""
+        self._note("rgb")
+        got = self._camera_snapshot().get("rgb")
+        return got[0] if got is not None else None
+
+    def depth(self) -> Any | None:
+        """HxW float32 metres, NaN = no return (read-only), or None."""
+        self._note("depth")
+        got = self._camera_snapshot().get("depth")
+        return got[0] if got is not None else None
+
+    def camera(self) -> dict[str, Any] | None:
+        """{width, height, K (3x3), frame_id, world_T_camera} or None."""
+        self._note("camera")
+        raw = self._camera_snapshot().get("camera")
+        if raw is None:
+            return None
+        k = [float(v) for v in raw.get("K", [])]
+        extr = raw.get("extrinsics_from_yaml") or {}
+        return {
+            "width": raw.get("width"),
+            "height": raw.get("height"),
+            "K": [k[0:3], k[3:6], k[6:9]] if len(k) >= 9 else None,
+            "frame_id": raw.get("frame_id"),
+            "world_T_camera": {
+                "translation": [float(v) for v in (extr.get("xyz") or [])],
+                "rotation_xyzw": [float(v) for v in (extr.get("quat_xyzw") or [])],
+            },
+        }
+
+    def frame_stamps(self) -> dict[str, Any]:
+        """{rgb_wall_ns, depth_wall_ns, age_ms} for this call's snapshot.
+
+        age_ms is measured from the OLDEST present frame to the snapshot
+        moment (the conservative staleness); None when neither frame exists.
+        """
+        self._note("frame_stamps")
+        snap = self._camera_snapshot()
+        rgb, depth = snap.get("rgb"), snap.get("depth")
+        stamps = [got[1] for got in (rgb, depth) if got is not None]
+        age_ms = (
+            round((snap["taken_wall_ns"] - min(stamps)) / 1e6, 3) if stamps else None
+        )
+        return {
+            "rgb_wall_ns": rgb[1] if rgb is not None else None,
+            "depth_wall_ns": depth[1] if depth is not None else None,
+            "age_ms": age_ms,
+        }
+
+    def deproject(self, u: Any, v: Any, z: Any) -> Any:
+        """Pixel(s) + depth -> world point(s), through K and world_T_camera.
+
+        Scalars return {"x", "y", "z"}; array inputs return an Nx3 ndarray.
+        Raises when camera_info (and so K / extrinsics) is unavailable.
+        """
+        import numpy as np
+
+        self._note("deproject")
+        cam = self.camera()
+        if cam is None or cam.get("K") is None:
+            raise ValueError("deproject needs camera_info, which is unavailable.")
+        k = cam["K"]
+        fx, fy, cx, cy = k[0][0], k[1][1], k[0][2], k[1][2]
+        pose = cam["world_T_camera"]
+        t = np.asarray(pose["translation"], dtype=float)
+        qx, qy, qz, qw = (float(v_) for v_ in pose["rotation_xyzw"])
+        rot = np.array([
+            [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
+            [2 * (qx * qy + qz * qw), 1 - 2 * (qx * qx + qz * qz), 2 * (qy * qz - qx * qw)],
+            [2 * (qx * qz - qy * qw), 2 * (qy * qz + qx * qw), 1 - 2 * (qx * qx + qy * qy)],
+        ])
+        u_arr = np.asarray(u, dtype=float)
+        v_arr = np.asarray(v, dtype=float)
+        z_arr = np.asarray(z, dtype=float)
+        x_cam = (u_arr - cx) * z_arr / fx
+        y_cam = (v_arr - cy) * z_arr / fy
+        cam_pts = np.stack(
+            [np.ravel(x_cam), np.ravel(y_cam), np.ravel(np.broadcast_to(z_arr, x_cam.shape))],
+            axis=1,
+        )
+        world = cam_pts @ rot.T + t
+        if u_arr.ndim == 0 and v_arr.ndim == 0:
+            return {"x": float(world[0, 0]), "y": float(world[0, 1]), "z": float(world[0, 2])}
+        return world
 
     # -- bookkeeping -------------------------------------------------------
 
@@ -554,6 +738,10 @@ class AuthoredMonitor(MonitorPrimitive):
         engine: Any,
         object_id: str | None = None,
         threshold_param: str | None = None,
+        camera: Any | None = None,
+        rate_hz: float | None = None,
+        purpose: str = "clause",
+        threshold_rationale: str | None = None,
         **kwargs: Any,
     ) -> None:
         if not isinstance(params, dict):
@@ -561,19 +749,48 @@ class AuthoredMonitor(MonitorPrimitive):
         super().__init__("authored", params, **kwargs)
         if not isinstance(description, str) or not description.strip():
             raise AuthoredCodeError("params", "description must be a non-empty string.")
+        if purpose not in MONITOR_PURPOSES:
+            raise AuthoredCodeError(
+                "params", f"purpose must be one of {list(MONITOR_PURPOSES)}."
+            )
         self.source = source
         self.description = description.strip()
         self.object_id = object_id
         self.strikes = 0
         self.last_detail: str | None = None
         self.last_wall_time_sec = 0.0
+        self.purpose = purpose
+        self.threshold_rationale = threshold_rationale
+        # rate_hz selects the ARRAY lane: a distinct feed so neither
+        # _evaluate_feed (tf/joint_states) nor the scalar authored lane
+        # (feed == "authored") ever evaluates this monitor.
+        self.rate_hz = float(rate_hz) if rate_hz is not None else None
+        if self.rate_hz is not None:
+            if not math.isfinite(self.rate_hz) or self.rate_hz <= 0:
+                raise AuthoredCodeError("params", "rate_hz must be a finite number > 0.")
+            self.feed = "authored_array"
+        # Array-lane scheduling/stats, owned by the engine's array worker.
+        self.next_due_ns = 0
+        self.last_wall_ms: float | None = None
+        self.calls = 0
 
         plain, sources = self._parse_params(params)
         self._param_sources = sources
 
         validate_source(source)
         self.code_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
-        self._check = compile_check(source)
+        extra_namespace: dict[str, Any] | None = None
+        if self.rate_hz is not None:
+            # numpy is PROVIDED on the array lane, never imported by authored
+            # code (import stays forbidden by the validator).
+            try:
+                import numpy as np
+            except Exception as exc:  # pragma: no cover - numpy is a hard dep
+                raise AuthoredCodeError(
+                    "compile", f"numpy is unavailable for the array lane: {exc}"
+                ) from exc
+            extra_namespace = {"np": np}
+        self._check = compile_check(source, extra_namespace)
 
         # Threshold plumbing, shaped so the UNCHANGED
         # _resolve_threshold_provenance in the server can run against this
@@ -610,8 +827,12 @@ class AuthoredMonitor(MonitorPrimitive):
         # plumbing. One ctx for the monitor's whole life: the arm-time first
         # call and every later evaluation share this object, so ctx.state
         # persists across calls.
-        self.ctx = MonitorContext(recorder, engine, _json_safe(dict(params)), state={})
+        self.ctx = MonitorContext(
+            recorder, engine, _json_safe(dict(params)), state={},
+            camera=camera, rate_hz=self.rate_hz,
+        )
         try:
+            self.ctx._begin_camera_tick()
             self.first_call_result, self.last_wall_time_sec = run_with_budget(
                 self._check, self.ctx
             )
@@ -684,6 +905,7 @@ class AuthoredMonitor(MonitorPrimitive):
         successive dry_call()s exactly as it would across live evaluations --
         which is what lets an author watch state accumulate tick by tick.
         """
+        self.ctx._begin_camera_tick()
         result, _elapsed, _lines = run_with_budget_counted(
             self._check, self.ctx, max_lines, usage
         )
@@ -691,7 +913,18 @@ class AuthoredMonitor(MonitorPrimitive):
 
     def evaluate(self, sample: Any) -> float | None:
         """Run check(ctx) under budget and apply the return contract."""
+        self.ctx._begin_camera_tick()
         result, self.last_wall_time_sec = run_with_budget(self._check, self.ctx)
+        self.calls += 1
+        self.last_wall_ms = round(self.last_wall_time_sec * 1000.0, 3)
+        if self.rate_hz is not None:
+            held = _state_ndarray_bytes(self.ctx.state)
+            if held > ARRAY_STATE_MAX_BYTES:
+                raise AuthoredReturnError(
+                    f"ctx.state holds {held} bytes of arrays, over the "
+                    f"{ARRAY_STATE_MAX_BYTES} byte cap -- store a downsampled "
+                    f"ROI or a summary, not full-resolution frame history."
+                )
         if result is None:
             return None
         if isinstance(result, dict) and "value" in result:
@@ -715,10 +948,13 @@ class AuthoredMonitor(MonitorPrimitive):
 
 
 __all__ = [
+    "ARRAY_RATE_MAX_HZ",
+    "ARRAY_STATE_MAX_BYTES",
     "AuthoredCodeError",
     "AuthoredBudgetExceeded",
     "AuthoredReturnError",
     "AuthoredMonitor",
+    "MONITOR_PURPOSES",
     "MonitorContext",
     "MAX_LINES_PER_CALL",
     "MAX_SOURCE_CHARS",

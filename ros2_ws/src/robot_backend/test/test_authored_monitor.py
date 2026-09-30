@@ -445,8 +445,9 @@ def test_context_has_no_step_events_or_registry_surface():
     ctx = MonitorContext(FakeRecorder(), FakeEngine(), params={}, state={})
     public = [name for name in dir(ctx) if not name.startswith("_")]
     assert sorted(public) == [
-        "channels_read", "dist", "frame_ids", "frame_pose", "frame_pose_window",
-        "held_object", "joint", "joint_names", "joint_window", "now_wall_ns",
-        "object_ids", "object_pose", "object_pose_window", "params", "state",
+        "camera", "channels_read", "deproject", "depth", "dist", "frame_ids",
+        "frame_pose", "frame_pose_window", "frame_stamps", "held_object",
+        "joint", "joint_names", "joint_window", "now_wall_ns", "object_ids",
+        "object_pose", "object_pose_window", "params", "rgb", "state",
         "transform", "value",
     ]

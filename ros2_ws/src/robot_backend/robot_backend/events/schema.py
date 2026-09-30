@@ -192,10 +192,16 @@ class MonitorArmedPayload(BaseModel):
     description: str | None = None
     channels_read: list[str] | None = None
     param_provenance: list[dict[str, Any]] | None = None
+    # "clause" (a conformance monitor, the default and the only value library
+    # monitors carry) or "observation" (a trigger for when to look, whose
+    # threshold is the agent's own choice -- threshold_source "agent_chosen",
+    # never verified, justified by threshold_rationale).
+    purpose: str = "clause"
+    threshold_rationale: str | None = None
 
 
 class MonitorFirePayload(BaseModel):
-    """WatchDog monitor violation event."""
+    """Monitor violation event; purpose says "clause" (conformance) or "observation" (look trigger)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -240,6 +246,11 @@ class MonitorFirePayload(BaseModel):
     description: str | None = None
     channels_read: list[str] | None = None
     detail: str | None = None
+    # Same semantics as MonitorArmedPayload's: an "observation" fire is a
+    # look-trigger, not a conformance finding, and is never counted in
+    # findings_during_run (that bookkeeping keys on recorded verdicts only).
+    purpose: str = "clause"
+    threshold_rationale: str | None = None
 
 
 class MonitorDisarmedPayload(BaseModel):
@@ -416,7 +427,7 @@ class FramesCapturedPayload(BaseModel):
 
 
 class LookPayload(BaseModel):
-    """An agent asked to SEE the workspace and was returned camera frames.
+    """An agent was returned camera frames; wakes wait_for_event only when "look" is named in event_types.
 
     Emitted by the look() tool on both the WatchDog and the executor (scene)
     server, so the run record says when each agent chose to look, why, and what

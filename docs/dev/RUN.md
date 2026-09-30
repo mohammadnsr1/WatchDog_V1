@@ -315,6 +315,27 @@ write into `<session_dir>/frames/` and both land on the event timeline — as
 `look` and `frames_captured` respectively, which is how the record distinguishes
 "the agent saw this" from "this was kept for later".
 
+### Array lane
+
+Authored monitors can read the camera directly: `arm_custom_monitor` (and the
+dry run) take `rate_hz` (clamped to at most 2.0), which arms the monitor on
+the ARRAY lane — its own engine thread, scheduled per-monitor, so numpy work
+never delays the TF/joint callbacks or the scalar authored lane. On that lane
+`check(ctx)` gets `np` plus `ctx.rgb()`, `ctx.depth()`, `ctx.camera()`,
+`ctx.deproject(u, v, z)` and `ctx.frame_stamps()` — one coherent snapshot per
+tick, frames read-only, None when absent or older than 1 s. Budgets: the
+usual 20000-line budget plus a 150 ms wall budget per call (5 strikes →
+`authored_timeout`), and `ctx.state` may hold at most 32 MB of arrays.
+
+`purpose="observation"` arms a monitor whose threshold only decides when to
+LOOK: `threshold_rationale` is required, the arm records
+`threshold_source="agent_chosen"` (never verified), `halt_on_fire` is
+refused, and its fires wake `wait_for_event` without ever counting as
+findings. The default `purpose="clause"` is unchanged conformance
+monitoring; either purpose may use either lane. The full agent-facing
+contract lives in `arm_custom_monitor`'s docstring; scoring for array-lane
+monitors is still an open item (see STAGE2_REPORT.md).
+
 ### Scored runs must use the Claude Code CLI
 
 Non-negotiable for any run where vision matters.

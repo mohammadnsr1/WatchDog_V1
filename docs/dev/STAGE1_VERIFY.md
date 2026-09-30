@@ -241,3 +241,58 @@ the `CameraInfo.k` truthiness bug; it passes after that fix.
 
 NOTE: `colcon build --packages-select robot_backend` is required before the
 next live run; these fixes exist in src only until then.
+
+## Executor first-look fix (2026-09-30)
+
+### Root cause
+
+The executor's camera attaches LAZILY: scene_mcp_server's `main()` eagerly
+built the backend but not vision, so `_ensure_vision()` first ran inside the
+first `look()` call itself (scene_mcp_server.py:553) -- attach and read within
+the same millisecond, hence the live "no message received on /camera/depth/rgb
+since attach at <t> (0 s ago); received=0, errors=0" on every view. The
+WatchDog attaches at server startup (`main()` -> `_ensure_watchdog()`), which
+is why its looks worked.
+
+### Changes
+
+- `scene_mcp_server.main()`: `_ensure_vision()` now runs at server startup,
+  wrapped so a failure only warns; `look()`'s lazy call remains the fallback.
+- `vision/look.py`: `FIRST_FRAME_GRACE_SEC = 3.0` and
+  `_wait_for_first_frames()` (polls every 50 ms) -- a requested view whose
+  slot has NEVER received a message waits until it fills or 3.0 s have passed
+  since attach, then proceeds; the wait is recorded in notes as
+  "waited <ms> ms for first frame after attach". A slot that has received
+  before never waits (stale is stale), and nothing waits past the bound.
+  This covers BOTH roles' lazy-fallback edge (a watchdog whose eager init
+  failed attaches lazily too).
+- WatchDog server checked for the same window: its camera already attaches at
+  startup (eager `_ensure_watchdog()` in `main()`), so no change there; the
+  grace wait is the safety net for its lazy path.
+
+### Proof: fail before, pass after
+
+New test `test_first_look_right_after_attach_waits_for_first_frames`
+(domain 77): `_ensure_vision()`, then `perform_look` IMMEDIATELY, with the
+publisher starting 300 ms later. Pre-fix run: FAILED with the live failure
+shape (both views failed, received=0, 0 s since attach). Post-fix: passes --
+both views ok and notes carries the wait.
+
+### Test results
+
+- `test_camera_streams_live.py`: 6 passed (the 5 receive tests + the new
+  first-look test).
+- STAGE1_VERIFY §2 targeted list + `test_skill_event_coverage`:
+  155 passed, 1 failed -- the failure is the PRE-EXISTING `get_object_spec`
+  coverage gap only.
+- Rebuild (`colcon build --packages-select robot_backend`) still required
+  before the next live run.
+
+### Addendum: get_object_spec gap closed (2026-09-30)
+
+`get_object_spec` is now allowlisted in `test_skill_event_coverage.py`'s
+SCENE_ALLOWLIST: "read-only registry lookup -- touches no physical state and
+changes nothing the timeline tracks; every call is still recorded in
+mcp_calls_executor.jsonl with its arguments and result". With it,
+`test_skill_event_coverage` + `test_camera_streams_live`: 15 passed, 0 failed.
+No remaining failures in any file this work touched.
