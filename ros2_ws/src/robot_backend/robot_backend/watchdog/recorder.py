@@ -38,6 +38,14 @@ _SELF_EMITTED_EVENT_TYPES = frozenset(
     {
         "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict",
         "run_verdict", "halt", "frames_captured",
+        # A look is an agent's own observation act, not something that happened
+        # in the cell, so it must never wake a wait_for_event -- the WatchDog
+        # calling look() and then being woken by its own call would spin. Note
+        # this also suppresses the EXECUTOR's look events for the WatchDog,
+        # since the filter is by type and cannot see LookPayload.role. That is
+        # deliberate for now: whether a WatchDog should be able to wait on the
+        # executor looking is a real design question, not a Stage 1 one.
+        "look",
     }
 )
 

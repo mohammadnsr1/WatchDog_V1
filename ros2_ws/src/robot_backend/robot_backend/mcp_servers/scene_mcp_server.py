@@ -9,6 +9,11 @@ Tools:
                          limits, grasp thresholds) plus cell frame names.
                          Read-only; does not carry grasp_width_m, which is
                          instruction-sourced (see the tool's docstring).
+  look                 — SEE the workspace: returns live camera frames to the
+                         model as image content (rgb and/or depth). Unlike every
+                         other tool here, which returns numbers. Shared
+                         implementation with the WatchDog's look() --
+                         robot_backend/vision/look.py.
   reset_tf             — flush the TF buffer after an Isaac sim reset.
   get_scene_summary    — MoveIt's current beliefs: world + attached objects.
   sync_scene           — push TF-derived poses into MoveIt's collision scene.
@@ -53,8 +58,9 @@ import rclpy
 from rclpy.node import Node
 
 from robot_backend.cell.gate import request_go
-from robot_backend.events.bus import configure_bus, shutdown_bus
+from robot_backend.events.bus import configure_bus, get_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
+from robot_backend.vision.look import LookDeps, look as _run_look
 from robot_backend.registry import load_registry
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.watchdog import session as session_helper
@@ -67,11 +73,25 @@ from robot_backend.mcp_servers import role_context
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.types import ToolAnnotations
 except ImportError as exc:
     FastMCP = None  # type: ignore[assignment]
+    ToolAnnotations = None  # type: ignore[assignment]
     _MCP_IMPORT_ERROR = exc
 else:
     _MCP_IMPORT_ERROR = None
+
+# Claude Code caps an MCP tool result at roughly 50 KB of characters; anything
+# larger is saved to a session file and the model gets a preview it is expected
+# to Read, which these Read-denied sessions cannot do -- so an over-cap result is
+# simply LOST to the agent. A base64 PNG is well past that cap, so look() must
+# carry this vendor override or its images never arrive. Mirrors the constant of
+# the same name in watchdog_mcp_server.py.
+_LARGE_RESULT_ANNOTATIONS = (
+    ToolAnnotations(**{"anthropic/maxResultSizeChars": 4_000_000})
+    if ToolAnnotations is not None
+    else None
+)
 
 
 _DEFAULT_REGISTRY_PATH = (
@@ -149,8 +169,109 @@ def _call_service(client, request, service_name: str, timeout_sec: float = 5.0) 
     return result
 
 
+# ----------------------------------------------------------------------
+# Vision (look()). Deliberately on its OWN node, executor and thread.
+#
+# _NODE above is never spun continuously -- it is driven only by
+# spin_until_future_complete inside _call_service, for the duration of one
+# service call. Subscriptions on it would therefore receive messages only during
+# those brief windows, so a camera buffer attached to _NODE would be empty
+# whenever look() was called and full of whatever arrived during an unrelated
+# pose query otherwise. Adding _NODE to a background executor is not an
+# alternative: spin_until_future_complete on a node already owned by another
+# executor is exactly the double-spin this pattern avoids.
+#
+# So vision gets a second node with a MultiThreadedExecutor on a daemon thread,
+# which is the same shape the watchdog server already uses, and the two never
+# touch.
+# ----------------------------------------------------------------------
+_VISION_NODE: Node | None = None
+_VISION_EXECUTOR = None
+_VISION_THREAD = None
+_CAMERA_STREAMS = None
+
+
+def _vision_session_dir() -> Path:
+    """Where look() writes frames: the active session, else the legacy location.
+
+    active_session_dir() rather than ensure_session_dir() for the reason the
+    watchdog server documents: the full resolver MINTS a fresh timestamped
+    directory when the pointer is missing, leaving a plausible-looking empty
+    session behind for a run that never existed.
+    """
+    active = session_helper.active_session_dir()
+    if active is not None:
+        active.mkdir(parents=True, exist_ok=True)
+        return active
+    return Path.home() / ".watchdog"
+
+
+def _ensure_vision():
+    """Build the vision node, camera subscriptions and spin thread. Idempotent.
+
+    Returns the CameraStreams, or None if it could not be created. A cell with no
+    camera is a supported configuration -- look() reports the missing views
+    rather than the server refusing to start.
+    """
+    global _VISION_NODE, _VISION_EXECUTOR, _VISION_THREAD, _CAMERA_STREAMS
+    if _CAMERA_STREAMS is not None:
+        return _CAMERA_STREAMS
+    if not rclpy.ok():
+        rclpy.init(args=None)
+    from rclpy.callback_groups import ReentrantCallbackGroup
+    from rclpy.executors import MultiThreadedExecutor
+    import threading
+
+    from robot_backend.watchdog.image_buffer import CameraStreams
+
+    _VISION_NODE = Node("robot_backend_scene_vision")
+    streams = CameraStreams(logger=_VISION_NODE.get_logger())
+    try:
+        # subscribe_rgb=True: unlike the watchdog, this process has no
+        # ImageBufferManager to forward frames from, so vision owns RGB here.
+        streams.attach(_VISION_NODE, ReentrantCallbackGroup(), subscribe_rgb=True)
+    except Exception as exc:
+        _VISION_NODE.get_logger().warning(
+            f"camera streams attach failed (non-fatal): {exc}"
+        )
+    _VISION_EXECUTOR = MultiThreadedExecutor(num_threads=2)
+    _VISION_EXECUTOR.add_node(_VISION_NODE)
+    _VISION_THREAD = threading.Thread(
+        target=_VISION_EXECUTOR.spin, name="scene_vision_spin", daemon=True
+    )
+    _VISION_THREAD.start()
+    _CAMERA_STREAMS = streams
+    return _CAMERA_STREAMS
+
+
+def _shutdown_vision() -> None:
+    global _VISION_NODE, _VISION_EXECUTOR, _VISION_THREAD, _CAMERA_STREAMS
+    _CAMERA_STREAMS = None
+    if _VISION_EXECUTOR is not None:
+        try:
+            _VISION_EXECUTOR.shutdown()
+        except Exception:
+            pass
+        _VISION_EXECUTOR = None
+    if _VISION_THREAD is not None:
+        try:
+            _VISION_THREAD.join(timeout=2.0)
+        except Exception:
+            pass
+        _VISION_THREAD = None
+    if _VISION_NODE is not None:
+        try:
+            _VISION_NODE.destroy_node()
+        except Exception:
+            pass
+        _VISION_NODE = None
+
+
 def _shutdown_backend() -> None:
     global _NODE, _BACKEND, _REGISTRY, _POSE_CLIENT, _POSES_CLIENT, _RESET_TF_CLIENT, _CURRENT_STEP_ID
+    # Before shutdown_bus and rclpy.shutdown: the vision executor is spinning a
+    # live node and must stop first.
+    _shutdown_vision()
     shutdown_bus()
     _POSE_CLIENT = None
     _POSES_CLIENT = None
@@ -372,6 +493,92 @@ if mcp is not None:
             return _ok(command, message=resp.message)
         except Exception as exc:
             return _error(command, exc)
+
+    # ------------------------------------------------------------------
+    # Vision — see the workspace. Shared implementation with the WatchDog's
+    # look(); see robot_backend/vision/look.py.
+    # ------------------------------------------------------------------
+
+    # structured_output=False and no return annotation: with either, FastMCP
+    # builds an output model and validates the returned list against it, and an
+    # Image object is not pydantic-serialisable. See the same note on the
+    # watchdog server's look().
+    @mcp.tool(structured_output=False, annotations=_LARGE_RESULT_ANNOTATIONS)
+    def look(reason: str, views: list[str] | None = None, max_width: int = 640):
+        """SEE the workspace now: returns live camera frames as images you can read.
+
+        This is the tool that lets you actually look at the cell. It returns
+        image content -- the frames reach you as pictures, not as paths or
+        numbers. Use it when a question is about what the workspace LOOKS like
+        and the pose queries cannot settle it: a part is not where get_object_pose
+        says it is, something is present that is not in your object list, a grasp
+        or a placement looks wrong and you need to see what actually happened.
+
+        reason is required and is recorded on the run's event timeline. Say what
+        you are looking FOR, not just that you are looking.
+
+        views is a subset of ["rgb", "depth"], default ["rgb"]. Each requested
+        view comes back as its own image.
+
+          rgb    -- the colour camera, as published.
+          depth  -- per-pixel distance, grayscale, NEAR = BRIGHT. The clip range
+                    in metres is in the text part; BLACK means either "no depth
+                    measured there" or "at/beyond the far clip", which are
+                    indistinguishable in the image, so do not read black as
+                    distance. Brightness is comparable only within one image.
+
+        depth_source in the text part says whether depth is a real per-pixel
+        depth image ("depth_image", dense) or the point cloud projected through
+        the camera intrinsics because no depth image was arriving
+        ("pointcloud_projection", SPARSE -- only pixels a point landed on carry a
+        distance). Absence of depth at a pixel is not evidence that nothing is
+        there.
+
+        max_width downscales what is sent to you; the full-resolution PNG and the
+        raw depth .npy are saved to the session record regardless.
+
+        A stale or unavailable view does not fail the call -- you get what worked
+        and views_failed says what did not and why. If no view could be returned,
+        the camera was unavailable; that says nothing about the workspace and
+        must not be read as a clear or unchanged scene.
+
+        Seeing does not replace measuring. A pose you need for a motion still
+        comes from get_object_pose; an image tells you what is there, not where
+        it is to millimetres.
+        """
+        # Built lazily INSIDE _run_look's guard: bringing up the vision node can
+        # fail, and a look() that raises tells the agent nothing about why it
+        # cannot see.
+        def _deps() -> LookDeps:
+            streams = _ensure_vision()
+            # The event bus is configured by _ensure_backend. Best-effort: if
+            # MoveIt or scene_tf_sync is not up, looking is still worth doing --
+            # get_bus() falls back to a no-op bus, so the look happens and only
+            # its event is lost.
+            try:
+                _ensure_backend()
+            except Exception as exc:
+                if _VISION_NODE is not None:
+                    _VISION_NODE.get_logger().warning(
+                        f"look: event bus not configured ({exc}); "
+                        "frames will be returned but the look event may be dropped"
+                    )
+            return LookDeps(
+                streams=streams,
+                session_dir=_vision_session_dir(),
+                role="executor",
+                # Distinct prefix so the two agents' frames cannot collide in
+                # the shared <session_dir>/frames/ directory.
+                file_prefix="exec_look_",
+                publish_event=get_bus().publish,
+                current_step_id=lambda: _CURRENT_STEP_ID,
+                logger=_VISION_NODE.get_logger() if _VISION_NODE is not None else None,
+            )
+
+        return _run_look(
+            _deps, reason=reason, views=views, max_width=max_width,
+            role="executor",
+        )
 
     # ------------------------------------------------------------------
     # Scene state — MoveIt's planning scene beliefs.

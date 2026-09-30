@@ -34,11 +34,16 @@ from robot_backend.events.schema import (
     available_event_type_definitions,
     make_event,
 )
+from robot_backend.vision.look import LookDeps, look as _run_look
 from robot_backend.watchdog.authored import AuthoredCodeError, AuthoredMonitor
 from robot_backend.watchdog.engine import MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
 from robot_backend.utils.png_encode import encode_png
-from robot_backend.watchdog.image_buffer import ImageBufferManager, ImageRingBuffer
+from robot_backend.watchdog.image_buffer import (
+    CameraStreams,
+    ImageBufferManager,
+    ImageRingBuffer,
+)
 from robot_backend.watchdog.monitors import MONITOR_TYPES, monitor_definitions
 from robot_backend.watchdog.ready import ReadyClient
 from robot_backend.watchdog.recorder import (
@@ -294,6 +299,17 @@ _LARGE_RESULT_ANNOTATIONS = (
     if ToolAnnotations is not None
     else None
 )
+# look() needs a much larger cap than any text tool: one base64-encoded PNG can
+# run to several hundred KB of characters and a look may return two views, so
+# 400_000 is not enough and an over-cap result loses the images entirely. Kept
+# as its own constant rather than raising the shared one, so widening the ceiling
+# for images does not quietly widen it for get_evidence and get_rendered_task,
+# whose sizes are worth keeping under pressure.
+_IMAGE_RESULT_ANNOTATIONS = (
+    ToolAnnotations(**{"anthropic/maxResultSizeChars": 4_000_000})
+    if ToolAnnotations is not None
+    else None
+)
 
 
 class _UnservableToolRegistry:
@@ -375,6 +391,10 @@ class WatchDogContext:
     session_dir: Path
     image_buffer: ImageRingBuffer
     image_manager: ImageBufferManager
+    # Latest-only camera streams behind look(). Distinct from image_buffer,
+    # which is the retrospective RGB history behind capture_frames -- see
+    # image_buffer.py's module docstring for why both exist.
+    camera_streams: CameraStreams
     # Lazily populated on first get_contract call from WATCHDOG_TASK_PATH's
     # steps: block, collapsed to one spec per object_id -- see
     # _load_task_objects. Contracts are addressed by object, not by step: the
@@ -628,12 +648,28 @@ def _ensure_watchdog() -> WatchDogContext:
             max_bytes=_env_int("WATCHDOG_IMAGE_BUFFER_BYTES", _DEFAULT_IMAGE_BUFFER_BYTES),
         )
         image_hz = _env_float("WATCHDOG_IMAGE_BUFFER_HZ", _DEFAULT_IMAGE_BUFFER_HZ)
-        image_manager = ImageBufferManager(image_buffer, hz=image_hz, logger=node.get_logger())
+        # look()'s latest-only store. Constructed BEFORE the manager so it can be
+        # handed in: the manager forwards each accepted RGB frame here, which
+        # keeps look() on the same single RGB subscription capture_frames already
+        # pays for instead of deserializing every frame twice.
+        camera_streams = CameraStreams(logger=node.get_logger())
+        image_manager = ImageBufferManager(
+            image_buffer, hz=image_hz, logger=node.get_logger(),
+            streams=camera_streams,
+        )
         image_cb_group = ReentrantCallbackGroup()
         try:
             image_manager.attach(node, image_cb_group)
         except Exception as exc:
             node.get_logger().warning(f"image buffer attach failed (non-fatal): {exc}")
+        try:
+            # subscribe_rgb=False: the manager above owns RGB and forwards it.
+            # The depth/camera_info/pointcloud topics are all optional and a
+            # missing one only degrades look()'s depth view -- same callback
+            # group, for the same halt-latency reason.
+            camera_streams.attach(node, image_cb_group, subscribe_rgb=False)
+        except Exception as exc:
+            node.get_logger().warning(f"camera streams attach failed (non-fatal): {exc}")
         halt_client = HaltClient(
             node=node,
             event_bus=event_bus,
@@ -687,6 +723,7 @@ def _ensure_watchdog() -> WatchDogContext:
             session_dir=session_dir,
             image_buffer=image_buffer,
             image_manager=image_manager,
+            camera_streams=camera_streams,
         )
         return _CONTEXT
 
@@ -1768,6 +1805,92 @@ if mcp is not None:
         except Exception as exc:
             return _error(command, exc)
 
+    # structured_output=False is load-bearing, not tidiness. With a return
+    # annotation FastMCP builds an output model and model_validate()s the return
+    # value against it (func_metadata.convert_result); an Image object in the
+    # returned list is not pydantic-serialisable and that validation is where it
+    # would fail. Opting out leaves _convert_to_content as the only conversion,
+    # which is exactly the one that turns Images into ImageContent blocks. There
+    # is deliberately no return annotation either, for the same reason.
+    # _IMAGE_RESULT_ANNOTATIONS is required here, not optional: a base64 PNG is
+    # far past the ~50 KB default per-tool result cap, and an over-cap result is
+    # replaced by a preview these Read-denied sessions cannot open -- i.e. the
+    # images would be silently LOST to the agent. See the constant's own note.
+    @mcp.tool(structured_output=False, annotations=_IMAGE_RESULT_ANNOTATIONS)
+    def look(reason: str, views: list[str] | None = None, max_width: int = 640):
+        """SEE the workspace now: returns live camera frames as images you can read.
+
+        This is the tool that lets you actually look. It returns image content --
+        the frames reach you as pictures, not as paths or numbers. Use it when a
+        question is about what the workspace LOOKS like and the proprioceptive
+        and TF evidence cannot settle it: something is present that should not
+        be, a part is not where its pose says it is, or you need to characterize
+        a physical event you have already detected.
+
+        reason is required and is recorded on the event. Say what you are
+        looking FOR, not just that you are looking -- the record of why an agent
+        chose to look is part of what makes its strategy legible afterwards.
+
+        views selects what you get, a subset of ["rgb", "depth"], default
+        ["rgb"]. Each requested view comes back as its own image.
+
+          rgb    -- the colour camera, as published.
+          depth  -- per-pixel distance, rendered grayscale with NEAR = BRIGHT.
+                    The mapping is linear over a clip range chosen from this
+                    frame's own 2nd/98th percentiles, and that range is in the
+                    text part in metres. BLACK means either "no depth measured
+                    at that pixel" or "at/beyond the far clip" -- the two are
+                    indistinguishable in the image, so do not read black as
+                    distance. Brightness is comparable only WITHIN one image,
+                    never between two looks.
+
+        depth_source in the text part says where depth came from and the two
+        sources are not equivalent:
+          "depth_image"            -- a real per-pixel depth image. Dense.
+          "pointcloud_projection"  -- no depth image was arriving, so the latest
+                                      point cloud was projected through the
+                                      camera intrinsics instead. SPARSE: only
+                                      pixels a point actually landed on carry a
+                                      distance and the rest are NaN (black).
+                                      Absence of depth at a pixel is not
+                                      evidence of absence of an object there.
+
+        max_width downscales what is sent to you (integer stride, aspect
+        preserved). The full-resolution PNG is always saved to the session
+        record regardless, along with the raw depth array as .npy, so your
+        reasoning from a frame can be audited against the real data later.
+
+        A view that is stale (older than 1 s) or unavailable does not fail the
+        call: you get whatever views did work, and views_failed names each one
+        that did not and why. If NO view could be returned, that says the camera
+        streams were unavailable -- it says nothing about the workspace, and you
+        must not read it as an empty or unchanged scene.
+
+        Looking is not free and not evidence by itself. What you see still has
+        to be reconciled with the specification and with the pose and effort
+        evidence; an image tells you something is there, not that a requirement
+        was met or broken.
+        """
+        # Built lazily INSIDE _run_look's guard: _ensure_watchdog() brings up a
+        # ROS node and can fail, and a look() that raises tells the agent nothing
+        # about why it cannot see.
+        def _deps() -> LookDeps:
+            ctx = _ensure_watchdog()
+            return LookDeps(
+                streams=ctx.camera_streams,
+                session_dir=ctx.session_dir,
+                role="watchdog",
+                file_prefix="look_",
+                publish_event=ctx.event_bus.publish,
+                current_step_id=ctx.recorder.current_step,
+                logger=ctx.node.get_logger(),
+            )
+
+        return _run_look(
+            _deps, reason=reason, views=views, max_width=max_width,
+            role="watchdog",
+        )
+
     @mcp.tool()
     def capture_frames(
         start_wall_ns: int,
@@ -1777,13 +1900,17 @@ if mcp is not None:
     ) -> dict[str, Any]:
         """Write buffered camera frames from a wall-clock window to the session directory.
 
-        This tool PRESERVES visual evidence; it does not perceive. The agent
-        harness sends text only -- WatchDog cannot see the frames it captures.
-        The tool exists so that visual evidence for a moment the monitor
-        identified as significant survives for later analysis. It does not
-        return image data and it does not inform any verdict, which rests on
-        the proprioceptive and TF evidence WatchDog can actually read,
-        independent of any vision pipeline.
+        This tool PRESERVES visual evidence; it does not perceive. It does not
+        return image data -- to SEE the workspace, call look(), which returns
+        live frames to you as images. The two are complements, not alternatives:
+        look() shows you the present, capture_frames preserves a window of the
+        recent PAST that has already gone by, which is the case look() cannot
+        serve because the moment is over by the time you decide it mattered.
+
+        Use this when a moment the evidence identified as significant should
+        survive for later analysis. Its result does not inform any verdict,
+        which rests on the proprioceptive and TF evidence WatchDog can read
+        directly, plus anything you established by looking.
 
         Selects buffered frames whose wall_ns falls in the window, downsamples
         uniformly to max_frames, and writes them under

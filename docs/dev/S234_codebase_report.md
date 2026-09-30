@@ -418,6 +418,7 @@ notes: str
 - **Bag:** `ros2 bag record` (`sim_moveit_bringup.launch.py:388-392`) writes `<session_dir>/bag`.
   - Core topics (`_CORE_BAG_TOPICS`, line 24): `/joint_states`, `/tf`, `/tf_static`, `/watchdog/events`.
   - Opt-in topics: `/camera/depth/rgb` and `/camera_info` (`record_images`); `/camera/depth/points` (`record_pointcloud`).
+    - **Stale as of 2026-09-30** (this report is a dated snapshot; left as written): Isaac now publishes `/camera/depth/camera_info`, not `/camera_info`, and the point cloud is no longer published at all. So `record_images:=true` names one topic that does not exist and `record_pointcloud:=true` names another. `_IMAGE_BAG_TOPICS` (`sim_moveit_bringup.launch.py:28`) has not been updated. Current camera truth: `RUN.md` § Vision.
   - The bag records on the **system clock** (`recv_timestamp`), deliberately not `use_sim_time`, so its timestamps compare directly with `wall_ns()`/`wall_time_iso` (bag launch comment, lines 381-386). Message `header.stamp` values are sim time, which resets to zero each run (manifest `clock` block, `session.py:362-370`).
 - **`events_<server>.jsonl`:** one per process (`watchdog`, `scene`, `motion`, `gripper`) under `<session_dir>/`, append-only, one JSON `EventEnvelope` per line. These are the structured event records the scorer reads (7.1).
 - **`mcp_calls_<role>.jsonl`:** one per role (`watchdog`, `executor`) — every MCP tool call with its result, possibly truncated (2.4).

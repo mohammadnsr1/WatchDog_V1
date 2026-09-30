@@ -415,6 +415,58 @@ class FramesCapturedPayload(BaseModel):
     step_id: str | None = None
 
 
+class LookPayload(BaseModel):
+    """An agent asked to SEE the workspace and was returned camera frames.
+
+    Emitted by the look() tool on both the WatchDog and the executor (scene)
+    server, so the run record says when each agent chose to look, why, and what
+    it was shown. Unlike frames_captured -- which records frames preserved for
+    LATER analysis and which the agent never sees -- this records frames that
+    went to the model as image content and therefore could have informed its
+    reasoning. Telling the two apart in the record is the whole point of having
+    both.
+
+    role is "watchdog" or "executor". It is a payload field rather than
+    something inferred from the event type because BOTH roles emit this one
+    type, which is unlike every other event here; event_type_origin() cannot
+    distinguish them and this field is the authoritative answer.
+
+    Paths only, never image bytes. The frames live on disk under the session
+    directory; an event log that carried base64 frames would be unreadable and
+    would dwarf every other record in the run.
+
+    views_ok / views_failed partition the requested views. A look that could
+    only return RGB because depth was stale is still a look that happened, and
+    the reason it was partial belongs on the record rather than only in the
+    tool result the agent saw.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    look_id: str
+    role: str
+    reason: str
+    views_requested: list[str]
+    views_ok: list[str] = []
+    views_failed: list[dict[str, Any]] = []
+    # view name -> saved full-resolution artifact path. Includes the depth
+    # .npy beside the depth .png, keyed "depth_npy".
+    paths: dict[str, str] = {}
+    # view name -> the source message's header stamp in nanoseconds, which is
+    # SIM time and resets each run. Kept for within-run alignment against TF
+    # and images only; never comparable to wall_ns.
+    stamps_ns: dict[str, int] = {}
+    # view name -> age in milliseconds at the moment the view was read, on the
+    # wall_ns axis (receipt time), which IS the cross-process axis.
+    ages_ms: dict[str, float] = {}
+    wall_ns: int | None = None
+    depth_source: str | None = None
+    depth_clip_m: list[float] | None = None
+    image_size: list[int] | None = None
+    camera_frame_id: str | None = None
+    step_id: str | None = None
+
+
 class EventEnvelope(BaseModel):
     """Top-level wrapper shared by all event types.
 
@@ -452,6 +504,7 @@ class EventEnvelope(BaseModel):
         "phase",
         "watchdog_ready",
         "frames_captured",
+        "look",
     ]
     timestamp_ns: int
     wall_time_iso: str
@@ -472,6 +525,13 @@ _WATCHDOG_EVENT_TYPES = frozenset(
     {
         "monitor_fire", "monitor_armed", "monitor_disarmed", "halt", "verdict",
         "run_verdict", "watchdog_ready", "frames_captured",
+        # "look" is the one type BOTH roles emit -- the executor's scene server
+        # publishes it too. It is filed here so event_type_origin() keeps its
+        # two-value contract and available_event_types() does not raise, but
+        # the origin it reports for "look" is only right for the WatchDog's own
+        # looks. LookPayload.role is the authoritative discriminator; read that,
+        # not the origin, when attributing a look event.
+        "look",
     }
 )
 
@@ -493,6 +553,7 @@ EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
     "phase": PhasePayload,
     "watchdog_ready": WatchDogReadyPayload,
     "frames_captured": FramesCapturedPayload,
+    "look": LookPayload,
 }
 
 # The event_type vocabulary itself, read off EventEnvelope's own Literal
@@ -560,6 +621,7 @@ def make_event(
         "phase",
         "watchdog_ready",
         "frames_captured",
+        "look",
     ],
     payload: (
         BeginStepPayload
@@ -576,6 +638,7 @@ def make_event(
         | PhasePayload
         | WatchDogReadyPayload
         | FramesCapturedPayload
+        | LookPayload
     ),
 ) -> EventEnvelope:
     """Create a timestamped EventEnvelope from a typed payload model.

@@ -9,6 +9,7 @@ now runs the same assembly. This is what changed.
 
 **`grasp_center_offset` is OBJECT-RELATIVE in both halves**, composed through
 the object's live pose:
+
 - `position` is rotated through the object's orientation, so one value names
   the same physical point however the part lies.
 - `orientation` is the grasp centre's rotation **relative to the object**, so
@@ -70,7 +71,7 @@ pair plans fine and puts the part somewhere else.
 ## 3. Motion MCP additions (so the agent passes values instead of computing them)
 
 | argument | tool | why |
-|---|---|---|
+| --- | --- | --- |
 | `target_offset_x/y/z/q*` | `move_grasp_center_to_pose` | composed in frame axes, in-tool |
 | `max_velocity/acceleration_scaling_factor`, `allowed_planning_time` | `move_grasp_center_to_pose` | were hardcoded; needed for slow seating |
 | `approach_distance_m` | `move_grasp_center_to_pose` | **lifts**: offsets the resolved grasp centre along its own local Z |
@@ -113,11 +114,29 @@ the chain, and `START_STATE_IN_COLLISION` now appends the colliding bodies from
   PNG encoding needs raw pixels. Raw costs more ring-buffer memory, so fewer
   frames are retained.
 - Rosbag is untouched — still a rosbag.
-- Only the **watchdog** has a capture tool (`capture_frames`). An executor-side
-  `capture_image` was built and then deliberately removed: the harness is
-  text-only (`providers.py` stringifies every tool result), so the agent could
-  save a PNG but never see it. Giving it back requires emitting real image
-  content blocks in `providers.py` — a change to the eval harness.
+- Only the **watchdog** has a *capture* tool (`capture_frames`), and it remains
+  record-only: it preserves a window of the recent past to disk and returns
+  paths, not pixels.
+- **Both roles can now SEE, via `look()`** (added 2026-09-30, Stage 1 of scene
+  observation). It returns the latest frame to the model as real MCP image
+  content — `rgb` and/or `depth` — and is on the watchdog server plus
+  `robot-backend-scene` for the executor. One shared implementation,
+  `robot_backend/vision/look.py`. Full-resolution PNGs and the raw depth `.npy`
+  still land in `<session_dir>/frames/`.
+  - This supersedes the note that used to sit here about the removed executor-side
+    `capture_image`. That tool was dropped because the agent could save a PNG but
+    never see it; the fix turned out not to be a `providers.py` change but a
+    change of harness. The **Claude Code CLI renders image content correctly**,
+    and it is already the sanctioned launch path for scored runs.
+  - `agents/agent_harness/providers.py` (~429–432) still stringifies every tool
+    result, so under that harness images arrive as base64 text. **Do not patch
+    `providers.py`** — treat vision as unavailable there instead. See `RUN.md`
+    § Vision.
+- Isaac now publishes `/camera/depth/image_raw` (32FC1 metres) and
+  `/camera/depth/camera_info`; the point cloud is **no longer published** and
+  nothing subscribes to it (`use_octomap` and `filter_pointcloud` both default
+  false). So depth is dense and per-pixel, and the point-cloud projection
+  fallback in `image_buffer.py` is dormant, kept as an option and unexercised.
 
 ## 5. Environment gotchas
 

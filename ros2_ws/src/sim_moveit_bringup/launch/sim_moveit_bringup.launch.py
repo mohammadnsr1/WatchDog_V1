@@ -24,10 +24,25 @@ from launch_ros.substitutions import FindPackageShare
 _CORE_BAG_TOPICS = ["/joint_states", "/tf", "/tf_static", "/watchdog/events"]
 # RGB image topics, recorded only when record_images is true. No throttle layer
 # is added -- the source already publishes slowly (~4.6 Hz); recording the
-# topic directly is correct here. There is no depth *image* topic on this cell.
-_IMAGE_BAG_TOPICS = ["/camera/depth/rgb", "/camera_info"]
+# topic directly is correct here.
+#
+# camera_info was "/camera_info" until 2026-09-30, when the render product moved
+# it under the camera namespace. The old name is no longer published, so this
+# list named a topic that does not exist and record_images silently recorded
+# colour only; corrected here.
+#
+# /camera/depth/image_raw (32FC1 depth, live since the same change) is
+# deliberately NOT in this list: it is 4 bytes per pixel and would multiply an
+# already ~180 MB/min option. look() saves the depth frames an agent actually
+# used to <session_dir>/frames/ as PNG plus a raw .npy, which is the record that
+# matters for auditing a decision. Add it here only for a run whose whole point
+# is offline depth analysis.
+_IMAGE_BAG_TOPICS = ["/camera/depth/rgb", "/camera/depth/camera_info"]
 # Point cloud, recorded only when record_pointcloud is true. ~4x the cost of
 # RGB for data a frame-inspecting analyst does not use, so it is off by default.
+# NOTE: nothing publishes this any more (see filter_pointcloud's own note below),
+# so record_pointcloud:=true currently records nothing. The topic name is kept
+# because the cloud path is retained as an option, not removed.
 _POINTCLOUD_BAG_TOPICS = ["/camera/depth/points"]
 
 
@@ -691,7 +706,8 @@ def generate_launch_description():
                 "record_images",
                 default_value="false",
                 description=(
-                    "Also record RGB camera topics (/camera/depth/rgb, /camera_info) "
+                    "Also record RGB camera topics (/camera/depth/rgb, "
+                    "/camera/depth/camera_info) "
                     "to the session bag. ~180 MB/min. Off by default."
                 ),
             ),

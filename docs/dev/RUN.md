@@ -39,7 +39,7 @@ Run this before **every** scored run, in order. Steps marked *enforced* now
 fail loudly on their own; the rest are still on you.
 
 | # | Step | Enforced? |
-|---|---|---|
+| --- | --- | --- |
 | 1 | `colcon build` so the registry reaches install space | **manual** — see below |
 | 2 | Mint a fresh session dir + rewrite the pointer | **enforced**: bringup refuses a dir a prior run used |
 | 3 | `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` name the intended files | **enforced**: echoed in `get_rendered_task`'s first response |
@@ -225,7 +225,7 @@ carries `WATCHDOG_SCENARIO` (which tools the server registers) and
 `WATCHDOG_AGENT_CONFIG` (which system prompt renders).
 
 | Scenario | Watchdog config (fmb_assembly / fmb_assembly_2) | Monitors |
-|---|---|---|
+| --- | --- | --- |
 | S1 | `watchdog.mcp.json` / `watchdog_2.mcp.json` | library monitors |
 | S2 | `watchdog_s2.mcp.json` / `watchdog_2_s2.mcp.json` | library + authored |
 | S3 | `watchdog_s3.mcp.json` / `watchdog_2_s3.mcp.json` | authored only |
@@ -297,6 +297,151 @@ observed, why it was or was not flagged, and for a fire what is believed to have
 physically happened. That text flows into `events_watchdog.jsonl` through the
 normal verdict path, which is how explanation quality stays scoreable without a
 harness transcript.
+
+---
+
+## Vision
+
+Both agents can see. `look(reason, views=["rgb"], max_width=640)` returns live
+camera frames to the model **as image content**, and it is available on the
+watchdog server (all scenarios) and on `robot-backend-scene` for the executor.
+Both call one implementation, `robot_backend/vision/look.py`, so the two roles
+look through the same instrument.
+
+`look()` is not `capture_frames`. `capture_frames` reaches *backwards* into an
+RGB ring buffer to preserve a window that has already passed, and returns paths
+the agent never sees. `look()` reads the *latest* frame and returns pixels. Both
+write into `<session_dir>/frames/` and both land on the event timeline — as
+`look` and `frames_captured` respectively, which is how the record distinguishes
+"the agent saw this" from "this was kept for later".
+
+### Scored runs must use the Claude Code CLI
+
+Non-negotiable for any run where vision matters.
+`agents/agent_harness/providers.py` (~429–432) flattens every tool result
+through `_stringify`, so an image content block arrives at the model as
+base64 **text**: useless, and large enough to crowd out the rest of the context.
+`agents/agent_harness/mcp_client.py` (~182) does preserve the image block, so the
+loss is entirely in the provider layer.
+
+**Do not modify `providers.py`** to fix this. The sanctioned launch path is
+already the CLI (`./run_watchdog.sh`, `./run_executor.sh`, both with
+`--strict-mcp-config`), and the CLI renders image content correctly. If a run
+ever needs the custom harness, treat vision as unavailable for it rather than
+patching the harness mid-study.
+
+### Topics from Isaac
+
+Verified live **2026-09-30**:
+
+| Topic | Type | Status | Role |
+| --- | --- | --- | --- |
+| `/camera/depth/rgb` | `sensor_msgs/Image` (raw RGB) | live | the `rgb` view; also feeds `capture_frames` |
+| `/camera/depth/image_raw` | `sensor_msgs/Image`, `32FC1`, metres | live | the `depth` view — dense, per-pixel |
+| `/camera/depth/camera_info` | `sensor_msgs/CameraInfo` | live | intrinsics for `look()`'s `camera` block |
+| `/camera/depth/points` | `sensor_msgs/PointCloud2` | **not published** | dormant depth fallback — see below |
+
+**Every one of these is optional to the code.** A missing topic is recorded at
+attach time and degrades one view; it never raises. Override with
+`WATCHDOG_DEPTH_IMAGE_TOPIC`, `WATCHDOG_CAMERA_INFO_TOPIC`,
+`WATCHDOG_POINTCLOUD_TOPIC`, or `WATCHDOG_IMAGE_TOPICS` for RGB.
+
+`camera_info` is resolved from two candidates in order —
+`/camera/depth/camera_info`, then the older unnamespaced `/camera_info` — so an
+un-updated stage still works. The namespaced one is what is live now.
+
+> **Fixed 2026-09-30:** `_IMAGE_BAG_TOPICS` in `sim_moveit_bringup.launch.py`
+> named the old `/camera_info`, which is no longer published, so
+> `record_images:=true` was silently recording colour only. It now names
+> `/camera/depth/camera_info`. `/camera/depth/image_raw` is deliberately **not**
+> recorded — 4 bytes per pixel on top of an already ~180 MB/min option, and
+> `look()` already saves the depth frames an agent actually used. Add it there
+> only for a run whose point is offline depth analysis.
+>
+> `record_pointcloud:=true` currently records **nothing**, since no cloud is
+> published. The topic name is kept because the path is retained as an option.
+
+Camera extrinsics are the fixed `world -> camera_depth_optical_frame` static TF
+that `sim_moveit_bringup` publishes from
+`sim_moveit_bringup/config/cameras.yaml` (`publish_camera_tf`, default `true`).
+`look()` reports those yaml values as `extrinsics_from_yaml` — the *declared*
+pose. If the camera prim in the USD stage disagrees with the yaml, nothing
+detects it.
+
+### The point cloud is gone, deliberately
+
+Nothing publishes `/camera/depth/points` and nothing subscribes to it.
+`use_octomap` and `filter_pointcloud` both default `false`
+(`sim_moveit_bringup.launch.py:507`, `:539`), and that launch file's own note on
+`filter_pointcloud` predicted this: with the filter off "nothing in the cell
+subscribes to `raw_pointcloud_topic`, so the depth publisher can be switched off
+in Isaac too."
+
+The octomap is off for a reason worth not re-learning: it voxelised the part held
+in the gripper mid-carry, producing goal-sampling failures and
+`<octomap>`-vs-attached-body aborts that clearing cannot fix, because the map
+refills faster than a trajectory runs. Every assembly part is a registry
+collision mesh and the bench is modelled exactly by `publish_workspace_floor`, so
+the cloud was contributing nothing the planner needed.
+
+**Consequence for vision:** `depth_source` will always read `"depth_image"` on
+this cell. The `"pointcloud_projection"` path in
+`watchdog/image_buffer.py` (`project_cloud_to_depth`, `cloud_xyz`) is retained on
+purpose as the fallback if `image_raw` ever regresses, but it is **dormant and
+unexercised** — treat it as unverified against a real message until a cloud is
+republished. To restore it: launch with `use_octomap:=true
+filter_pointcloud:=true` and republish the cloud from Isaac, and expect the
+mid-carry planner failures back with it.
+
+### Fallback behaviour
+
+- **Depth source.** If `/camera/depth/image_raw` is fresh (< 1 s), depth is that
+  image and `depth_source` is `"depth_image"` — dense, per-pixel. This is the
+  only path live on this cell. If it is stale or absent, the code would project
+  the latest point cloud through `camera_info` K (nearest z per pixel,
+  `depth_source` `"pointcloud_projection"`, **sparse**, NaN where no point
+  landed) — but with no cloud published, depth simply fails with a stated reason.
+- **Staleness.** A view older than 1 s is reported as failed rather than served.
+  Depth no longer silently degrades to a sparser source: a stale depth image and
+  a projected cloud are not interchangeable evidence, so the tool says it cannot
+  see depth rather than quietly swapping one for the other.
+- **Partial results.** A failed view never fails the call: whatever worked comes
+  back, and `views_failed` names each failure with its reason. `look()` never
+  raises to the model.
+- **No views at all** means the camera was unavailable. It is not evidence about
+  the workspace, and the tool text says so explicitly so the agent cannot read it
+  as a clear scene.
+
+### Current scope
+
+- **Depth is for the WatchDog.** `views=["depth"]` is *implemented* on both
+  servers and the executor can call it, but using it is out of scope for now —
+  the executor's job is `rgb`. This is a convention, not a gate; if it needs
+  enforcing so an executor run cannot reach depth at all, that is a one-line
+  change to the scene server's `look()`.
+- **The planner is not told about unlisted objects.** A Stage 3 injected intruder
+  is deliberately invisible to MoveIt: it is not a registry collision object and,
+  with the octomap off, no perception path puts it in the planning scene. Noticing
+  it is the agent's job, through `look()`.
+
+### What lands on disk
+
+Per call, in `<session_dir>/frames/`:
+
+- `look_<seq>_rgb.png` / `look_<seq>_depth.png` — full resolution (watchdog)
+- `exec_look_<seq>_*.png` — the same for the executor, prefixed so the two
+  agents' frames cannot collide
+- `look_<seq>_depth.npy` — the **raw float32 metric depth**, saved before any
+  visualisation, so an agent's later reasoning from a depth image can be audited
+  against the real distances
+
+Depth PNGs are grayscale with near = bright, clipped to the frame's own 2nd/98th
+percentiles; the clip range in metres is in the tool's text part and on the
+event. Black is ambiguous between "no depth measured" and "at/beyond the far
+clip", which is why the range always travels with the image. PNG encoding stays
+on `utils/png_encode.py` — this cell has no Pillow and no OpenCV.
+
+Events carry **paths only**, never image bytes.
 
 ---
 
