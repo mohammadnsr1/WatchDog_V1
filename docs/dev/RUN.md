@@ -488,7 +488,7 @@ Operator-side scene perturbation for observation scoring. Full detail in
 - **Inject:** in Isaac's Script Editor, while the cell is running:
 
   ```python
-  import sys; sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/scripts/isaac")
+  import sys; sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
   import inject_intruder as ii
   ii.inject("intruder_a", shape="cube", size_m=0.05,
             position_xyz_world=(0.4, -0.2, 0.76), color_rgb=(0.9, 0.1, 0.1),

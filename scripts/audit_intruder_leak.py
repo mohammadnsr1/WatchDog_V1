@@ -2,7 +2,7 @@
 """Audit a session for intruder-name leaks: audit_intruder_leak.py <session_dir>
 
 Reads <session_dir>/ground_truth_injections.jsonl (written by
-scripts/isaac/inject_intruder.py) and searches every channel an agent could
+isaac/script_editor/inject_intruder.py) and searches every channel an agent could
 have learned an intruder's existence from WITHOUT the camera:
 
   (a) the run's rosbag /tf and /tf_static frame ids (via rosbag2_py when

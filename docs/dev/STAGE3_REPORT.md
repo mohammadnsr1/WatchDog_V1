@@ -139,7 +139,7 @@ that it is not a finding, that presence alone is not a violation, that a
 requirement-breaking observation also needs a normal verdict, and the
 update/resolve lifecycle.
 
-## 2. Intruder injection — `scripts/isaac/inject_intruder.py`
+## 2. Intruder injection — `isaac/script_editor/inject_intruder.py`
 
 Operator tool for Isaac's Script Editor. Pure-Python core (importable and
 unit-tested outside Isaac) + an Isaac layer whose `omni.usd` / `pxr` /
@@ -184,7 +184,7 @@ at_step=None, delay_s=0)`, `list_injections()`.
 Operator usage (full block at the top of the file):
 
 ```python
-import sys; sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/scripts/isaac")
+import sys; sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
 import inject_intruder as ii
 ii.inject("intruder_a", shape="cube", size_m=0.05,
           position_xyz_world=(0.4, -0.2, 0.76), color_rgb=(0.9, 0.1, 0.1),
@@ -241,7 +241,7 @@ observation scoring.
 | `robot_backend/vision/observation.py` | **new** — shared core, ObservationStore, per-role look registry, S4 hook |
 | `robot_backend/vision/look.py` | registers each completed look's id in the observation look registry |
 | `robot_backend/mcp_servers/watchdog_mcp_server.py` | record_observation tool (all scenarios); `_OBSERVATIONS` store; observation threshold_param arm check (`for_arm`); 4b docstring lines |
-| `scripts/isaac/inject_intruder.py` | **new** — operator injection tool |
+| `isaac/script_editor/inject_intruder.py` | **new** — operator injection tool |
 | `scripts/audit_intruder_leak.py` | **new** — leak audit |
 | `test/test_observation.py`, `test/test_inject_intruder.py`, `test/test_audit_intruder_leak.py` | **new** — 42 tests |
 

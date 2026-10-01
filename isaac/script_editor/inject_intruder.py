@@ -3,7 +3,7 @@
 USAGE (paste into Isaac Sim's Script Editor while the cell is running):
 
     import sys
-    sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/scripts/isaac")
+    sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
     import inject_intruder as ii
 
     # Immediately drop a red 5 cm cube on the table:
