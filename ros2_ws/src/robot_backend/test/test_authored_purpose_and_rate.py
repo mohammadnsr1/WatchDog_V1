@@ -246,6 +246,51 @@ def test_dry_run_with_rate_spaces_ticks_and_arms_nothing(ctx):
     assert ctx.bus.events == []
 
 
+FIRES_ALWAYS = "def check(ctx):\n    return {'value': 1.0, 'detail': 'always'}\n"
+
+
+def test_dry_run_counts_fires_and_warns_on_every_tick(ctx):
+    result = ws.dry_run_custom_monitor(code=FIRES_ALWAYS, params={}, ticks=2)
+    assert result["ok"] is True
+    assert result["fires"] == "2/2"
+    assert "fires on every tick" in result["warning"]
+    assert "Returning a dict IS a fire" in result["warning"]
+
+
+def test_dry_run_no_fires_has_no_warning(ctx):
+    result = ws.dry_run_custom_monitor(code=PASSIVE, params={}, ticks=2)
+    assert result["fires"] == "0/2"
+    assert "warning" not in result
+
+
+def test_dry_run_clause_with_rate_notes_the_purpose_default(ctx):
+    result = ws.dry_run_custom_monitor(
+        code=PASSIVE, params={}, ticks=1, rate_hz=2.0
+    )
+    assert 'purpose="observation"' in result["note_purpose"]
+    obs = ws.dry_run_custom_monitor(
+        code=PASSIVE, params={}, ticks=1, rate_hz=2.0, purpose="observation"
+    )
+    assert "note_purpose" not in obs
+
+
+def test_arm_warns_when_the_first_call_already_fired(ctx):
+    result = ws.arm_custom_monitor(
+        code=FIRES_ALWAYS, description="always", params={}, monitor_id="warn1"
+    )
+    assert result["ok"] is True                      # armed anyway
+    assert "fires on every tick" in result["warning"]
+    assert "warn1" in ctx.engine.monitors            # not refused
+
+
+def test_arm_without_a_first_call_dict_has_no_warning(ctx):
+    result = ws.arm_custom_monitor(
+        code=PASSIVE, description="quiet", params={}, monitor_id="quiet1"
+    )
+    assert result["ok"] is True
+    assert "warning" not in result
+
+
 def test_dry_run_without_rate_keeps_the_50ms_ticks(ctx):
     result = ws.dry_run_custom_monitor(code=PASSIVE, params={}, ticks=1)
     assert result["ok"] is True

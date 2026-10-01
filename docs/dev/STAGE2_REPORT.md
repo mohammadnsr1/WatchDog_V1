@@ -182,3 +182,86 @@ Full run — STAGE1_VERIFY §2 targeted list + validator + skill-event coverage
   worst; fine for observation triggers.
 - Rebuild required before a live run: `colcon build --packages-select
   robot_backend`.
+
+## Stage 2 live follow-ups (2026-10-01, session 20261001T000236Z)
+
+### 1a. How authored code is restricted (the answer)
+
+Entirely namespace-local: `compile_check`
+(`robot_backend/watchdog/authored.py`, the `namespace = {"__builtins__":
+dict(_ALLOWED_BUILTINS), "math": math}` block) execs the source into a dict
+whose `__builtins__` lacks `__import__` and the other escape hatches, plus
+the AST validator (`validate_source`) as the front gate. NOTHING process-wide
+is touched: no `builtins` patching, no `sys.modules` tampering. The only
+process state the lane uses is `sys.settrace`, which is PER-THREAD by
+construction (the line budget), so there was no cross-thread hazard to
+remove -- 1b required no change, confirmed by reading every path.
+
+### 1d. Why `ndarray.sum()` and `a | b` failed (the answer)
+
+Not the validator -- it has never restricted operators (no
+BitOr/BitAnd/Invert/BitXor rules). Reproduced offline: in a fresh
+interpreter, `a.sum()` inside the restricted frame raises
+`KeyError: '__import__'`. numpy resolves its FIRST-USE lazy imports through
+the CALLING frame's builtins; the authored frame's `__builtins__` dict has no
+`__import__`, so the first `a.sum()`, `a | b` (np.bitwise_or), `np.percentile`
+etc. executed from authored code died, while ops whose imports had already
+completed (np.count_nonzero) worked. Fix: `warm_numpy()` in authored.py runs
+the whole operation battery once from an ordinary frame (real builtins), at
+watchdog server start (`_ensure_watchdog`) and again, idempotently, when an
+array monitor compiles -- after which no lazy import can occur inside an
+authored call, and no import time is ever charged against the 150 ms budget.
+Verified: the full battery (sum/mean/std/any/all/max/astype, | & ~ ^,
+nanmean/nanmedian/median/percentile/nanpercentile, histogram/argwhere/where/
+abs/isnan/clip/unique/cumsum/convolve, and `for _ in range(3)`) runs inside
+the sandbox (`test_numpy_battery_runs_in_the_sandbox`).
+
+### 1c. Validator
+
+A bare `_` Name is now allowed (the conventional throwaway loop variable);
+every other underscore-led name or attribute stays rejected, which covers
+`__import__`, `__builtins__`, `__class__`, `__subclasses__`, `__globals__`
+and every other dunder. `getattr` remains a forbidden name, so
+`getattr(x, '__class__')` is rejected too. New validator tests pin
+`__import__('os')`, `getattr(ctx, '__class__')`, `().__class__`,
+`__subclasses__`, `__globals__`, `__builtins__` as rejected and `for _ in
+range(3)` as accepted.
+
+### 2. Return contract, made unmissable
+
+- arm_custom_monitor's docstring now opens with "THE RETURN CONTRACT,
+  FIRST": returning a dict IS a fire and disarms; compare inside check and
+  return the dict only past the threshold; re-arm an observation monitor
+  after looking (re-arming re-captures the reference); read params with
+  ctx.value(name); purpose defaults to "clause"; depth()/rgb() may be None.
+- 2b audit: the ONE code example in arm_custom_monitor (the ROI depth-change
+  observation example) already returns None on every no-fire path and a dict
+  only past its threshold -- compliant. dry_run_custom_monitor's docstring
+  contains no code examples. Nothing needed fixing; no non-compliant example
+  existed.
+- Dry run results now carry "fires": "<n>/<ticks>"; a run where every tick
+  fired carries the fires-on-every-tick warning verbatim; purpose="clause"
+  with rate_hz set carries note_purpose pointing at purpose="observation".
+- arm_custom_monitor: when the arm-time first call returned a dict, the
+  result carries the same warning -- the monitor is still armed (the first
+  call never fires), never refused.
+
+### 3. RGB stamp
+
+`ImageBufferManager`'s forward now passes the source message's header stamp
+(`offer_rgb(frame, stamp_ns=_header_stamp_ns(msg))`), so `get_rgb()` -- and
+with it look()'s `stamps_ns.rgb` -- reports the real sim-time stamp instead
+of 0. Pinned by `test_forwarded_rgb_frame_keeps_its_header_stamp`.
+
+### Test results
+
+New/extended: numpy battery, stamp forward, validator dunder/`_` rules,
+dry-run fires/warning/note, arm-time warning (+ no-warning controls).
+Full run -- STAGE1_VERIFY §2 targeted list + validator + skill-event
+coverage + camera receive + all Stage 2 files:
+
+```
+247 passed in 12.22s   (zero failures)
+```
+
+Rebuild before the next live run: `colcon build --packages-select robot_backend`.

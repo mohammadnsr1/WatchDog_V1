@@ -274,6 +274,67 @@ def test_np_is_provided_only_on_the_array_lane():
     assert monitor.ctx.state["ok"] == 3
 
 
+NUMPY_BATTERY = (
+    "def check(ctx):\n"
+    "    d = ctx.depth()\n"
+    "    if d is None:\n"
+    "        return None\n"
+    "    b1 = d > 1.0\n"
+    "    b2 = d < 2.0\n"
+    "    ok = [float(d.sum()), float(d.mean()), float(d.std()),\n"
+    "          int(b1.any()), int(b1.all()), float(d.max()),\n"
+    "          float(d.astype('float64')[0, 0]),\n"
+    "          int((b1 | b2)[0, 0]), int((b1 & b2)[0, 0]),\n"
+    "          int((~b1)[0, 0]), int((b1 ^ b2)[0, 0]),\n"
+    "          float(np.nanmean(d)), float(np.nanmedian(d)),\n"
+    "          float(np.median(d)), float(np.percentile(d, 50)),\n"
+    "          float(np.nanpercentile(d, 50)), len(np.histogram(d)[0]),\n"
+    "          len(np.argwhere(b1)), float(np.where(b1, 1.0, 0.0)[0, 0]),\n"
+    "          float(np.abs(d)[0, 0]), int(np.isnan(d)[0, 0]),\n"
+    "          float(np.clip(d, 0, 2)[0, 0]), len(np.unique(d)),\n"
+    "          float(np.cumsum(d[0])[0]),\n"
+    "          len(np.convolve(d[0, :3], d[0, :2]))]\n"
+    "    total = 0\n"
+    "    for _ in range(3):\n"
+    "        total = total + 1\n"
+    "    ctx.state['battery'] = len(ok) + total\n"
+    "    return None\n"
+)
+
+
+def test_numpy_battery_runs_in_the_sandbox():
+    """Every listed numpy operation works inside an array-lane check --
+    the restricted-builtins lazy-import failure class is gone."""
+    streams = FakeArrayStreams()
+    monitor = _monitor(NUMPY_BATTERY, streams)
+    assert monitor.ctx.state["battery"] == 28
+    assert monitor.evaluate(None) is None  # and again, post-construction
+
+
+def test_forwarded_rgb_frame_keeps_its_header_stamp():
+    """The manager's forward into CameraStreams carries the header stamp."""
+    from types import SimpleNamespace
+
+    from robot_backend.watchdog.image_buffer import (
+        CameraStreams, ImageBufferManager, ImageRingBuffer,
+    )
+
+    streams = CameraStreams()
+    manager = ImageBufferManager(
+        ImageRingBuffer(max_frames=4, max_bytes=1 << 22), streams=streams
+    )
+    cb = manager._make_callback("/camera/depth/rgb", "raw")
+    msg = SimpleNamespace(
+        header=SimpleNamespace(stamp=SimpleNamespace(sec=12, nanosec=345)),
+        encoding="rgb8", width=4, height=2, data=bytes(4 * 2 * 3),
+    )
+    cb(msg)
+    got = streams.get_rgb()
+    assert got is not None
+    _array, stamp_ns = got
+    assert stamp_ns == 12 * 1_000_000_000 + 345
+
+
 # --- budgets ---------------------------------------------------------------------
 
 def test_python_pixel_loop_hits_the_line_budget():

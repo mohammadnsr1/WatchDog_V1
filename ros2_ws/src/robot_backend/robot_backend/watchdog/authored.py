@@ -80,6 +80,46 @@ _ALLOWED_BUILTINS = {
 }
 
 
+_NUMPY_WARMED = False
+
+
+def warm_numpy() -> bool:
+    """Trigger numpy's first-use lazy imports with REAL builtins in scope.
+
+    Authored code runs in a namespace whose __builtins__ dict deliberately
+    lacks __import__. numpy resolves its own lazy, first-use imports through
+    the CALLING frame's builtins, so the first a.sum(), a | b, np.percentile
+    and friends executed from an authored frame died with
+    KeyError: '__import__' (observed live 2026-10-01). Running each such
+    operation once here, from an ordinary frame, completes every lazy import
+    so nothing inside an authored call ever needs one -- which also keeps the
+    import cost out of the array lane's 150 ms budget. Idempotent; returns
+    False (and stays safe) if numpy is unavailable.
+    """
+    global _NUMPY_WARMED
+    if _NUMPY_WARMED:
+        return True
+    try:
+        import numpy as np
+
+        a = np.full((6, 8), 1.5, dtype=np.float32)
+        a[0, 0] = np.nan
+        b1, b2 = a > 1.0, a < 2.0
+        a.sum(); a.mean(); a.std(); b1.any(); b1.all(); a.max()  # noqa: E702
+        a.min(); a.astype("float64")  # noqa: E702
+        _ = b1 | b2; _ = b1 & b2; _ = ~b1; _ = b1 ^ b2  # noqa: E702
+        np.nanmean(a); np.nanmedian(a); np.median(a)  # noqa: E702
+        np.percentile(a, 50); np.nanpercentile(a, 50)  # noqa: E702
+        np.histogram(a[np.isfinite(a)]); np.argwhere(b1)  # noqa: E702
+        np.where(b1, 1.0, 0.0); np.abs(a); np.isnan(a); np.clip(a, 0, 2)  # noqa: E702
+        np.unique(a); np.cumsum(a); np.convolve([1.0, 2.0], [0.5, 0.5])  # noqa: E702
+        np.linalg.norm(a[np.isfinite(a)]); np.sort(a, axis=0)  # noqa: E702
+    except Exception:
+        return False
+    _NUMPY_WARMED = True
+    return True
+
+
 class AuthoredCodeError(ValueError):
     """An authored monitor could not be built. Carries the stage that failed.
 
@@ -188,7 +228,11 @@ def validate_source(source: str) -> None:
                     lineno=getattr(node, "lineno", None),
                 )
         if isinstance(node, ast.Name):
-            if node.id.startswith("_"):
+            # A bare "_" (the conventional throwaway loop variable) is fine;
+            # everything else underscore-led is rejected, which covers every
+            # dunder escape (__import__, __builtins__, __class__,
+            # __subclasses__, __globals__, ...).
+            if node.id.startswith("_") and node.id != "_":
                 raise AuthoredCodeError(
                     "validate",
                     f"names starting with '_' are not allowed: {node.id!r}.",
@@ -789,6 +833,10 @@ class AuthoredMonitor(MonitorPrimitive):
                 raise AuthoredCodeError(
                     "compile", f"numpy is unavailable for the array lane: {exc}"
                 ) from exc
+            # Belt for hosts that skipped the server-start warm (and for
+            # tests): no lazy import may remain for the authored frame to
+            # trigger. Idempotent, so arming cost is paid once per process.
+            warm_numpy()
             extra_namespace = {"np": np}
         self._check = compile_check(source, extra_namespace)
 
@@ -963,4 +1011,5 @@ __all__ = [
     "run_with_budget",
     "run_with_budget_counted",
     "validate_source",
+    "warm_numpy",
 ]

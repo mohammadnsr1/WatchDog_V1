@@ -183,6 +183,35 @@ def test_underscore_name_is_rejected():
     _rejects("def check(ctx):\n    _x = 1\n    return None\n")
 
 
+def test_bare_underscore_loop_variable_is_allowed():
+    validate_source(
+        "def check(ctx):\n"
+        "    total = 0\n"
+        "    for _ in range(3):\n"
+        "        total = total + 1\n"
+        "    return None\n"
+    )
+
+
+def test_dunder_import_call_is_rejected():
+    err = _rejects("def check(ctx):\n    return __import__('os')\n")
+    assert "__import__" in str(err)
+
+
+def test_getattr_dunder_class_is_rejected():
+    _rejects("def check(ctx):\n    return getattr(ctx, '__class__')\n")
+
+
+def test_tuple_dunder_class_is_rejected():
+    _rejects("def check(ctx):\n    return ().__class__\n")
+
+
+def test_dunder_subclasses_and_globals_are_rejected():
+    _rejects("def check(ctx):\n    return ctx.__subclasses__\n")
+    _rejects("def check(ctx):\n    return check.__globals__\n")
+    _rejects("def check(ctx):\n    return __builtins__\n")
+
+
 def test_dunder_name_is_rejected():
     _rejects("def check(ctx):\n    return __builtins__\n")
 

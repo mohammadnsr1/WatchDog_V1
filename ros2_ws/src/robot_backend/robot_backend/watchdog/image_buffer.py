@@ -340,9 +340,12 @@ class ImageBufferManager:
                 self.buffer.append(frame)
                 if self.streams is not None:
                     # Forwarded AFTER the ring append so a failure here can
-                    # never cost capture_frames its frame.
+                    # never cost capture_frames its frame. The header stamp
+                    # travels along so look()'s stamps_ns.rgb is real.
                     try:
-                        self.streams.offer_rgb(frame)
+                        self.streams.offer_rgb(
+                            frame, stamp_ns=_header_stamp_ns(msg)
+                        )
                     except Exception as exc:
                         self._log(f"image buffer: offer_rgb failed on {topic}: {exc}")
             except Exception as exc:  # never let a bad frame kill the callback
@@ -467,17 +470,21 @@ class CameraStreams:
 
     # -- ingest ------------------------------------------------------------
 
-    def offer_rgb(self, frame: ImageFrame) -> None:
+    def offer_rgb(self, frame: ImageFrame, stamp_ns: int = 0) -> None:
         """Accept an RGB frame already received by ImageBufferManager.
 
         Takes an ImageFrame rather than a raw message because that is what the
         manager has, and re-deriving width/height/encoding from the message a
         second time would be the only alternative. The frame carries its own
-        receipt wall_ns, so no clock is re-read here.
+        receipt wall_ns, so no clock is re-read here. stamp_ns is the source
+        message's header stamp (sim time), passed by the manager so a
+        forwarded frame keeps a real stamp instead of 0.
         """
         try:
             with self._lock:
-                self._rgb = _Latest(msg=frame, stamp_ns=0, wall_ns=int(frame.wall_ns))
+                self._rgb = _Latest(
+                    msg=frame, stamp_ns=int(stamp_ns), wall_ns=int(frame.wall_ns)
+                )
             self._count_received("rgb", getattr(frame, "topic", None))
         except Exception as exc:
             self._count_error("rgb", exc)
@@ -688,10 +695,11 @@ class CameraStreams:
     def get_rgb(self) -> tuple[Any, int] | None:
         """(HxWx3 uint8 ndarray, stamp_ns) for the latest RGB frame, or None.
 
-        stamp_ns is the message header stamp (sim time) when the frame came
-        through its own subscription, and 0 when it was forwarded from
-        ImageBufferManager, which does not retain headers. Callers that need a
-        cross-process time must use the age reported by ages(), not this.
+        stamp_ns is the source message's header stamp (sim time) whether the
+        frame came through this store's own subscription or was forwarded by
+        ImageBufferManager (the manager passes the header stamp along).
+        Callers that need a cross-process time must use the age reported by
+        ages(), not this.
 
         Returns None when no frame has arrived, when it is stale, or when its
         encoding is not one this cell can turn into pixels.

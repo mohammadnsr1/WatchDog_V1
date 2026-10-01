@@ -44,6 +44,7 @@ from robot_backend.watchdog.authored import (
     AuthoredMonitor,
     MONITOR_PURPOSES,
     json_safe,
+    warm_numpy,
 )
 from robot_backend.watchdog.engine import ARRAY_WALL_BUDGET_MS, MonitorEngine
 from robot_backend.watchdog.halt import HaltClient
@@ -717,6 +718,14 @@ def _ensure_watchdog() -> WatchDogContext:
         # wake event.
         engine.attach_recorder(recorder)
         engine.start_authored_lane()
+        # Trigger numpy's lazy first-use imports NOW, with real builtins in
+        # scope, so an authored array monitor's first call never pays import
+        # time against its 150 ms budget -- or dies on KeyError '__import__'
+        # resolving an import through its restricted frame.
+        try:
+            warm_numpy()
+        except Exception as exc:
+            node.get_logger().warning(f"numpy warm-up failed (non-fatal): {exc}")
         thread = threading.Thread(target=executor.spin, daemon=True)
         thread.start()
         # Prewarm client construction outside recorder callbacks. Left lazy,
@@ -1587,14 +1596,24 @@ if mcp is not None:
     ) -> dict[str, Any]:
         """Arm one monitor whose predicate is the supplied Python source.
 
+        THE RETURN CONTRACT, FIRST. check(ctx) returns None when all is well.
+        Returning a dict IS a fire: the monitor fires and is disarmed.
+        Compare against your threshold inside check() and return the dict
+        only when it is crossed. A monitor disarms after it fires. For an
+        observation monitor, re-arm after you have looked; re-arming
+        re-captures your reference. Read params with ctx.value(name):
+        ctx.params[name] is a {value, source} record, not the number.
+        purpose defaults to "clause"; a look-trigger passes
+        purpose="observation". ctx.depth()/ctx.rgb() may return None.
+
         Code contract. `code` must define exactly one top-level function
         check(ctx) taking one positional argument. Its return value is read
         as: None -- the monitored condition holds; a dict with a finite
         numeric "value" key and an optional str "detail" key -- a violation,
-        which fires with that value; anything else disarms the monitor with
-        reason authored_bad_return. Top level may contain only function
-        definitions (helper functions are allowed) and assignments of literal
-        constants, at most 8000 characters in total.
+        which FIRES with that value and disarms the monitor; anything else
+        disarms the monitor with reason authored_bad_return. Top level may
+        contain only function definitions (helper functions are allowed) and
+        assignments of literal constants, at most 8000 characters in total.
 
         First call. check(ctx) runs once during this call, with ctx.state an
         empty dict. Its return value is stored and returned here as
@@ -1809,6 +1828,15 @@ if mcp is not None:
                     result.update(
                         rate_hz_clamped=True, rate_hz_requested=float(rate_hz)
                     )
+            if isinstance(monitor.first_call_result, dict):
+                # Armed anyway -- the first call never fires -- but a check
+                # whose reference-capture call already returned a dict is the
+                # fires-on-every-tick mistake two live agents made.
+                result.update(warning=(
+                    "This monitor fires on every tick. Returning a dict IS a "
+                    "fire; return None when nothing is wrong. Armed as is, it "
+                    "would fire on its first tick and disarm."
+                ))
             return _ok(command, **result)
         except Exception as exc:
             return _error(command, exc)
@@ -1982,9 +2010,24 @@ if mcp is not None:
                 entry["channels_read"] = list(monitor.channels_read)
                 results.append(entry)
 
+            fired_count = sum(1 for entry in results if entry.get("fired"))
+            extras: dict[str, Any] = {"fires": f"{fired_count}/{tick_count}"}
+            if fired_count == tick_count and tick_count >= 1:
+                extras["warning"] = (
+                    "This monitor fires on every tick. Returning a dict IS a "
+                    "fire; return None when nothing is wrong. Armed as is, it "
+                    "would fire on its first tick and disarm."
+                )
+            if purpose == "clause" and effective_rate is not None:
+                extras["note_purpose"] = (
+                    'purpose defaults to "clause" (a conformance monitor). A '
+                    'camera monitor meant only to decide when to look should '
+                    'pass purpose="observation".'
+                )
             return _ok(
                 command,
                 armed=False,
+                **extras,
                 code_sha256=monitor.code_sha256,
                 description=monitor.description,
                 object_id=monitor.provenance.get("object_id"),
