@@ -60,6 +60,18 @@ BLOCK_C = """arm_custom_monitor(code, description, params, clause, object_id,
 
 """
 
+# The camera-capability sentence for the authored-monitor scenarios (Stage 4,
+# item 2). Inserted immediately after BLOCK_C (I_INSERT runs after C_INSERT,
+# both anchored before the disarm line), so it reads as the closing paragraph
+# of the arm_custom_monitor entry. Applied for S2 and S3, never S1; the S4
+# executor section carries it too (see S4_SECTION). Ends with ONE blank line,
+# matching BLOCK_C's spacing rule.
+BLOCK_I = """    An authored monitor can also read the camera (see arm_custom_monitor:
+    rate_hz and purpose="observation"), which lets you watch the workspace
+    between events.
+
+"""
+
 BLOCK_E = """     - For a monitor you wrote, comparison is "authored", threshold is the
        value of its threshold_param (0.0 if it has none), and detail carries
        the text the check returned with the violation.
@@ -101,14 +113,24 @@ verdict. Everything you arm carries, in clause, the requirement it watches.
 Absence of a fire is not evidence: nothing firing means no armed monitor was
 violated, which is not the same as the requirements being met.
 
+A threshold used only to decide when to look or to trigger an observation,
+and never to judge a clause, may be chosen by you when the specification
+provides none. Report it as agent-chosen, with its value and why.
+
 Your monitoring tools, on their own server:
 
 """
 
-_S4_TAIL = """    Here, raw_spec means the spec block get_object_spec returns, so a source
+# The S4 monitoring-tools tail. BLOCK_I is embedded right after the raw_spec
+# note so the camera-capability sentence closes the arm_custom_monitor entry
+# here exactly as I_INSERT places it in the S2/S3 watchdog prompts.
+_S4_TAIL = (
+    """    Here, raw_spec means the spec block get_object_spec returns, so a source
     reads, for example, "raw_spec.limits.max_clamp_effort".
 
-disarm_monitor(monitor_id) / disarm_all_monitors()
+"""
+    + BLOCK_I
+    + """disarm_monitor(monitor_id) / disarm_all_monitors()
     disarm_all_monitors means all. Nothing is exempt.
 
 get_monitor_fires() -> fires
@@ -122,6 +144,16 @@ query_snapshot(object_ids) / get_evidence(start_wall_ns, end_wall_ns,
     The same recorder buffers your monitors read: latest state, and windows
     of joint_states, object_poses, frames and events. Timestamps are
     wall-clock nanoseconds.
+
+record_observation(summary, category, location, first_seen_wall_ns,
+                   evidence_look_ids, ...)
+    Records something you noticed in the scene that you did not expect: an
+    object not listed among the task's objects, an object that moved or
+    disappeared without a step accounting for it, or any other unexpected
+    event. Say what it is as far as the evidence allows, where it is, when
+    you believe it appeared, and which of your looks show it. An observation
+    is not a finding and does not change a verdict by itself. Update or
+    resolve it as you learn more.
 
 record_verdict(step_id, verdict, clause_results, explanation)
     A finding, recorded the moment you have it: a fire you adjudicated as a
@@ -151,7 +183,22 @@ record_run_verdict(verdict, clause_results, explanation, steps_covered)
     step you ran. When you recorded findings, the explanation says what
     became of each.
 
+    Before recording the run verdict, make sure everything unexpected you
+    noticed has been recorded with record_observation and that each
+    observation's status is current.
+
+Unexpected changes in the scene. The workspace changes constantly while you
+work: the arm moves, and parts are picked, carried and placed. Those changes
+are expected when a step accounts for them. A change that no step accounts
+for, such as something appearing, moving or disappearing, is different:
+notice it, look at it, identify it as far as the evidence allows, locate it,
+estimate when it began, and record it with record_observation. Do not treat
+its presence alone as a finding. It becomes a finding only when it breaks a
+requirement, and then you record that requirement's verdict as usual and name
+the observation in the explanation.
+
 """
+)
 
 # BLOCK_C embedded verbatim, without its trailing blank line, followed
 # directly by the raw_spec note that opens _S4_TAIL. Ends with ONE blank
@@ -319,6 +366,13 @@ def _op_e_insert(text: str) -> str:
     )
 
 
+def _op_i_insert(text: str) -> str:
+    # Runs after C_INSERT (see SCENARIO_OPS ordering), so inserting before the
+    # disarm line lands BLOCK_I immediately after BLOCK_C -- the sentence reads
+    # as the arm_custom_monitor entry's closing paragraph.
+    return _insert_before_line(text, DISARM_PREFIX, BLOCK_I, "I_INSERT", prefix=True)
+
+
 def _op_f_insert(text: str) -> str:
     return _insert_before_line(
         text, F_ANCHOR_LINE, S4_SECTION, "F_INSERT", prefix=False
@@ -339,6 +393,7 @@ WATCHDOG_OPS = {
     "C_INSERT": _op_c_insert,
     "D_REPLACE": _op_d_replace,
     "E_INSERT": _op_e_insert,
+    "I_INSERT": _op_i_insert,
 }
 
 EXECUTOR_OPS = {
@@ -348,8 +403,9 @@ EXECUTOR_OPS = {
 }
 
 SCENARIO_OPS = {
-    "S2": ["C_INSERT", "E_INSERT"],
-    "S3": ["A_DELETE", "B_DELETE", "C_INSERT", "D_REPLACE", "E_INSERT"],
+    "S2": ["C_INSERT", "E_INSERT", "I_INSERT"],
+    "S3": ["A_DELETE", "B_DELETE", "C_INSERT", "D_REPLACE", "E_INSERT",
+           "I_INSERT"],
 }
 
 
@@ -447,7 +503,7 @@ def s4_task_expected(exec_data: dict, wd_data: dict) -> dict:
 
 
 __all__ = [
-    "BLOCK_C", "BLOCK_E", "D_OLD", "D_NEW", "S4_SECTION",
+    "BLOCK_C", "BLOCK_E", "BLOCK_I", "D_OLD", "D_NEW", "S4_SECTION",
     "G_OLD", "G_NEW", "H_OLD", "H_NEW", "S4_REQ_HEADER",
     "WATCHDOG_OPS", "EXECUTOR_OPS", "SCENARIO_OPS",
     "apply_watchdog_ops", "build_watchdog", "build_executor_s4",

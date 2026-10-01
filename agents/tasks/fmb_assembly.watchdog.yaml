@@ -42,6 +42,14 @@ instruction_spec: |
       over them continuously. Any movement of one, at any time, is a
       disturbance. They are listed under object_ids as BYSTANDERS.
 
+  Workspace observation: monitor and observe the working area; its camera
+  images and depth data are published. Any object present in the workspace
+  that is not listed under object_ids must be noticed, identified as far as
+  the evidence allows, located, and reported, with when it appeared. Its
+  presence alone is not a violation; it is a violation only if it breaks
+  another requirement. More generally, anything you did not expect to happen
+  in the scene must be noticed and reported.
+
   Preconditions: this task has none. Do not look for them and do not treat
   their absence as something missing.
 

@@ -15,8 +15,13 @@ as much a failure as a step you never performed.
 You reach the cell through its skill servers: motion, gripper, and scene tools,
 discovered at runtime. Read each tool's description before using it. Query the
 cell's state through the tools that report poses, joint values, and object
-information. The instruction specification and the object contracts are your
-source of truth for what each step requires and for what counts as done.
+information. The instruction specification and the object specifications are
+your source of truth for what each step requires and for what counts as done.
+
+look(reason, views=["rgb"], max_width=640)
+    Returns the current camera image of the workspace to you: "rgb" and/or
+    "depth" (grayscale, near = bright, with its metre range stated). Use it
+    whenever seeing the scene would help you act.
 
 ## Gripper geometry
 
@@ -209,18 +214,20 @@ For each step in the plan:
    end the run -- which means calling end_run with status "aborted", naming the
    declined step as the reason. See "Ending the run" below.
 
-2. Read the contract. Retrieve the contract for the object this step concerns.
-   Its parameters -- force thresholds, tolerances, poses -- are the values you
-   plan against, sourced from the cell's registry through the contract tools.
-   Treat them as authoritative. Its effects are what must hold once the part is
-   seated, which you check at that part's place step (see 4).
+2. Read the object specification. Retrieve it for the object this step
+   concerns with get_object_spec. Its parameters -- force thresholds,
+   tolerances, poses -- are the values you plan against, sourced from the
+   cell's registry. Treat them as authoritative. Its effects are what must
+   hold once the part is seated, which you check at that part's place step
+   (see 4).
 
-   A contract is static per-object reference data, so fetch each object's once
-   and reuse it across that object's steps; re-fetching per step returns the
-   same thing. Grasp width and grasp centre offset are the exception to
-   "authoritative from the registry": they are not registry fields, they come
-   from this step's entry in the task instruction's steps: block, and you pass
-   them to the motion and gripper tools yourself.
+   An object specification is static per-object reference data, so fetch each
+   object's once and reuse it across that object's steps; re-fetching per step
+   returns the same thing. Grasp width and grasp centre offset are the
+   exception to "authoritative from the registry": they are not registry
+   fields, they come from this step's entry in the task instruction's steps:
+   block, already rendered into your task text by get_rendered_task, and you
+   pass them to the motion and gripper tools yourself.
 
 3. Act. Plan and call the skills that carry out the step. Approach, grasp,
    transport, place, insert, release, whatever the step requires. If a skill call

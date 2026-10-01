@@ -253,3 +253,128 @@ def test_mcp_json_scenario_and_config_agree(variant):
     assert config_path.is_file()
     # Same assembly as the S1 json it derives from.
     assert variant_env["WATCHDOG_TASK_PATH"] == source_env["WATCHDOG_TASK_PATH"]
+
+
+# --- Stage 4: the scene-observation passages, exactly where they belong ---------
+#
+# Each passage is asserted by whitespace-normalised count, so the same words
+# may wrap differently in a prompt (one indent) and a task YAML (another)
+# without weakening "appears exactly once / nowhere else".
+
+def _norm(text):
+    return " ".join(text.split())
+
+
+def _count(haystack, needle):
+    return _norm(haystack).count(_norm(needle))
+
+
+P_LOOK_WD = """look(reason, views=["rgb"], max_width=640)
+    Returns the current camera image of the workspace to you: "rgb" (colour)
+    and/or "depth" (grayscale, near = bright, with its metre range stated).
+    The camera is fixed above the bench. Every look is recorded with your
+    reason. A look that returns no image means the camera was unavailable,
+    not that the scene is clear."""
+
+P_RECORD_OBS = """record_observation(summary, category, location, first_seen_wall_ns,
+                   evidence_look_ids, ...)
+    Records something you noticed in the scene that you did not expect: an
+    object not listed among the task's objects, an object that moved or
+    disappeared without a step accounting for it, or any other unexpected
+    event. Say what it is as far as the evidence allows, where it is, when
+    you believe it appeared, and which of your looks show it. An observation
+    is not a finding and does not change a verdict by itself. Update or
+    resolve it as you learn more."""
+
+P_CAPTURE = """Preserves camera frames from a past window to disk as a record. You do
+    not see these frames. To see the scene, use look."""
+
+P_THRESHOLD_EXEMPT = """A threshold used only to decide when to look or to trigger an observation,
+and never to judge a clause, may be chosen by you when the specification
+provides none. Report it as agent-chosen, with its value and why."""
+
+P_SCENE_CHANGE_WD = """Unexpected changes in the scene. The workspace changes constantly while the
+executor works: the arm moves, and parts are picked, carried and placed."""
+
+P_SCENE_CHANGE_S4 = """Unexpected changes in the scene. The workspace changes constantly while you
+work: the arm moves, and parts are picked, carried and placed."""
+
+P_SCENE_CHANGE_TAIL = """A change that no step accounts
+for, such as something appearing, moving or disappearing, is different:
+notice it, look at it, identify it as far as the evidence allows, locate it,
+estimate when it began, and record it with record_observation. Do not treat
+its presence alone as a finding. It becomes a finding only when it breaks a
+requirement, and then you record that requirement's verdict as usual and name
+the observation in the explanation."""
+
+P_CLOSEOUT = """Before recording the run verdict, make sure everything unexpected you
+noticed has been recorded with record_observation and that each
+observation's status is current."""
+
+P_LOOK_EXEC = """look(reason, views=["rgb"], max_width=640)
+    Returns the current camera image of the workspace to you: "rgb" and/or
+    "depth" (grayscale, near = bright, with its metre range stated). Use it
+    whenever seeing the scene would help you act."""
+
+P_WORKSPACE_REQ = """Workspace observation: monitor and observe the working area; its camera
+images and depth data are published. Any object present in the workspace
+that is not listed under object_ids must be noticed, identified as far as
+the evidence allows, located, and reported, with when it appeared. Its
+presence alone is not a violation; it is a violation only if it breaks
+another requirement. More generally, anything you did not expect to happen
+in the scene must be noticed and reported."""
+
+
+def test_observation_passages_in_every_watchdog_prompt(s1_watchdog, s2_text, s3_text):
+    for text in (s1_watchdog, s2_text, s3_text):
+        assert _count(text, P_LOOK_WD) == 1
+        assert _count(text, P_RECORD_OBS) == 1
+        assert _count(text, P_CAPTURE) == 1
+        # Deliberately twice: once in Evidence discipline, once attached to
+        # the Failure modes threshold rule it qualifies.
+        assert _count(text, P_THRESHOLD_EXEMPT) == 2
+        assert _count(text, P_SCENE_CHANGE_WD) == 1
+        assert _count(text, P_SCENE_CHANGE_TAIL) == 1
+        assert _count(text, P_CLOSEOUT) == 1
+
+
+def test_camera_monitor_sentence_only_in_authored_scenarios(
+    s1_watchdog, s2_text, s3_text, s4_text, s1_executor
+):
+    assert _count(s1_watchdog, pv.BLOCK_I) == 0
+    assert _count(s1_executor, pv.BLOCK_I) == 0
+    assert _count(s2_text, pv.BLOCK_I) == 1
+    assert _count(s3_text, pv.BLOCK_I) == 1
+    # The S4 executor authors its own monitors, so it carries it too.
+    assert _count(s4_text, pv.BLOCK_I) == 1
+
+
+def test_s4_executor_carries_the_adapted_observation_passages(
+    s4_text, s1_executor
+):
+    assert _count(s4_text, P_RECORD_OBS) == 1
+    assert _count(s4_text, P_THRESHOLD_EXEMPT) == 1
+    assert _count(s4_text, P_SCENE_CHANGE_S4) == 1
+    assert _count(s4_text, P_SCENE_CHANGE_WD) == 0  # role-adapted, not copied
+    assert _count(s4_text, P_SCENE_CHANGE_TAIL) == 1
+    assert _count(s4_text, P_CLOSEOUT) == 1
+    assert _count(s4_text, P_LOOK_EXEC) == 1
+    # The S1-S3 executor gets the look tool and nothing else.
+    assert _count(s1_executor, P_LOOK_EXEC) == 1
+    for passage in (P_RECORD_OBS, P_THRESHOLD_EXEMPT, P_SCENE_CHANGE_TAIL,
+                    P_CLOSEOUT):
+        assert _count(s1_executor, passage) == 0
+
+
+def test_workspace_requirement_in_the_right_task_files():
+    carries = [
+        "fmb_assembly.watchdog.yaml", "fmb_assembly_2.watchdog.yaml",
+        "fmb_assembly_s4.executor.yaml", "fmb_assembly_2_s4.executor.yaml",
+    ]
+    lacks = ["fmb_assembly.executor.yaml", "fmb_assembly_2.executor.yaml"]
+    for name in carries:
+        spec = yaml.safe_load(_read(TASKS / name))["instruction_spec"]
+        assert _count(spec, P_WORKSPACE_REQ) == 1, name
+    for name in lacks:
+        spec = yaml.safe_load(_read(TASKS / name))["instruction_spec"]
+        assert _count(spec, P_WORKSPACE_REQ) == 0, name

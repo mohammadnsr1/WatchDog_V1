@@ -45,6 +45,7 @@ fail loudly on their own; the rest are still on you.
 | 3 | `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` name the intended files | **enforced**: echoed in `get_rendered_task`'s first response |
 | 4 | `registry_install_matches_source` is true | **manual** — bringup warns, never blocks |
 | 5 | Launch watchdog, then executor | manual |
+| 6 | Injection run only: after the run, `ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>` — a run with `leak: true` is excluded from observation scoring | **manual** |
 
 S2/S3 runs may be collected now but must not be scored until the scorer
 recognises authored monitors.
@@ -224,12 +225,12 @@ The scenario is selected by which watchdog config you launch with; the config
 carries `WATCHDOG_SCENARIO` (which tools the server registers) and
 `WATCHDOG_AGENT_CONFIG` (which system prompt renders).
 
-| Scenario | Watchdog config (fmb_assembly / fmb_assembly_2) | Monitors |
-| --- | --- | --- |
-| S1 | `watchdog.mcp.json` / `watchdog_2.mcp.json` | library monitors |
-| S2 | `watchdog_s2.mcp.json` / `watchdog_2_s2.mcp.json` | library + authored |
-| S3 | `watchdog_s3.mcp.json` / `watchdog_2_s3.mcp.json` | authored only |
-| S4 | not yet runnable (executor-side monitor server pending) | — |
+| Scenario | Watchdog config (fmb_assembly / fmb_assembly_2) | Monitors | Scene observation |
+| --- | --- | --- | --- |
+| S1 | `watchdog.mcp.json` / `watchdog_2.mcp.json` | library monitors | look at boundaries |
+| S2 | `watchdog_s2.mcp.json` / `watchdog_2_s2.mcp.json` | library + authored | look + camera-reading authored monitors |
+| S3 | `watchdog_s3.mcp.json` / `watchdog_2_s3.mcp.json` | authored only | look + camera-reading authored monitors |
+| S4 | not yet runnable (executor-side monitor server pending) | — | same as S2/S3 on the executor, pending host — the S4 prompt already documents record_observation, but the tool awaits the S4 monitor host (do NOT add it to the scene server before then) |
 
 The executor uses `executor.mcp.json` / `executor_2.mcp.json` unchanged in
 S1–S3. The task pairing rule still applies: both sides must name the same
