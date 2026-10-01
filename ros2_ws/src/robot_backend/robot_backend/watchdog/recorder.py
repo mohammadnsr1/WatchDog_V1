@@ -52,7 +52,10 @@ _SELF_DISARM_REASONS = frozenset(
 )
 # "look" is deliberately NOT in the set above: it is the one event type BOTH
 # roles emit, so type alone cannot say whether this process emitted it.
-# _is_self_emitted() decides it from LookPayload.role instead.
+# _is_self_emitted() decides it from LookPayload.role instead. "observation"
+# follows the same rule for the same reason: the WatchDog records
+# observations today and a future S4 executor-side host will emit the same
+# type, so ObservationPayload.role decides, not the type.
 
 # Types that never wake a bare wait_for_event -- a caller must name them in
 # event_types to receive one. Distinct from self-emitted, which is about who
@@ -64,7 +67,11 @@ _SELF_DISARM_REASONS = frozenset(
 # flood its loop with events it has no decision to make about, and the events it
 # waits on are the ones that change what it must do. So it is available on
 # request and silent otherwise.
-_WAKE_OPT_IN_EVENT_TYPES = frozenset({"look"})
+# "observation" is opt-in for the same reason "look" is: the WatchDog's own
+# observations are suppressed as self-emitted anyway (by role), and a future
+# executor-side observation is a note on the timeline, not something the
+# WatchDog must be interrupted for -- it is available to a wait that names it.
+_WAKE_OPT_IN_EVENT_TYPES = frozenset({"look", "observation"})
 
 
 def _is_self_emitted(envelope: Any) -> bool:
@@ -78,7 +85,10 @@ def _is_self_emitted(envelope: Any) -> bool:
     "look" receive it while a caller that did not is left undisturbed.
     """
     event_type = envelope.event_type
-    if event_type == "look":
+    if event_type in ("look", "observation"):
+        # Both types are emitted by both roles (observation: WatchDog today,
+        # the S4 executor-side host later), so the payload's role field is
+        # the only thing that can say whose it was.
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         return payload.get("role") == "watchdog"
     if event_type == "monitor_disarmed":

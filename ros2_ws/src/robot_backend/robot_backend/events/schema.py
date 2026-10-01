@@ -486,6 +486,51 @@ class LookPayload(BaseModel):
     notes: list[str] = []
 
 
+class ObservationPayload(BaseModel):
+    """An agent recorded a structured scene observation; NOT a verdict and never a finding.
+
+    Emitted by record_observation. An observation is the agent's structured
+    note that something in the scene is unexpected -- an unlisted object, a
+    registry object that moved or vanished, anything else off-script. It is
+    deliberately OUTSIDE the verdict path: it never calls the finding
+    bookkeeping, never appears in findings_during_run or recovered, and
+    recording one says nothing about conformance. If the observed thing also
+    breaks a requirement, that is a separate, normal verdict.
+
+    role is a payload field for the same reason LookPayload's is: the
+    WatchDog records observations today, and a future executor-side host
+    (S4) will emit this same type, so event_type_origin() cannot attribute
+    it -- role is the authoritative answer.
+
+    first_seen_wall_ns is the caller's claim about when the thing was first
+    visible (typically the wall_ns of the look that revealed it); wall_ns is
+    when this event was emitted. They differ whenever the agent looked first
+    and recorded later, which is the normal order.
+
+    evidence_look_ids name looks the recording role actually performed in
+    this session -- validated at record time, so an observation can never
+    cite a look that did not happen.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    observation_id: str
+    summary: str
+    category: str
+    location: dict[str, Any] | None = None
+    first_seen_wall_ns: int | None = None
+    evidence_look_ids: list[str] = []
+    evidence_monitor_ids: list[str] = []
+    identity: str | None = None
+    confidence: str = "medium"
+    requirement_impact: str = "none"
+    impact_detail: str | None = None
+    status: str = "new"
+    role: str = "watchdog"
+    wall_ns: int | None = None
+    step_id: str | None = None
+
+
 class EventEnvelope(BaseModel):
     """Top-level wrapper shared by all event types.
 
@@ -524,6 +569,7 @@ class EventEnvelope(BaseModel):
         "watchdog_ready",
         "frames_captured",
         "look",
+        "observation",
     ]
     timestamp_ns: int
     wall_time_iso: str
@@ -551,6 +597,10 @@ _WATCHDOG_EVENT_TYPES = frozenset(
         # looks. LookPayload.role is the authoritative discriminator; read that,
         # not the origin, when attributing a look event.
         "look",
+        # "observation" follows look's pattern exactly: the WatchDog emits it
+        # today, a future S4 executor-side host will too, and
+        # ObservationPayload.role is the authoritative discriminator.
+        "observation",
     }
 )
 
@@ -573,6 +623,7 @@ EVENT_TYPE_PAYLOAD_CLASSES: dict[str, type[BaseModel]] = {
     "watchdog_ready": WatchDogReadyPayload,
     "frames_captured": FramesCapturedPayload,
     "look": LookPayload,
+    "observation": ObservationPayload,
 }
 
 # The event_type vocabulary itself, read off EventEnvelope's own Literal
@@ -641,6 +692,7 @@ def make_event(
         "watchdog_ready",
         "frames_captured",
         "look",
+        "observation",
     ],
     payload: (
         BeginStepPayload
@@ -658,6 +710,7 @@ def make_event(
         | WatchDogReadyPayload
         | FramesCapturedPayload
         | LookPayload
+        | ObservationPayload
     ),
 ) -> EventEnvelope:
     """Create a timestamped EventEnvelope from a typed payload model.

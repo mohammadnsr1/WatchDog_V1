@@ -36,6 +36,11 @@ from robot_backend.events.schema import (
     make_event,
 )
 from robot_backend.vision.look import LookDeps, look as _run_look
+from robot_backend.vision.observation import (
+    ObservationDeps,
+    ObservationStore,
+    record_observation as _run_record_observation,
+)
 from robot_backend.watchdog.authored import (
     ARRAY_RATE_MAX_HZ,
     ARRAY_STATE_MAX_BYTES,
@@ -415,6 +420,10 @@ class WatchDogContext:
 
 _CONTEXT: WatchDogContext | None = None
 _CONTEXT_LOCK = threading.Lock()
+# This server's observations, module-level like the look-id registry it is
+# validated against: both are per-process state, not per-ROS-context state,
+# and record_observation must work even if _ensure_watchdog has not run.
+_OBSERVATIONS = ObservationStore()
 # "incomplete" is run-scoped only: the executor stopped before the end-state
 # could exist, and nothing fired. It is deliberately distinct from
 # "inconclusive" (WatchDog's own evidence was insufficient to judge) and from
@@ -1063,6 +1072,7 @@ def _prepare_authored_monitor(
     purpose: str = "clause",
     threshold_rationale: str | None = None,
     halt_on_fire: bool = False,
+    for_arm: bool = True,
 ) -> tuple[Any | None, dict[str, Any] | None]:
     """Build one AuthoredMonitor and resolve its provenance, WITHOUT arming it.
 
@@ -1087,6 +1097,23 @@ def _prepare_authored_monitor(
     two would make the dry run worthless as a pre-arm check, which is its only
     purpose.
     """
+    if for_arm and purpose == "observation" and threshold_param is None:
+        # Without this, an observation monitor's armed event records
+        # threshold 0.0 while the agent's real trigger value sits only in
+        # params, invisible to the scorer (seen live in Stage 2: threshold
+        # 0.0 recorded, the actual 0.02 only in params). Enforced on the arm
+        # path only: a dry run records no armed event and deliberately never
+        # passes threshold_param. Clause behaviour is unchanged -- a clause
+        # threshold may genuinely be structural and carry no scalar.
+        exc = AuthoredCodeError(
+            "params",
+            "purpose='observation' requires threshold_param naming the "
+            "params key that holds your chosen trigger value (e.g. "
+            'params={"change_m": {"value": 0.02}} with '
+            "threshold_param='change_m'), so the recorded threshold is your "
+            "real value.",
+        )
+        return None, {"exc": exc, "stage": exc.stage, "lineno": exc.lineno}
     ctx = _ensure_watchdog()
     try:
         monitor = AuthoredMonitor(
@@ -1713,8 +1740,9 @@ if mcp is not None:
         exec, compile, open, getattr, setattr, delattr, globals, locals,
         vars, dir, input, breakpoint, help, memoryview, type, super, object.
 
-        Params and provenance. params is {name: {"value": v, "source": s}}
-        where source is a dotted path like
+        Params and provenance. params is {name: {"value": v, "source": s}},
+        e.g. params={"change_m": {"value": 0.02}} -- every entry is a mapping
+        with a "value" key, never a bare number. source is a dotted path like
         "raw_spec.tolerances.disturbance_tolerance_m" naming where the value
         was read from, or null for a value with no registry source. Each
         entry reaches check unchanged as ctx.params[name]; ctx.value(name)
@@ -1919,7 +1947,9 @@ if mcp is not None:
           channels_read   -- cumulative ctx methods used, as "method:arg".
 
         params takes the same {name: {"value": v, "source": s}} shape as
-        arm_custom_monitor. object_id behaves the same way. threshold_param is
+        arm_custom_monitor, e.g. params={"change_m": {"value": 0.02}} -- every
+        entry is a mapping with a "value" key, never a bare number. object_id
+        behaves the same way. threshold_param is
         deliberately absent: a dry run judges nothing, so a threshold has nothing
         to be verified against here -- pass it when you arm.
         """
@@ -1951,6 +1981,9 @@ if mcp is not None:
                 None,        # monitor_id: this monitor is never registered
                 rate_hz=effective_rate,
                 purpose=purpose,
+                # A dry run records no armed event, so the observation
+                # threshold_param requirement does not apply here.
+                for_arm=False,
             )
             if err is not None:
                 return _error(
@@ -2378,6 +2411,89 @@ if mcp is not None:
         return _run_look(
             _deps, reason=reason, views=views, max_width=max_width,
             role="watchdog",
+        )
+
+    @mcp.tool()
+    def record_observation(
+        summary: str,
+        category: str,
+        location: dict[str, Any] | None,
+        first_seen_wall_ns: int | None,
+        evidence_look_ids: list[str],
+        evidence_monitor_ids: list[str] | None = None,
+        identity: str | None = None,
+        confidence: str = "medium",
+        requirement_impact: str = "none",
+        impact_detail: str | None = None,
+        observation_id: str | None = None,
+        status: str = "new",
+    ) -> dict[str, Any]:
+        """Put something unexpected you noticed in the scene on the record.
+
+        An observation is a structured note that the scene holds something
+        the process description did not lead you to expect: an object that is
+        not on any list you were given, an object that moved when nothing
+        should have moved it, an object that is gone, or anything else
+        off-script. Recording it is how what you noticed becomes part of the
+        run record instead of living only in your reasoning.
+
+        An observation is NOT a finding and NOT a verdict. It does not count
+        against the run, and the presence of something unexpected is not by
+        itself a violation of anything. If what you observed also breaks a
+        requirement, record the observation with
+        requirement_impact="violates" AND record a normal verdict for it --
+        the verdict is what carries conformance weight, and this tool never
+        substitutes for one.
+
+        category: one of unlisted_object (something present that no listing
+        names), object_moved (a known object is not where it should be),
+        object_missing (a known object is gone), other_unexpected.
+
+        location: where the thing is, in either or both of two forms --
+        {"frame": "world", "x": ..., "y": ..., "z": ...} (metres), and/or
+        {"pixel": {"u": ..., "v": ...}, "look_id": "<id>"} naming the pixel
+        in a specific look you made. At least one form is required unless
+        category is object_missing.
+
+        first_seen_wall_ns: when the thing first became visible to you,
+        typically the wall_ns of the look that revealed it. Null if unknown.
+
+        evidence_look_ids: ids of your own looks that show what you are
+        describing. They are checked against the looks you actually made;
+        an empty list is allowed but the observation is then on record as
+        unsupported by any visual evidence.
+
+        identity: what you believe the thing is, if you can say.
+        confidence: low | medium | high -- your confidence in the observation.
+        requirement_impact: none | violates | unknown. "violates" requires
+        impact_detail naming the requirement, and a separate verdict.
+
+        To revise an observation later, call again with status="update" and
+        the observation_id this tool returned; when the situation is over
+        (the object was removed, the mystery resolved), close it with
+        status="resolved". On status="new" the id is generated for you --
+        never pass one.
+        """
+        deps = ObservationDeps(
+            role="watchdog",
+            store=_OBSERVATIONS,
+            publish_event=lambda event: _ensure_watchdog().event_bus.publish(event),
+            current_step_id=lambda: _ensure_watchdog().recorder.current_step(),
+        )
+        return _run_record_observation(
+            deps,
+            summary=summary,
+            category=category,
+            location=location,
+            first_seen_wall_ns=first_seen_wall_ns,
+            evidence_look_ids=evidence_look_ids,
+            evidence_monitor_ids=evidence_monitor_ids,
+            identity=identity,
+            confidence=confidence,
+            requirement_impact=requirement_impact,
+            impact_detail=impact_detail,
+            observation_id=observation_id,
+            status=status,
         )
 
     @mcp.tool()

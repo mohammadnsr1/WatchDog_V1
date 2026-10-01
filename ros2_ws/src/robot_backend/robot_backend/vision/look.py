@@ -682,6 +682,18 @@ def look(
     except Exception as exc:
         return _tool_failure(role, exc, "capture")
 
+    # Register the look id as one this role actually made, so
+    # record_observation can validate evidence_look_ids against in-process
+    # ground truth rather than the event topic. Registered even when every
+    # view failed: the look HAPPENED, and an observation is allowed to cite
+    # a look that came back empty (the citation is about the attempt being
+    # on the record).
+    try:
+        from robot_backend.vision.observation import register_look
+        register_look(result.role, result.look_id)
+    except Exception:
+        pass
+
     if deps.publish_event is not None:
         try:
             deps.publish_event(build_look_event(result))

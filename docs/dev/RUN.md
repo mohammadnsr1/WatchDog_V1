@@ -480,6 +480,50 @@ Events carry **paths only**, never image bytes.
 
 ---
 
+## Intruder injection (Stage 3)
+
+Operator-side scene perturbation for observation scoring. Full detail in
+`docs/dev/STAGE3_REPORT.md`.
+
+- **Inject:** in Isaac's Script Editor, while the cell is running:
+
+  ```python
+  import sys; sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/scripts/isaac")
+  import inject_intruder as ii
+  ii.inject("intruder_a", shape="cube", size_m=0.05,
+            position_xyz_world=(0.4, -0.2, 0.76), color_rgb=(0.9, 0.1, 0.1),
+            physics=True, label="red cube near base2", expected_impact="benign")
+  # or trigger later: at_step="place_u_green" (fires on that begin_step in
+  # events_scene.jsonl) / delay_s=10.0; also ii.move / ii.remove /
+  # ii.list_injections()
+  ```
+
+  Prims go under `/World/WatchdogIntruders`, which the scene's
+  ROS2PublishTransformTree does NOT cover (it publishes an explicit prim
+  list), so an intruder has no TF frame and no pose any agent tool can
+  resolve — the camera is the only discovery channel. Names colliding with
+  any registry id or frame (including disabled ones like `red_cube`) are
+  refused.
+
+- **Ground truth:** every executed action appends one line to
+  `<session_dir>/ground_truth_injections.jsonl` (fsync'd; never on
+  `/watchdog/events`).
+
+- **The agent-side record:** the WatchDog reports what it finds with the
+  `record_observation` tool (every scenario). Observations are events of type
+  `observation`; they are not findings and never touch verdict bookkeeping.
+
+- **Audit before scoring:**
+
+  ```bash
+  ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>
+  ```
+
+  writes `<session_dir>/intruder_leak_audit.json`; exit 0 clean, 1 leak.
+  A run with `leak: true` is excluded from observation scoring.
+
+---
+
 ## Split permission sets
 
 `executor.settings.json` and `watchdog.settings.json` hold per-role
