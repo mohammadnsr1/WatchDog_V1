@@ -25,20 +25,30 @@ TF_SAMPLE_HZ = 20.0
 # arm_monitor / disarm_monitor / record_verdict calls, wasting a turn on
 # activity the agent already knows it just did. These are still appended to
 # `events` for the timeline -- only the wake path (_wait_events) excludes
-# them. monitor_fire is deliberately not in this set: it reaches the agent
-# through the engine's fire queue, a different path entirely, and must keep
-# waking it. halt is in this set for the same reason as the others: only
-# WatchDog ever publishes it, and the agent already learns of the halt
-# through that same monitor_fire fire (action_taken/halt_result) -- a
-# separate wake on its own echo would burn a turn for no new information.
-# frames_captured is here for the same reason: capture_frames is WatchDog's own
-# output (see FramesCapturedPayload), and waking the agent on its own capture
-# would waste a turn on something it just did.
+# them. monitor_fire IS in this set: fires reach the agent through the
+# engine's fire queue (which also sets the wake event), so queuing the topic
+# echo here as well double-delivered every fire -- the copy survived the wait
+# that consumed the queued fire and arrived STALE at the next wait (observed
+# live 2026-10-01, a T3 fire replayed at the start of T5). halt is here
+# because only WatchDog publishes it and the agent already learns of the halt
+# through the fire's action_taken/halt_result. frames_captured likewise:
+# waking the agent on its own capture would waste a turn.
+# monitor_disarmed is here for the agent's OWN disarms and fire echoes, but
+# an authored_* disarm (timeout/bad_return/error) is the lane telling the
+# agent its monitor DIED -- that is new information and is delivered; see
+# _is_self_emitted.
 _SELF_EMITTED_EVENT_TYPES = frozenset(
     {
-        "watchdog_ready", "monitor_armed", "monitor_disarmed", "verdict",
-        "run_verdict", "halt", "frames_captured",
+        "watchdog_ready", "monitor_armed", "monitor_disarmed", "monitor_fire",
+        "verdict", "run_verdict", "halt", "frames_captured",
     }
+)
+# monitor_disarmed reasons that are the agent's own doing (or the echo of a
+# fire it is already receiving through the queue): suppressed from the wake
+# path. Every OTHER reason -- the authored_* failures -- wakes the wait.
+_SELF_DISARM_REASONS = frozenset(
+    {"fired", "agent_disarm", "agent_disarm_all", "auto_disarm_release",
+     "internal_error"}
 )
 # "look" is deliberately NOT in the set above: it is the one event type BOTH
 # roles emit, so type alone cannot say whether this process emitted it.
@@ -71,6 +81,15 @@ def _is_self_emitted(envelope: Any) -> bool:
     if event_type == "look":
         payload = envelope.payload if isinstance(envelope.payload, dict) else {}
         return payload.get("role") == "watchdog"
+    if event_type == "monitor_disarmed":
+        # The agent's own disarms (and the echo of a fire it receives through
+        # the engine's queue) are suppressed; an authored_* failure disarm is
+        # the lane reporting that an armed monitor DIED, which the agent can
+        # learn no other way while blocked in wait_for_event -- a budget-test
+        # monitor once died 2 s into a 60 s wait and the agent saw nothing
+        # (2026-10-01). Delivered, with the payload's reason and detail.
+        payload = envelope.payload if isinstance(envelope.payload, dict) else {}
+        return str(payload.get("reason", "")) in _SELF_DISARM_REASONS
     return event_type in _SELF_EMITTED_EVENT_TYPES
 
 

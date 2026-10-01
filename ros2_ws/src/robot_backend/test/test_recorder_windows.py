@@ -73,3 +73,63 @@ def test_latest_samples_are_json_safe():
         "y": 2.0,
         "z": 3.0,
     }
+
+
+# --- fire/disarm wake-path routing (live follow-ups, 2026-10-01) ---------------
+
+def _ingest(recorder, event_type, payload_model):
+    from types import SimpleNamespace
+
+    from robot_backend.events.schema import make_event
+
+    envelope = make_event(event_type, payload_model)
+    recorder._on_event_msg(SimpleNamespace(data=envelope.model_dump_json()))
+
+
+def test_monitor_fire_topic_echo_is_never_queued_for_waiting():
+    """Fires reach the agent through the engine's fire queue; the topic echo
+    must not double-deliver (a T3 fire once replayed stale at the start of
+    T5)."""
+    from robot_backend.events.schema import MonitorFirePayload
+
+    recorder = make_recorder()
+    _ingest(recorder, "monitor_fire", MonitorFirePayload(
+        monitor_id="m1", monitor_type="authored", trigger_wall_ns=1,
+        triggering_value=1.0, threshold=0.5, comparison="authored",
+        clause=None, action_taken="flag",
+    ))
+    # On the timeline, yes; in the wait queue, never -- even when asked for.
+    assert [e["event_type"] for e in recorder.latest_events(5)] == ["monitor_fire"]
+    assert recorder.pop_wait_events({"monitor_fire"}) == []
+    assert recorder.pop_wait_events(None) == []
+    assert not recorder.wake_event.is_set()
+
+
+def test_authored_failure_disarm_is_delivered_and_wakes():
+    from robot_backend.events.schema import MonitorDisarmedPayload
+
+    recorder = make_recorder()
+    _ingest(recorder, "monitor_disarmed", MonitorDisarmedPayload(
+        monitor_id="m1", reason="authored_timeout",
+        detail="wall time 184.4 ms exceeded the array lane's 150 ms budget",
+    ))
+    assert recorder.wake_event.is_set()
+    got = recorder.pop_wait_events(None)
+    assert [e["event_type"] for e in got] == ["monitor_disarmed"]
+    assert got[0]["payload"]["reason"] == "authored_timeout"
+    assert "184.4" in got[0]["payload"]["detail"]
+
+
+def test_own_disarms_and_fire_echoes_stay_silent():
+    from robot_backend.events.schema import MonitorDisarmedPayload
+
+    recorder = make_recorder()
+    for reason in ("fired", "agent_disarm", "agent_disarm_all",
+                   "auto_disarm_release", "internal_error"):
+        _ingest(recorder, "monitor_disarmed", MonitorDisarmedPayload(
+            monitor_id="m1", reason=reason,
+        ))
+    assert recorder.pop_wait_events(None) == []
+    assert not recorder.wake_event.is_set()
+    # Still all on the timeline.
+    assert len(recorder.latest_events(10)) == 5

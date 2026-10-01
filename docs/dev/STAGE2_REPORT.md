@@ -265,3 +265,39 @@ coverage + camera receive + all Stage 2 files:
 ```
 
 Rebuild before the next live run: `colcon build --packages-select robot_backend`.
+
+## T3/T5 fixes (2026-10-01, session 20261001T005744Z)
+
+T3 (depth-change observation monitor, dry run -> arm -> cube drop -> fire ->
+look) worked end-to-end: fire at 00:59:10 with a correct pixel localisation.
+T5 (deliberate budget bust: 40x np.sort per tick at 2 Hz) confirmed
+enforcement -- armed 01:00:17.092, five wall strikes, disarmed 01:00:19.343
+with "wall time 184.4 ms exceeded the array lane's 150 ms per-call budget" --
+and exposed two wake-path defects, both fixed in recorder.py:
+
+1. **Stale duplicate fire.** monitor_fire was deliberately absent from
+   _SELF_EMITTED_EVENT_TYPES, so every fire was delivered TWICE: once through
+   the engine's fire queue (the designed path, which also wakes the wait) and
+   once as a topic echo queued in _wait_events. T3's wait consumed the queue
+   copy; the echo sat and was served STALE as T5's first wait result.
+   monitor_fire is now in the self-emitted set: on the timeline (events /
+   get_events) as before, never in the wait queue.
+
+2. **Silent monitor death.** monitor_disarmed was wholly self-emitted, so the
+   budget monitor's authored_timeout disarm (2 s into a 60 s wait) was
+   invisible to the blocked agent. _is_self_emitted now delivers a
+   monitor_disarmed whose reason is NOT in {fired, agent_disarm,
+   agent_disarm_all, auto_disarm_release, internal_error} -- i.e. the
+   authored_* failures wake the wait, carrying reason + detail.
+   wait_for_event's docstring says so.
+
+Tests: three new recorder wake-path tests (fire echo never queued even when
+filtered for; authored_timeout disarm delivered with detail and wakes; own
+disarms/fire echoes stay silent and on the timeline). Full regression
+including the forced-termination and terminal-status suites: **281 passed,
+0 failed**.
+
+Note, not a change: in these taskless test sessions a quiet wait_for_event
+timeout counts toward the 2-timeout forced finalize (T5 saw the countdown
+warning). In a real run the executor's event stream resets the counter; in
+ad-hoc sessions, expect the countdown and don't let it run out.

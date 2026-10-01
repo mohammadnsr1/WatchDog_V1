@@ -2096,6 +2096,13 @@ if mcp is not None:
     ) -> dict[str, Any]:
         """Block until a monitor fire, an executor event of the requested types, or timeout.
 
+        A monitor DYING also wakes this call: a monitor_disarmed event with an
+        authored_* reason (authored_timeout, authored_bad_return,
+        authored_error) is delivered with its reason and detail, so a wait on
+        a monitor that has been disarmed for exceeding its budget or raising
+        does not sit out its full timeout in silence. Disarms you performed
+        yourself, and the disarm echo of a fire, are not delivered.
+
         event_types must be exact names from available_event_types() -- a
         filter naming a type that does not exist matches nothing and would
         otherwise wait out the full timeout for no reason, believing it is
