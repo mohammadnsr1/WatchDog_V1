@@ -235,3 +235,23 @@ def test_ground_truth_records_carry_visibility():
     )
     assert moved["in_camera_view"] is False
     assert moved["edge_margin_px"] < 20
+
+
+# --- resting-z defaults (fix b from the 2026-10-01 smoke runs) -------------------
+
+
+def test_default_spawn_z_is_bench_plus_half_height_plus_clearance():
+    assert ii.default_spawn_z(0.05) == pytest.approx(ii.BENCH_TOP_Z + 0.025 + 0.005)
+    assert ii.default_spawn_z(0.03) == pytest.approx(0.01 + 0.015 + 0.005)
+
+
+def test_position_z_none_means_resting_default():
+    size, pos, _color = ii.validate_inject_args(
+        "cube", 0.05, (0.4, -0.2, None), (1, 0, 0), "benign"
+    )
+    assert pos == (0.4, -0.2, ii.default_spawn_z(0.05))
+    # explicit z still wins
+    _s, pos2, _c = ii.validate_inject_args(
+        "cube", 0.05, (0.4, -0.2, 0.3), (1, 0, 0), "benign"
+    )
+    assert pos2 == (0.4, -0.2, 0.3)

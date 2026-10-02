@@ -293,19 +293,27 @@ P_THRESHOLD_EXEMPT = """A threshold used only to decide when to look or to trigg
 and never to judge a clause, may be chosen by you when the specification
 provides none. Report it as agent-chosen, with its value and why."""
 
-P_SCENE_CHANGE_WD = """Unexpected changes in the scene. The workspace changes constantly while the
-executor works: the arm moves, and parts are picked, carried and placed."""
+P_SCENE_CHANGE_WD = """Watching the scene. The working area is yours to observe for the whole run,
+not only at step boundaries. The workspace changes constantly while the
+executor works -- the arm moves, and parts are picked, carried and placed --
+and those changes are expected when a step accounts for them. Report any
+unexpected event: an unidentified object appears in the scene; an object
+moves when the robot did not move it; someone or something enters the
+workspace and later leaves."""
 
-P_SCENE_CHANGE_S4 = """Unexpected changes in the scene. The workspace changes constantly while you
-work: the arm moves, and parts are picked, carried and placed."""
+P_SCENE_CHANGE_S4 = """Watching the scene. The working area is yours to observe for the whole run,
+not only at step boundaries. The workspace changes constantly while you work
+-- the arm moves, and parts are picked, carried and placed -- and those
+changes are expected when a step accounts for them. Report any unexpected
+event: an unidentified object appears in the scene; an object moves when you
+did not move it; someone or something enters the workspace and later leaves."""
 
-P_SCENE_CHANGE_TAIL = """A change that no step accounts
-for, such as something appearing, moving or disappearing, is different:
-notice it, look at it, identify it as far as the evidence allows, locate it,
-estimate when it began, and record it with record_observation. Do not treat
-its presence alone as a finding. It becomes a finding only when it breaks a
-requirement, and then you record that requirement's verdict as usual and name
-the observation in the explanation."""
+P_SCENE_CHANGE_TAIL = """Report each one with record_observation: what it
+is, as far as the evidence allows, where it is, and when it appeared -- and
+when it left, if it did. An unexpected event is not a violation by itself; it
+becomes one only if it breaks another requirement, and then you also record
+that requirement's verdict as usual and name the observation in the
+explanation."""
 
 P_CLOSEOUT = """Before recording the run verdict, make sure everything unexpected you
 noticed has been recorded with record_observation and that each
@@ -316,13 +324,15 @@ P_LOOK_EXEC = """look(reason, views=["rgb"], max_width=640)
     "depth" (grayscale, near = bright, with its metre range stated). Use it
     whenever seeing the scene would help you act."""
 
-P_WORKSPACE_REQ = """Workspace observation: monitor and observe the working area; its camera
-images and depth data are published. Any object present in the workspace
-that is not listed under object_ids must be noticed, identified as far as
-the evidence allows, located, and reported, with when it appeared. Its
-presence alone is not a violation; it is a violation only if it breaks
-another requirement. More generally, anything you did not expect to happen
-in the scene must be noticed and reported."""
+P_WORKSPACE_REQ = """Workspace observation: observe and monitor the working area for the whole
+run, not only at step boundaries; its camera images and depth data are
+published. Report any unexpected event: an object present that is not
+listed under object_ids, an object that moves when the robot did not move
+it, or someone or something entering the workspace and later leaving.
+Report each one with what it is (as far as the evidence allows), where it
+is, and when it appeared -- and when it left, if it did. An unexpected
+event is not a violation by itself; it is a violation only if it breaks
+another requirement."""
 
 
 def test_observation_passages_in_every_watchdog_prompt(s1_watchdog, s2_text, s3_text):

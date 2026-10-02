@@ -6,19 +6,20 @@ USAGE (paste into Isaac Sim's Script Editor while the cell is running):
     sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
     import inject_intruder as ii
 
-    # Immediately drop a red 5 cm cube on the table:
+    # Immediately put a red 5 cm cube on the bench (z defaults to resting
+    # height, bench + half the object + 5 mm -- see default_spawn_z):
     ii.inject("intruder_a", shape="cube", size_m=0.05,
-              position_xyz_world=(0.4, -0.2, 0.76), color_rgb=(0.9, 0.1, 0.1),
+              position_xyz_world=(0.4, -0.2, None), color_rgb=(0.9, 0.1, 0.1),
               physics=True, label="red cube near base2",
               expected_impact="benign")
 
     # Inject when the executor begins a step (fires on begin_step in
     # events_scene.jsonl), or after a delay:
     ii.inject("intruder_b", shape="sphere", size_m=0.04,
-              position_xyz_world=(0.3, 0.1, 0.80), color_rgb=(0.1, 0.1, 0.9),
-              physics=False, label="blue sphere over tray",
+              position_xyz_world=(0.3, 0.1, None), color_rgb=(0.1, 0.1, 0.9),
+              label="blue sphere near tray",
               expected_impact="violates", at_step="place_u_green")
-    ii.move("intruder_a", (0.5, -0.1, 0.76), delay_s=10.0)
+    ii.move("intruder_a", (0.5, -0.1, 0.04), delay_s=10.0)
     ii.remove("intruder_b", at_step="place_hex_red")
 
     ii.list_injections()   # executed actions (ground truth) + pending triggers
@@ -67,6 +68,23 @@ INTRUDER_ROOT = "/World/WatchdogIntruders"
 SHAPES = ("cube", "cylinder", "sphere")
 EXPECTED_IMPACTS = ("benign", "violates")
 GROUND_TRUTH_FILENAME = "ground_truth_injections.jsonl"
+
+# The bench top in world coordinates (the prompts' "world Z = 0" is nominal;
+# measured resting parts sit at ~0.01). Spawn heights derive from this.
+BENCH_TOP_Z = 0.01
+
+
+def default_spawn_z(size_m: float) -> float:
+    """Resting height for a new object: bench + half its height + 5 mm.
+
+    All three shapes are size_m tall (cube edge, cylinder height, sphere
+    diameter), so half the height is size_m / 2. The 5 mm clearance lets a
+    physics object settle instead of spawning interpenetrated with the bench;
+    a static object sits visually on the bench within that tolerance. The
+    2026-10-01 smoke runs spawned at z ~0.8 -- 0.79 m ABOVE the bench -- and
+    a physics=False object hung in mid-air; this default is the fix.
+    """
+    return BENCH_TOP_Z + float(size_m) / 2.0 + 0.005
 
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -148,7 +166,7 @@ def validate_inject_args(
     size = float(size_m)
     if not (size > 0):
         raise ValueError(f"size_m must be > 0, got {size_m!r}.")
-    position = _xyz(position_xyz_world, "position_xyz_world")
+    position = _xyz_or_resting(position_xyz_world, size)
     color = _xyz(color_rgb, "color_rgb")
     if any(not (0.0 <= c <= 1.0) for c in color):
         raise ValueError(f"color_rgb components must be in [0, 1], got {color_rgb!r}.")
@@ -165,6 +183,20 @@ def _xyz(value: Any, label: str) -> tuple[float, float, float]:
         x, y, z = (float(v) for v in value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{label} must be three numbers, got {value!r}.") from exc
+    return (x, y, z)
+
+
+def _xyz_or_resting(value: Any, size_m: float) -> tuple[float, float, float]:
+    """(x, y, z) where z may be given as None, meaning default_spawn_z(size_m)."""
+    try:
+        x, y, z = value
+        x, y = float(x), float(y)
+        z = default_spawn_z(size_m) if z is None else float(z)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"position_xyz_world must be three numbers (z may be None for the "
+            f"resting default), got {value!r}."
+        ) from exc
     return (x, y, z)
 
 
@@ -479,13 +511,31 @@ def _apply_move(
     return path
 
 
-def _apply_remove(name: str) -> str:
+def prim_world_position(prim: Any) -> tuple[float, float, float] | None:
+    """The prim's current world translation, or None if it cannot be read."""
+    try:
+        from pxr import Usd, UsdGeom
+
+        matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
+            Usd.TimeCode.Default()
+        )
+        t = matrix.ExtractTranslation()
+        return (float(t[0]), float(t[1]), float(t[2]))
+    except Exception:
+        return None
+
+
+def _apply_remove(name: str) -> tuple[str, tuple[float, float, float] | None]:
+    """Remove the prim; returns (path, its LAST world position before removal)
+    so the ground-truth record can carry where the thing was when it vanished."""
     stage = _stage()
     path = _prim_path(name)
-    if not stage.GetPrimAtPath(path):
+    prim = stage.GetPrimAtPath(path)
+    if not prim:
         raise ValueError(f"{path} does not exist.")
+    last_position = prim_world_position(prim)
     stage.RemovePrim(path)
-    return path
+    return path, last_position
 
 
 def _record(record: dict[str, Any]) -> dict[str, Any]:
@@ -587,7 +637,7 @@ def inject(
     name: str,
     shape: str = "cube",
     size_m: float = 0.05,
-    position_xyz_world: Any = (0.4, 0.0, 0.8),
+    position_xyz_world: Any = (0.4, 0.0, None),
     yaw_deg: float = 0.0,
     color_rgb: Any = (0.8, 0.1, 0.1),
     physics: bool = True,
@@ -672,10 +722,14 @@ def remove(
 
     def apply() -> dict[str, Any]:
         session_dir = resolve_session_dir()
-        path = _apply_remove(name)
+        path, last_position = _apply_remove(name)
+        # position_xyz_world on a remove record is the LAST position before
+        # removal, so the visibility triple says whether the disappearance
+        # happened in view.
         return _record(build_ground_truth_record(
             action="remove", name=name, prim_path=path, trigger=trigger,
-            wall_ns=time.time_ns(), session_dir=str(session_dir), sha256=sha,
+            wall_ns=time.time_ns(), session_dir=str(session_dir),
+            position_xyz_world=last_position, sha256=sha,
         ))
 
     return _schedule(f"remove {name}", at_step, delay_s, apply)

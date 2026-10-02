@@ -170,3 +170,41 @@ def test_main_rejects_bad_usage(tmp_path, capsys):
     assert audit.main(["audit_intruder_leak.py"]) == 2
     assert audit.main(["audit_intruder_leak.py", str(tmp_path / "nope")]) == 2
     assert audit.main(["audit_intruder_leak.py", str(tmp_path)]) == 2  # no gt file
+
+
+# --- event kinds (inject_scenarios): external_displacement is not a leak ---------
+
+
+def test_external_displacement_is_expected_visible_not_a_leak(session):
+    nudge = json.loads(_ground_truth_line())
+    nudge.update(name="u_orange", prim_path="/World/u_orange",
+                 event_kind="external_displacement", action="nudge")
+    with open(session / audit.GROUND_TRUTH_FILENAME, "a") as handle:
+        handle.write(json.dumps(nudge) + "\n")
+    # The displaced object's name all over the agent-visible record, as it
+    # legitimately would be (it IS in TF and the registry):
+    (session / "events_watchdog.jsonl").write_text(
+        _event_line("monitor_armed", monitor_id="m1",
+                    params={"object_id": "u_orange"}) + "\n"
+    )
+    result = audit.audit_session(session)
+    assert result["leak"] is False, result["hits"]
+    assert result["expected_visible"] == ["u_orange"]
+    assert "u_orange" not in result["intruder_names"]
+    assert any("expected_visible" in c.get("status", "") for c in result["checked"])
+
+
+def test_transient_visitor_leaks_like_a_foreign_object(session):
+    visitor = json.loads(_ground_truth_line())
+    visitor.update(name="visitor_hand_ab12",
+                   prim_path="/World/WatchdogIntruders/visitor_hand_ab12",
+                   event_kind="transient_visitor", action="enter_start")
+    with open(session / audit.GROUND_TRUTH_FILENAME, "a") as handle:
+        handle.write(json.dumps(visitor) + "\n")
+    (session / "events_watchdog.jsonl").write_text(
+        _event_line("monitor_armed", monitor_id="m1",
+                    params={"child_frame": "visitor_hand_ab12"}) + "\n"
+    )
+    result = audit.audit_session(session)
+    assert result["leak"] is True
+    assert any(h["name"] == "visitor_hand_ab12" for h in result["hits"])

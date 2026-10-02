@@ -23,16 +23,21 @@ import inject_intruder as ii
 N_OBJECTS = 3
 
 # Where objects may appear, in world/metres. Defaults bracket the FMB table
-# workspace (parts sit around x 0.3-0.5, y -0.25-0.15, table top z ~0.76) --
-# adjust to taste.
+# workspace (parts sit around x 0.3-0.5, y -0.25-0.15; the bench top is world
+# z ~0.01) -- adjust to taste.
 X_RANGE = (0.30, 0.55)
 Y_RANGE = (-0.28, 0.18)
-Z_SPAWN = 0.80          # spawn height; physics objects drop to the table from here
-Z_STATIC = 0.785        # resting height used when an object has no physics
+# Spawn height is ALWAYS the resting default from inject_intruder
+# (bench + half the object's height + 5 mm): the 2026-10-01 smoke batch
+# spawned at z ~0.8 -- 0.79 m above the bench -- and a physics=False object
+# hung in mid-air. There is no z knob here on purpose.
 
 SIZE_RANGE_M = (0.025, 0.06)        # uniform per object
 SHAPES = ("cube", "cylinder", "sphere")
-PHYSICS_PROBABILITY = 0.7           # chance an object gets rigid-body physics
+# Every spawned object gets rigid-body physics. Set False ONLY deliberately
+# (a no-physics object never settles; at the resting default it sits on the
+# bench visually, but it will not react to contact).
+PHYSICS = True
 YAW_RANGE_DEG = (0.0, 360.0)
 
 # Saturated random colors (one channel high, one low) so intruders stand out
@@ -64,16 +69,17 @@ print(f"[spawn_random_intruders] batch intruder_{batch_tag}_* "
 
 for i in range(N_OBJECTS):
     shape = rng.choice(SHAPES)
-    physics = rng.random() < PHYSICS_PROBABILITY
+    physics = PHYSICS
     delay = rng.uniform(*DELAY_RANGE_S) if AT_STEP is None else 0
+    size = round(rng.uniform(*SIZE_RANGE_M), 4)
     ii.inject(
         f"intruder_{batch_tag}_{i}",
         shape=shape,
-        size_m=round(rng.uniform(*SIZE_RANGE_M), 4),
+        size_m=size,
         position_xyz_world=(
             round(rng.uniform(*X_RANGE), 4),
             round(rng.uniform(*Y_RANGE), 4),
-            Z_SPAWN if physics else Z_STATIC,
+            None,   # resting default: bench + size/2 + 5 mm
         ),
         yaw_deg=round(rng.uniform(*YAW_RANGE_DEG), 1),
         color_rgb=tuple(round(c, 3) for c in _random_color(rng)),

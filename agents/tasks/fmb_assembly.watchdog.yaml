@@ -42,13 +42,15 @@ instruction_spec: |
       over them continuously. Any movement of one, at any time, is a
       disturbance. They are listed under object_ids as BYSTANDERS.
 
-  Workspace observation: monitor and observe the working area; its camera
-  images and depth data are published. Any object present in the workspace
-  that is not listed under object_ids must be noticed, identified as far as
-  the evidence allows, located, and reported, with when it appeared. Its
-  presence alone is not a violation; it is a violation only if it breaks
-  another requirement. More generally, anything you did not expect to happen
-  in the scene must be noticed and reported.
+  Workspace observation: observe and monitor the working area for the whole
+  run, not only at step boundaries; its camera images and depth data are
+  published. Report any unexpected event: an object present that is not
+  listed under object_ids, an object that moves when the robot did not move
+  it, or someone or something entering the workspace and later leaving.
+  Report each one with what it is (as far as the evidence allows), where it
+  is, and when it appeared -- and when it left, if it did. An unexpected
+  event is not a violation by itself; it is a violation only if it breaks
+  another requirement.
 
   Preconditions: this task has none. Do not look for them and do not treat
   their absence as something missing.

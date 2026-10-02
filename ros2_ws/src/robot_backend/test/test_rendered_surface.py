@@ -171,3 +171,57 @@ def test_tf_stamp_sentence_is_documented():
     sentence = "Samples from one recorder tick share one TF time (tf_stamp_ns)"
     for tool in (ws.query_snapshot, ws.get_evidence, ws.arm_custom_monitor):
         assert sentence in _norm(tool.__doc__), tool.__name__
+
+
+# --- observation duty + leak hygiene (OBSERVATION_DUTY_AND_SCENARIOS) -----------
+
+DUTY_HEAD = "Watching the scene. The working area is yours to observe for the whole run"
+DUTY_TAIL = (
+    "where it is, and when it appeared -- and when it left, if it did. An "
+    "unexpected event is not a violation by itself"
+)
+# Words that would leak the injection machinery to an agent. Checked on the
+# RENDERED text (YAML comments never render, so "fault-injection" comments in
+# task files are not a leak).
+LEAK_WORDS = ("inject", "intruder", "watchdogintruders", "ground truth",
+              "planted", "test object")
+
+
+@pytest.mark.parametrize("scenario,task_name,config", WATCHDOG_COMBOS)
+def test_observation_duty_in_every_watchdog_render(
+    monkeypatch, tmp_path, scenario, task_name, config
+):
+    prompt, task = _render(monkeypatch, tmp_path, "watchdog", task_name, config)
+    assert _norm(prompt).count(_norm(DUTY_HEAD)) == 1
+    assert _norm(prompt).count(_norm(DUTY_TAIL)) == 1
+    # and the task's workspace-observation requirement agrees with it
+    assert "observe and monitor the working area for the whole" in _norm(task)
+
+
+def test_observation_duty_in_the_s4_monitoring_section_only(
+    monkeypatch, tmp_path
+):
+    # S4 executor: carries the role-adapted duty ("while you work").
+    prompt, _task = _render(monkeypatch, tmp_path, "executor",
+                            "fmb_assembly_s4", "executor_agent_s4.yaml")
+    assert _norm(prompt).count(_norm(DUTY_HEAD)) == 1
+    assert "while you work" in _norm(prompt)
+    # S1-S3 executor: no observation duty at all.
+    prompt, _task = _render(monkeypatch, tmp_path, "executor",
+                            "fmb_assembly", None)
+    assert _norm(DUTY_HEAD) not in _norm(prompt)
+    assert "record_observation" not in prompt
+
+
+@pytest.mark.parametrize("scenario,task_name,config",
+                         WATCHDOG_COMBOS + EXECUTOR_COMBOS)
+def test_no_leak_hygiene_words_on_any_rendered_surface(
+    monkeypatch, tmp_path, scenario, task_name, config
+):
+    role = "watchdog" if (scenario, task_name, config) in [
+        tuple(c) for c in WATCHDOG_COMBOS
+    ] else "executor"
+    prompt, task = _render(monkeypatch, tmp_path, role, task_name, config)
+    surface = (prompt + "\n" + task).lower()
+    for word in LEAK_WORDS:
+        assert word not in surface, (scenario, task_name, word)

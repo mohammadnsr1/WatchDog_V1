@@ -19,7 +19,21 @@ a TF frame, a pose query, authored monitor code, a verdict explanation --
 means the name reached the agent through a side channel, because the prim
 name is never visible in pixels.
 
-Output: {"leak": bool, "hits": [...], "checked": [...]} to stdout and to
+Event kinds (inject_scenarios.py stamps `event_kind` on its records):
+
+  - foreign_object and transient_visitor prims, and any legacy record with no
+    event_kind, must never appear in TF / the registry / any agent-visible
+    tool output -- the leak rule above applies to all of them alike (a
+    visitor's prim lives under /World/WatchdogIntruders exactly like a
+    foreign object; only its lifetime differs).
+  - external_displacement (nudge_object) targets a LISTED registry object, so
+    its TF visibility is expected: those records are classified as
+    "expected_visible", never as leaks, and their names are excluded from the
+    leak search terms (they would otherwise match every legitimate TF frame
+    and tool result for that object).
+
+Output: {"leak": bool, "hits": [...], "checked": [...],
+"expected_visible": [...]} to stdout and to
 <session_dir>/intruder_leak_audit.json. A run with leak=true is excluded from
 observation scoring.
 """
@@ -41,8 +55,17 @@ EXEMPT_EVENT_TYPES = {"look", "observation"}
 EXEMPT_TOOLS = {"look", "record_observation"}
 
 
-def load_intruder_names(session_dir: Path) -> tuple[list[str], list[dict[str, Any]]]:
-    """(sorted search terms, parsed ground-truth records)."""
+def load_intruder_names(
+    session_dir: Path,
+) -> tuple[list[str], list[dict[str, Any]], list[str]]:
+    """(sorted leak search terms, parsed records, expected_visible names).
+
+    external_displacement records target LISTED registry objects whose TF
+    visibility is expected; their names go into the third return value and
+    are excluded from the search terms. Every other event_kind (and every
+    legacy record without one) contributes its name and prim leaf to the
+    leak search exactly as before.
+    """
     gt_path = session_dir / GROUND_TRUTH_FILENAME
     if not gt_path.is_file():
         raise FileNotFoundError(
@@ -50,6 +73,7 @@ def load_intruder_names(session_dir: Path) -> tuple[list[str], list[dict[str, An
             "session, or the wrong directory was given."
         )
     names: set[str] = set()
+    expected_visible: set[str] = set()
     records: list[dict[str, Any]] = []
     for line in gt_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -60,15 +84,21 @@ def load_intruder_names(session_dir: Path) -> tuple[list[str], list[dict[str, An
         except ValueError:
             continue
         records.append(record)
+        target = expected_visible if (
+            record.get("event_kind") == "external_displacement"
+        ) else names
         name = record.get("name")
         if isinstance(name, str) and name:
-            names.add(name)
+            target.add(name)
         prim_path = record.get("prim_path")
         if isinstance(prim_path, str) and prim_path:
             leaf = prim_path.rstrip("/").rsplit("/", 1)[-1]
             if leaf:
-                names.add(leaf)
-    return sorted(names), records
+                target.add(leaf)
+    # A name both displaced AND injected would be a ground-truth authoring
+    # error; the leak rule wins so a real leak cannot hide behind a nudge.
+    expected_visible -= names
+    return sorted(names), records, sorted(expected_visible)
 
 
 def _snippet(text: str, name: str, width: int = 90) -> str:
@@ -234,16 +264,26 @@ def scan_bag(
 def audit_session(session_dir: Path) -> dict[str, Any]:
     """Run the whole audit. Raises only when the ground truth file is absent."""
     session_dir = Path(session_dir)
-    names, records = load_intruder_names(session_dir)
+    names, records, expected_visible = load_intruder_names(session_dir)
     hits: list[dict[str, Any]] = []
     checked: list[dict[str, Any]] = []
+    if expected_visible:
+        checked.append({
+            "source": "ground_truth",
+            "status": "external_displacement targets classified as "
+            "expected_visible (TF visibility is expected for listed objects); "
+            "excluded from the leak search",
+            "expected_visible": expected_visible,
+        })
 
     if not names:
         return {
             "leak": False, "hits": [],
-            "checked": [{"source": "ground_truth",
-                         "status": "file present but holds no intruder names"}],
-            "intruder_names": [], "session_dir": str(session_dir),
+            "checked": checked + [{"source": "ground_truth",
+                         "status": "file present but holds no leak-scoped "
+                         "intruder names"}],
+            "intruder_names": [], "expected_visible": expected_visible,
+            "session_dir": str(session_dir),
         }
 
     bag_hits, bag_checked = scan_bag(session_dir, names)
@@ -284,6 +324,7 @@ def audit_session(session_dir: Path) -> dict[str, Any]:
         "hits": hits,
         "checked": checked,
         "intruder_names": names,
+        "expected_visible": expected_visible,
         "ground_truth_records": len(records),
         "session_dir": str(session_dir),
     }

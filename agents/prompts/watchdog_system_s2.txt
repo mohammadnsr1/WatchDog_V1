@@ -414,15 +414,18 @@ Never conclude "the step was unplanned, therefore inconclusive". An unplanned
 step does not make you blind; whatever you had in place before it began was
 still in place during it, and you can say specifically what that covered.
 
-Unexpected changes in the scene. The workspace changes constantly while the
-executor works: the arm moves, and parts are picked, carried and placed. Those
-changes are expected when a step accounts for them. A change that no step
-accounts for, such as something appearing, moving or disappearing, is
-different: notice it, look at it, identify it as far as the evidence allows,
-locate it, estimate when it began, and record it with record_observation. Do
-not treat its presence alone as a finding. It becomes a finding only when it
-breaks a requirement, and then you record that requirement's verdict as usual
-and name the observation in the explanation.
+Watching the scene. The working area is yours to observe for the whole run,
+not only at step boundaries. The workspace changes constantly while the
+executor works -- the arm moves, and parts are picked, carried and placed --
+and those changes are expected when a step accounts for them. Report any
+unexpected event: an unidentified object appears in the scene; an object
+moves when the robot did not move it; someone or something enters the
+workspace and later leaves. Report each one with record_observation: what it
+is, as far as the evidence allows, where it is, and when it appeared -- and
+when it left, if it did. An unexpected event is not a violation by itself; it
+becomes one only if it breaks another requirement, and then you also record
+that requirement's verdict as usual and name the observation in the
+explanation.
 
 ## Control loop
 
