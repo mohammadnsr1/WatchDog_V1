@@ -44,8 +44,9 @@ fail loudly on their own; the rest are still on you.
 | 2 | Mint a fresh session dir + rewrite the pointer | **enforced**: bringup refuses a dir a prior run used |
 | 3 | `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` name the intended files | **enforced**: echoed in `get_rendered_task`'s first response |
 | 4 | `registry_install_matches_source` is true | **manual** — bringup warns, never blocks |
-| 5 | Launch watchdog, then executor | manual |
-| 6 | Injection run only: after the run, `ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>` — a run with `leak: true` is excluded from observation scoring | **manual** |
+| 5 | `model` / `effortLevel` in both `*.settings.json` are what you intend | **manual** — the launchers echo both at startup |
+| 6 | Launch watchdog, then executor | manual |
+| 7 | Injection run only: after the run, `ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>` — a run with `leak: true` is excluded from observation scoring | **manual** |
 
 S2/S3 runs may be collected now but must not be scored until the scorer
 recognises authored monitors.
@@ -151,7 +152,65 @@ know the CLI version. Record it alongside:
 ```bash
 SD=$(cat ~/.watchdog/current_session)
 claude --version > "$SD/claude_cli_version.txt"
+cp watchdog.settings.json executor.settings.json "$SD/"
 ```
+
+The two settings files are copied because they now carry the run's **model and
+effort level** (next section), and a scored run whose record cannot say which
+model produced it is not comparable against any other run.
+
+### 4. Choose the model and effort level
+
+`model` and `effortLevel` live at the top of `watchdog.settings.json` and
+`executor.settings.json`. Edit them there before a run; nothing else needs
+changing, and the launchers pick them up automatically.
+
+```json
+{
+  "model": "claude-sonnet-5",
+  "effortLevel": "low",
+  "permissions": { ... }
+}
+```
+
+| Key | Accepted values |
+| --- | --- |
+| `model` | an alias (`opus`, `sonnet`, `haiku`, `fable`) or a full id (`claude-sonnet-5`, `claude-opus-5`) |
+| `effortLevel` | `low`, `medium`, `high`, `xhigh`, `max` |
+
+Current setting: **both roles on `claude-sonnet-5` at `low` effort**,
+deliberately matched so the two sides of a run differ only in role.
+
+If you later want them to differ, raise the watchdog first: its turns are
+conformance judgment (arming discipline, trigger-versus-bound adjudication)
+while the executor's are mechanical, one instruction-driven skill call at a
+time — the same split already recorded for the API path in
+`agents/config/*.yaml`. Note that `low` effort on the watchdog is the cheaper
+side of a real tradeoff: Stage 3 live testing showed the quality of its
+*threshold choices* is exactly what observation scoring measures, so compare
+like with like before reading a weak run as an agent failure.
+
+Three things worth knowing:
+
+- **These files outrank `~/.claude/settings.json`.** A `--settings` file beats
+  user settings, which is the point: before `model` was pinned here, a scored
+  run silently inherited whatever model the operator last set globally.
+- **Deleting `effortLevel` restores the model's own default** (what the CLI
+  calls `auto`). There is no literal `"auto"` value to write.
+- **A `--model` or `--effort` flag, and the `ANTHROPIC_MODEL` /
+  `CLAUDE_CODE_EFFORT_LEVEL` env vars, all outrank these files.** Leave them
+  unset for a scored run, or the file stops being the source of truth.
+
+The launchers echo both values at startup, so a typo is visible before the
+session begins (an unrecognised key is otherwise ignored with only a warning):
+
+```
+launching watchdog session: watchdog_s2.mcp.json  (model=claude-sonnet-5 effort=low)
+```
+
+`agents/config/*.yaml` also contain `model:` and `reasoning_effort:` fields.
+Those belong to the **run_agent.py / API path** (`provider: openai`) and have
+no effect on a Claude Code run — do not edit them expecting a change here.
 
 ---
 
