@@ -9,9 +9,16 @@ USAGE (paste into Isaac Sim's Script Editor; reload-safe):
 
     import sys, importlib
     sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
+    importlib.invalidate_caches()   # see below
     import inject_intruder, inject_scenarios
     importlib.reload(inject_intruder); importlib.reload(inject_scenarios)
     from inject_scenarios import *
+
+invalidate_caches() is not optional boilerplate: Isaac's interpreter caches a
+directory listing per sys.path entry, so a module FILE created after Isaac
+started is invisible to import until the cache is dropped -- the symptom is
+"ModuleNotFoundError: No module named 'inject_scenarios'" even though the
+file is plainly there and the sibling import on the same line succeeds.
 
     presets()      # prints one ready-to-paste call per scenario
     cancel_all()   # stops every callback and removes every prim this module made
@@ -343,6 +350,8 @@ def presets() -> None:
     preamble = (
         "import sys, importlib\n"
         'sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")\n'
+        "importlib.invalidate_caches()  # a file created after Isaac started\n"
+        "                               # is invisible to import without this\n"
         "import inject_intruder, inject_scenarios\n"
         "importlib.reload(inject_intruder); importlib.reload(inject_scenarios)\n"
         "from inject_scenarios import *\n"

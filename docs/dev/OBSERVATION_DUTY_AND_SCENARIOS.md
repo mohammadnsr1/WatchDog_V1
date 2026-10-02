@@ -198,6 +198,9 @@ subscription and keeps the created-prim registry so cleanup still works):
 ```python
 import sys, importlib
 sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
+importlib.invalidate_caches()   # REQUIRED when the file is newer than the
+                                # running Isaac: its cached directory listing
+                                # otherwise hides the module entirely
 import inject_intruder, inject_scenarios
 importlib.reload(inject_intruder); importlib.reload(inject_scenarios)
 from inject_scenarios import *

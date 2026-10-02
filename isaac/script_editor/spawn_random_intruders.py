@@ -17,6 +17,11 @@ import sys
 import time
 
 sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1/isaac/script_editor")
+# Drop Python's cached directory listing for that path: a module file created
+# after Isaac started is otherwise invisible to import (ModuleNotFoundError
+# on a file that is plainly there).
+import importlib
+importlib.invalidate_caches()
 import inject_intruder as ii
 
 # =========================== CONFIG ========================================
