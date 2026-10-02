@@ -64,6 +64,7 @@ def _finite_or_none(value: Any) -> float | None:
 
 _PROVENANCE_FIELDS = (
     "threshold_source",
+    "provenance_object_source",
     "threshold_verified",
     "threshold_registry_field",
     "threshold_registry_value",
@@ -339,6 +340,7 @@ class MonitorEngine:
             "comparison": monitor.comparison or "",
             "reference_values": dict(monitor.reference_values),
             "threshold_source": payload.threshold_source,
+            "provenance_object_source": payload.provenance_object_source,
             "threshold_verified": payload.threshold_verified,
             "threshold_registry_field": payload.threshold_registry_field,
             "threshold_registry_value": payload.threshold_registry_value,

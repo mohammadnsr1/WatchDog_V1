@@ -84,6 +84,9 @@ available_event_types()
 
 get_contract(object_id) -> contract, raw_spec, acm_allowed_object_pairs,
                           cell, object_frames
+    Covers only the objects and frames registered for this cell; it
+    cannot show anything else that is in the workspace.
+
     One object's contract: the static bounds the registry holds for it, plus
     the conformance grasp width read structurally from the running task file
     so it never passes through your reasoning. It is addressed by object alone
@@ -103,13 +106,18 @@ get_contract(object_id) -> contract, raw_spec, acm_allowed_object_pairs,
 
 get_execution_state() -> current_step_id, counts, armed_monitors,
                          last_executor_event, tf_staleness_counters
+    Covers only the objects and frames registered for this cell; it
+    cannot show anything else that is in the workspace.
+
     Where you are, and what you already have watching. armed_monitors lists
     every monitor currently up, with its type and parameters. Rising
     tf_staleness_counters for an object means TF evidence is degrading and any
     monitor over that object may be blind.
 
 query_snapshot(object_ids) -> objects (latest poses), joint_state
-    Instantaneous state. Positions and efforts by joint name.
+    Instantaneous state. Positions and efforts by joint name. Covers only
+    the objects and frames registered for this cell; it cannot show anything
+    else that is in the workspace.
 
 arm_custom_monitor(code, description, params, clause, object_id,
                    threshold_param, monitor_id)
@@ -164,6 +172,9 @@ wait_for_event(timeout_sec, event_types) -> wake, plus fire or event payload
 get_events(since_wall_ns) -> events
 get_evidence(start_wall_ns, end_wall_ns, channels, object_ids, frame_ids,
              joint_names, max_samples) -> evidence
+    Covers only the objects and frames registered for this cell; it
+    cannot show anything else that is in the workspace.
+
     channels is any of joint_states, object_poses, frames, events. The frames
     channel carries cell frames such as the gripper TCP, sampled on the same
     tick as object poses so samples pair by index. Use it to verify

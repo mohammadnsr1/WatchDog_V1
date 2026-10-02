@@ -34,20 +34,45 @@ case "$assembly" in
   *) echo "assembly must be 1 or 2 (got: $assembly)" >&2; exit 1 ;;
 esac
 
-# model and effortLevel live in watchdog.settings.json (edit them there before
-# a run). Echoed here rather than passed as flags: the settings file is the
-# single source of truth, and a --model/--effort flag would silently outrank
-# it. Reading them back is what makes a typo visible -- an unrecognised key or
-# value is otherwise ignored with only a warning, and the run would proceed on
-# the account default with nothing in the terminal saying so.
-params=$(python3 -c "
-import json
-d = json.load(open('watchdog.settings.json'))
-print('model=%s effort=%s' % (d.get('model', '<unset: account default>'),
-                              d.get('effortLevel', '<unset: model default>')))
-")
+# MODEL and EFFORT come from the environment, defaulting to the values in
+# watchdog.settings.json ("model" / "effortLevel"), and are passed as explicit
+# --model/--effort flags -- the highest-precedence form the installed claude
+# CLI supports, so nothing in the user's global settings can silently override
+# what this launch line says. The study varies ONLY the WatchDog's effort;
+# override per run with e.g.:  EFFORT=high ./run_watchdog.sh s2 1
+MODEL="${MODEL:-$(python3 -c "import json; print(json.load(open('watchdog.settings.json')).get('model','claude-sonnet-5'))")}"
+EFFORT="${EFFORT:-$(python3 -c "import json; print(json.load(open('watchdog.settings.json')).get('effortLevel','low'))")}"
 
-echo "launching watchdog session: $config  ($params)" >&2
+# Put the launch parameters in the run record. The manifest is written by the
+# bringup before any session exists, so the launcher is the first place that
+# knows which model and effort this role actually ran with.
+session_dir=$(cat ~/.watchdog/current_session 2>/dev/null || true)
+if [ -n "$session_dir" ] && [ -d "$session_dir" ]; then
+  python3 - "$session_dir" "$scenario" "$assembly" "$MODEL" "$EFFORT" <<'PYEOF'
+import datetime, json, subprocess, sys
+session_dir, scenario, assembly, model, effort = sys.argv[1:6]
+try:
+    cli = subprocess.run(["claude", "--version"], capture_output=True,
+                         text=True, timeout=15).stdout.strip()
+except Exception as exc:
+    cli = f"unavailable: {exc}"
+record = {
+    "role": "watchdog", "scenario": scenario, "assembly": assembly,
+    "model": model, "effort": effort, "claude_cli_version": cli,
+    "launched_wall_time_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+}
+path = f"{session_dir}/agent_config_watchdog.json"
+with open(path, "w") as handle:
+    json.dump(record, handle, indent=2)
+print(f"wrote {path}", file=sys.stderr)
+PYEOF
+else
+  echo "WARNING: ~/.watchdog/current_session does not name a directory;" \
+       "agent_config_watchdog.json not written (bring the cell up first)" >&2
+fi
+
+echo "launching watchdog session: $config  (model=$MODEL effort=$EFFORT)" >&2
 exec claude --mcp-config "$config" --strict-mcp-config \
+  --model "$MODEL" --effort "$EFFORT" \
   --settings watchdog.settings.json \
   'Call get_rendered_task(part="system_prompt") and then get_rendered_task(part="task"). Load system_prompt as your standing instructions and task as your opening task, then begin your role.'

@@ -362,3 +362,104 @@ def test_threshold_is_json_safe_for_every_family(ctx):
     for payload in ctx.bus.payloads("monitor_armed"):
         text = json.dumps(payload, allow_nan=False)  # raises on NaN/Infinity
         assert "NaN" not in text
+
+
+# --- declared object_id on arm_monitor (PREBATCH_FIXES item 8) -----------------
+#
+# These go through the REAL tool (ws.arm_monitor, _ensure_watchdog patched)
+# because the feature is the tool's: a declared object_id that resolves
+# threshold provenance for a primitive that cannot resolve an object itself,
+# without touching behaviour, fire attribution, or held-object logic.
+
+@pytest.fixture
+def tool_ctx(ctx, monkeypatch):
+    monkeypatch.setattr(ws, "_ensure_watchdog", lambda: ctx)
+    return ctx
+
+
+def test_pre_grasp_effort_event_verifies_against_declared_object(tool_ctx, registry):
+    tool_ctx._held = None
+    value = _spec(registry, "u_brown", "limits.max_clamp_effort")
+    result = ws.arm_monitor(
+        "effort_event",
+        {"joint_name": "finger_joint", "comparison": "le", "threshold": value},
+        object_id="u_brown",
+    )
+    assert result["ok"] is True, result
+    assert result["object_id"] == "u_brown"
+    assert result["provenance_object_source"] == "declared"
+    assert result["threshold_source"] == "raw_spec.limits.max_clamp_effort"
+    assert result["threshold_verified"] is True
+    armed = tool_ctx.bus.payloads("monitor_armed")[-1]
+    assert armed["provenance_object_source"] == "declared"
+    assert armed["threshold_verified"] is True
+
+
+def test_without_declared_object_the_result_is_unchanged_from_today(tool_ctx, registry):
+    tool_ctx._held = None
+    value = _spec(registry, "u_brown", "limits.max_clamp_effort")
+    result = ws.arm_monitor(
+        "effort_event",
+        {"joint_name": "finger_joint", "comparison": "le", "threshold": value},
+    )
+    assert result["ok"] is True, result
+    assert result["object_id"] is None
+    assert result["provenance_object_source"] is None
+    assert result["threshold_source"] == "object_unresolved"
+    assert result["threshold_verified"] is False
+
+
+def test_unregistered_declared_object_is_rejected(tool_ctx):
+    result = ws.arm_monitor(
+        "effort_event",
+        {"joint_name": "finger_joint", "comparison": "le", "threshold": 1.0},
+        object_id="no_such_part",
+    )
+    assert result["ok"] is False
+    assert "not in the registry" in result["error"]
+    assert tool_ctx.engine.snapshot() == []  # nothing armed
+
+
+def test_declared_object_loses_to_the_held_part(tool_ctx, registry):
+    tool_ctx._held = "u_orange"
+    value = _spec(registry, "u_orange", "limits.max_clamp_effort")
+    result = ws.arm_monitor(
+        "effort_event",
+        {"joint_name": "finger_joint", "comparison": "le", "threshold": value},
+        object_id="u_brown",
+    )
+    assert result["ok"] is True, result
+    assert result["object_id"] == "u_orange"
+    assert result["provenance_object_source"] == "held"
+    assert result["object_id_conflict"]["declared"] == "u_brown"
+    assert result["object_id_conflict"]["used"] == "u_orange"
+
+
+def test_declared_object_loses_to_the_primitive_subject(tool_ctx, registry):
+    value = _spec(registry, "u_brown", "tolerances.grasp_slip_tolerance_m")
+    result = ws.arm_monitor(
+        "relative_frame",
+        {"parent_frame": "tcp", "child_frame": "u_brown", "max_delta_m": value},
+        object_id="u_orange",
+    )
+    assert result["ok"] is True, result
+    assert result["object_id"] == "u_brown"
+    assert result["provenance_object_source"] == "params"
+    assert result["object_id_conflict"]["declared"] == "u_orange"
+
+
+def test_fire_payload_carries_the_object_source(tool_ctx, registry):
+    tool_ctx._held = None
+    value = _spec(registry, "u_brown", "limits.max_clamp_effort")
+    result = ws.arm_monitor(
+        "effort_event",
+        {"joint_name": "finger_joint", "comparison": "le", "threshold": value},
+        object_id="u_brown",
+        monitor_id="prov_fire",
+    )
+    assert result["ok"] is True, result
+    monitor = tool_ctx.engine.monitors["prov_fire"]
+    tool_ctx.engine._handle_fire(monitor, value + 1.0)
+    fire = tool_ctx.bus.payloads("monitor_fire")[-1]
+    assert fire["provenance_object_source"] == "declared"
+    assert fire["threshold_verified"] is True

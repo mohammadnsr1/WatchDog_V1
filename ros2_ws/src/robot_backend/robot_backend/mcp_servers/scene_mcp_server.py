@@ -315,6 +315,9 @@ if mcp is not None:
     def get_object_pose(object_id: str) -> dict[str, Any]:
         """Return the current TF pose of a registry object in its lookup frame.
 
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
+
         Delegates to scene_tf_sync_node's /get_object_pose service, which
         holds the single executor-side TF buffer. Does not read or write
         MoveIt's planning scene.
@@ -365,6 +368,9 @@ if mcp is not None:
         kind: str | None = None,
     ) -> dict[str, Any]:
         """Return current TF poses for every enabled registry entry.
+
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
 
         This is the tool to call to find out what is actually on the table.
         It returns both kinds of entry the registry declares, each pose tagged
@@ -587,6 +593,9 @@ if mcp is not None:
     @mcp.tool()
     def get_scene_summary() -> dict[str, Any]:
         """Return a read-only audit of MoveIt's current planning scene.
+
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
 
         Reports world collision objects (TF-tracked) and attached objects
         (held by the robot), with convenience counts. Does not modify state.

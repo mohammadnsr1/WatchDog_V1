@@ -19,6 +19,18 @@ JOINT_STATES_TOPIC = "/joint_states"
 EVENTS_TOPIC = "/watchdog/events"
 TF_SAMPLE_HZ = 20.0
 
+# A chain whose own latest TF time lags the freshest chain's by more than this
+# is excluded from the tick's common-time computation and sampled at its own
+# latest instead (see _on_tf_timer): a chain that has stopped publishing must
+# not drag every other sample into the past with it.
+TF_COMMON_TIME_MAX_LAG_SEC = 1.0
+
+
+def _tf_header_stamp_ns(transform: Any) -> int:
+    """The TF time a lookup result was evaluated at, off its own header."""
+    stamp = transform.header.stamp
+    return int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec)
+
 # WatchDog's own output event types, published to the same /watchdog/events
 # topic this recorder subscribes to. The recorder hears itself: without this
 # exclusion, wait_for_event wakes the agent on its own signal_ready /
@@ -381,40 +393,100 @@ class EvidenceRecorder:
 
     def _on_tf_timer(self) -> None:
         try:
-            # One stamp for the whole tick, shared by every object pose and
-            # cell frame sampled in it -- so a relative_frame clause can pair
-            # a TCP sample with an object sample by identical wall_ns (a
+            # One WALL stamp for the whole tick, shared by every object pose
+            # and cell frame sampled in it -- so a relative_frame clause can
+            # pair a TCP sample with an object sample by identical wall_ns (a
             # zip) rather than needing to interpolate between mismatched
             # timestamps.
+            #
+            # And one TF time for the whole tick. A Time(0) lookup resolves
+            # each chain at ITS OWN latest TF time, and in this cell the robot
+            # chain republishes at ~11 Hz against the Isaac object chains'
+            # ~34 Hz, so two latest-time samples from one tick can be up to
+            # ~50 ms apart. A relative quantity assembled from two such
+            # samples shows motion-induced phantom drift -- measured at
+            # 18-26 mm during ordinary approach/lift moves on the 2026-10-02
+            # S3 bag, against <= 1.1 mm for a time-consistent lookup, which
+            # fired two slip monitors on a grasp that never slipped (see
+            # docs/dev/PREBATCH_FIXES.md item 1). So: pass 1 finds each
+            # chain's latest TF time, the tick's common time is the LATEST
+            # TIME AVAILABLE TO EVERY healthy chain (the minimum of those),
+            # and pass 2 samples every chain at that one time. tf_stamp_ns on
+            # each sample records the TF time actually used.
+            #
+            # The common time lags "now" by at most the slowest healthy
+            # chain's publish interval (~90 ms at 11 Hz) -- the same order of
+            # staleness a Time(0) sample of that slowest chain already had,
+            # so detection/halt latency is unchanged; the samples are simply
+            # mutually consistent now.
             tick_wall_ns = wall_ns()
-            for object_id in list(self.object_frames):
-                frame = self.object_frames[object_id]
+
+            chains: list[tuple[str, dict[str, str], bool]] = [
+                (object_id, self.object_frames[object_id], True)
+                for object_id in list(self.object_frames)
+            ] + [
+                (frame_id, self.cell_frames[frame_id], False)
+                for frame_id in list(self.cell_frames)
+            ]
+
+            # Pass 1: each chain's latest transform and the TF time tf2 used
+            # for it (the lookup result's own header stamp). A failed lookup
+            # bumps the chain's staleness counter, exactly as before.
+            latest: list[tuple[str, dict[str, str], Any, int, bool]] = []
+            for ident, frame, is_object in chains:
                 try:
                     transform = self.lookup_transform(frame["lookup_frame"], frame["tf_frame"])
-                    pose = self._transform_to_pose_tuple(tick_wall_ns, object_id, transform)
-                    with self.lock:
-                        self.object_pose_samples.setdefault(
-                            object_id, collections.deque(maxlen=self.max_tf_samples)
-                        ).append(pose)
+                    latest.append(
+                        (ident, frame, transform, _tf_header_stamp_ns(transform), is_object)
+                    )
                 except Exception:
                     with self.lock:
-                        self.tf_staleness_counters[object_id] = (
-                            self.tf_staleness_counters.get(object_id, 0) + 1
+                        self.tf_staleness_counters[ident] = (
+                            self.tf_staleness_counters.get(ident, 0) + 1
                         )
-            for frame_id in list(self.cell_frames):
-                frame = self.cell_frames[frame_id]
-                try:
-                    transform = self.lookup_transform(frame["lookup_frame"], frame["tf_frame"])
-                    pose = self._transform_to_pose_tuple(tick_wall_ns, frame_id, transform)
-                    with self.lock:
-                        self.frame_samples.setdefault(
-                            frame_id, collections.deque(maxlen=self.max_tf_samples)
-                        ).append(pose)
-                except Exception:
-                    with self.lock:
-                        self.tf_staleness_counters[frame_id] = (
-                            self.tf_staleness_counters.get(frame_id, 0) + 1
+
+            # The tick's common TF time: the latest time available to every
+            # chain -- excluding chains lagging the freshest by more than
+            # TF_COMMON_TIME_MAX_LAG_SEC. A chain that has stopped publishing
+            # must not drag every other sample into the past with it; it is
+            # sampled at its own latest (it is already inaccurate, and
+            # tf_staleness_counters is the channel that reports it).
+            common_ns: int | None = None
+            if latest:
+                newest = max(stamp for _, _, _, stamp, _ in latest)
+                lag_limit = int(TF_COMMON_TIME_MAX_LAG_SEC * 1e9)
+                eligible = [
+                    stamp for _, _, _, stamp, _ in latest if newest - stamp <= lag_limit
+                ]
+                if eligible:
+                    common_ns = min(eligible)
+
+            # Pass 2: sample every eligible chain at the common time. A chain
+            # whose latest IS the common time keeps its pass-1 result; a
+            # re-lookup that fails (a chain that only just appeared, with no
+            # cache at the common time) falls back to its pass-1 latest, with
+            # tf_stamp_ns saying so honestly.
+            for ident, frame, transform, stamp, is_object in latest:
+                tf_stamp_ns = stamp
+                if common_ns is not None and stamp != common_ns and (
+                    stamp - common_ns >= 0
+                ):
+                    try:
+                        transform = self.lookup_transform_at(
+                            frame["lookup_frame"], frame["tf_frame"], common_ns
                         )
+                        tf_stamp_ns = common_ns
+                    except Exception:
+                        pass
+                pose = self._transform_to_pose_tuple(
+                    tick_wall_ns, ident, transform, tf_stamp_ns
+                )
+                with self.lock:
+                    buffers = self.object_pose_samples if is_object else self.frame_samples
+                    buffers.setdefault(
+                        ident, collections.deque(maxlen=self.max_tf_samples)
+                    ).append(pose)
+
             if self.engine is not None:
                 self.engine.on_tf_tick(self)
         except Exception as exc:
@@ -485,7 +557,7 @@ class EvidenceRecorder:
             self._log_warn(f"WatchDog event-tail callback failed: {exc}")
 
     def _transform_to_pose_tuple(
-        self, stamp: int, object_id: str, transform: Any
+        self, stamp: int, object_id: str, transform: Any, tf_stamp_ns: int | None = None
     ) -> tuple[Any, ...]:
         tf = getattr(transform, "transform", transform)
         translation = getattr(tf, "translation")
@@ -500,6 +572,10 @@ class EvidenceRecorder:
             float(rotation.y),
             float(rotation.z),
             float(rotation.w),
+            # Appended LAST so every existing consumer that unpacks or indexes
+            # the first nine fields keeps working; _pose_tuple_to_dict accepts
+            # both lengths.
+            int(tf_stamp_ns) if tf_stamp_ns is not None else None,
         )
 
     def lookup_transform(self, parent_frame: str, child_frame: str) -> Any:
@@ -510,6 +586,17 @@ class EvidenceRecorder:
             return self.tf_buffer.lookup_transform(parent_frame, child_frame, rclpy.time.Time())
         except Exception:
             return self.tf_buffer.lookup_transform(parent_frame, child_frame, None)
+
+    def lookup_transform_at(
+        self, parent_frame: str, child_frame: str, stamp_ns: int
+    ) -> Any:
+        """Transform at one specific TF time, for the common-time tick sampling."""
+        if self.tf_buffer is None:
+            raise RuntimeError("TF buffer is not attached.")
+        import rclpy
+        return self.tf_buffer.lookup_transform(
+            parent_frame, child_frame, rclpy.time.Time(nanoseconds=int(stamp_ns))
+        )
 
     def get_joint_window(
         self,
@@ -712,9 +799,15 @@ class EvidenceRecorder:
     def _pose_tuple_to_dict(
         self, sample: tuple[Any, ...], id_key: str = "object_id"
     ) -> dict[str, Any]:
-        stamp, ident, x, y, z, qx, qy, qz, qw = sample
+        # 10-tuples carry tf_stamp_ns (the TF time the sample was evaluated
+        # at) appended last; 9-tuples are the pre-alignment shape and still
+        # parse, reporting tf_stamp_ns: null.
+        stamp, ident, x, y, z, qx, qy, qz, qw = sample[:9]
+        tf_stamp_ns = sample[9] if len(sample) > 9 else None
         return {
             "wall_ns": int(stamp),
+            # Samples from one recorder tick share one TF time (tf_stamp_ns).
+            "tf_stamp_ns": int(tf_stamp_ns) if tf_stamp_ns is not None else None,
             id_key: ident,
             "pose": {
                 "position": {"x": float(x), "y": float(y), "z": float(z)},

@@ -9,9 +9,13 @@ Writes (all under agents/):
     prompts/watchdog_system_s2.txt, prompts/watchdog_system_s3.txt,
     prompts/executor_system_s4.txt   -- builder output, byte for byte;
     tasks/fmb_assembly_s4.executor.yaml, tasks/fmb_assembly_2_s4.executor.yaml
-        -- only their instruction_spec and object_ids block scalars are
-        rewritten (to s4_task_expected's values); every other line, including
-        comments and the steps: block, is left byte-identical.
+        -- their instruction_spec and object_ids block scalars are rewritten
+        (to s4_task_expected's values) and their steps: block is copied
+        VERBATIM from the source executor task (the derivation pins
+        s4.steps == source.steps, and a source edit that is not copied over
+        -- e.g. commit c390b1d commenting out a target_offset -- leaves the
+        S4 file failing test_s4_task_matches_derivation); every other line,
+        including comments, is left byte-identical.
 
 test_prompt_variants.py pins each written file to exactly this derivation, so
 running this script is the one sanctioned way to change a derived file.
@@ -77,6 +81,30 @@ def _replace_block_scalar(text: str, key: str, new_value: str) -> str:
     return "\n".join(lines[: start + 1] + body + [""] + lines[end:])
 
 
+def _block_span(lines: list[str], key: str) -> tuple[int, int]:
+    """(start, end) line indices of a top-level block: its `key:` line through
+    the last line before the next non-indented, non-blank line."""
+    try:
+        start = next(i for i, line in enumerate(lines) if line.startswith(f"{key}:"))
+    except StopIteration:
+        raise ValueError(f"no top-level block {key!r} found") from None
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if lines[i] and not lines[i].startswith(" ") and not lines[i].startswith("#"):
+            end = i
+            break
+    return start, end
+
+
+def _copy_block_verbatim(dest_text: str, source_text: str, key: str) -> str:
+    """Replace dest's top-level `key:` block with source's, byte for byte."""
+    dest_lines = dest_text.split("\n")
+    source_lines = source_text.split("\n")
+    d0, d1 = _block_span(dest_lines, key)
+    s0, s1 = _block_span(source_lines, key)
+    return "\n".join(dest_lines[:d0] + source_lines[s0:s1] + dest_lines[d1:])
+
+
 def main() -> None:
     s1_watchdog = (PROMPTS / "watchdog_system.txt").read_text(encoding="utf-8")
     s1_executor = (PROMPTS / "executor_system.txt").read_text(encoding="utf-8")
@@ -95,6 +123,9 @@ def main() -> None:
             text, "instruction_spec", expected["instruction_spec"]
         )
         text = _replace_block_scalar(text, "object_ids", expected["object_ids"])
+        text = _copy_block_verbatim(
+            text, (TASKS / exec_name).read_text(encoding="utf-8"), "steps"
+        )
         # Round-trip check: the file must parse back to exactly the expected
         # blocks, or the write is refused.
         parsed = yaml.safe_load(text)
@@ -103,6 +134,8 @@ def main() -> None:
                 raise RuntimeError(
                     f"{s4_name}: {key} does not round-trip; not writing."
                 )
+        if parsed["steps"] != exec_data["steps"]:
+            raise RuntimeError(f"{s4_name}: steps does not round-trip; not writing.")
         _write(s4_path, text)
 
 

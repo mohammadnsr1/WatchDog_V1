@@ -157,6 +157,12 @@ class MonitorArmedPayload(BaseModel):
     # only worth anything to a scorer if it can distinguish a genuine
     # registry read from a default that happens to coincide.
     threshold_source: str = "unresolved"
+    # How object_id above was resolved for provenance: "params" (the
+    # monitor's own subject parameter), "held" (the part in the gripper at
+    # arm time), or "declared" (the agent's explicit object_id argument,
+    # honoured only when the primitive cannot resolve an object itself).
+    # None on pre-existing logs and when no object resolved at all.
+    provenance_object_source: str | None = None
     # True only when the comparison above succeeded. Redundant with
     # threshold_source by construction, and deliberately so: a scorer should
     # not have to parse a string to learn whether verification passed.
@@ -227,6 +233,7 @@ class MonitorFirePayload(BaseModel):
     # registry that could have been reloaded in between would answer a
     # different question.
     threshold_source: str = "unresolved"
+    provenance_object_source: str | None = None
     threshold_verified: bool = False
     threshold_registry_field: str | None = None
     threshold_registry_value: float | None = None

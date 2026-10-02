@@ -44,7 +44,7 @@ fail loudly on their own; the rest are still on you.
 | 2 | Mint a fresh session dir + rewrite the pointer | **enforced**: bringup refuses a dir a prior run used |
 | 3 | `EXECUTOR_TASK_PATH` / `WATCHDOG_TASK_PATH` name the intended files | **enforced**: echoed in `get_rendered_task`'s first response |
 | 4 | `registry_install_matches_source` is true | **manual** — bringup warns, never blocks |
-| 5 | `model` / `effortLevel` in both `*.settings.json` are what you intend | **manual** — the launchers echo both at startup |
+| 5 | Model/effort: settings-file defaults (or `MODEL`/`EFFORT` env) are what you intend; executor identical across the batch | **manual** — launchers echo both and write `agent_config_<role>.json` into the session |
 | 6 | Launch watchdog, then executor | manual |
 | 7 | Injection run only: after the run, `ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>` — a run with `leak: true` is excluded from observation scoring | **manual** |
 
@@ -190,19 +190,38 @@ side of a real tradeoff: Stage 3 live testing showed the quality of its
 *threshold choices* is exactly what observation scoring measures, so compare
 like with like before reading a weak run as an agent failure.
 
-Three things worth knowing:
+The launchers pass both values as explicit `--model`/`--effort` flags (the
+highest-precedence form the CLI supports, so nothing in the user's global
+settings can silently override the launch line), and both can be overridden
+per run from the environment:
 
-- **These files outrank `~/.claude/settings.json`.** A `--settings` file beats
-  user settings, which is the point: before `model` was pinned here, a scored
-  run silently inherited whatever model the operator last set globally.
-- **Deleting `effortLevel` restores the model's own default** (what the CLI
-  calls `auto`). There is no literal `"auto"` value to write.
-- **A `--model` or `--effort` flag, and the `ANTHROPIC_MODEL` /
-  `CLAUDE_CODE_EFFORT_LEVEL` env vars, all outrank these files.** Leave them
-  unset for a scored run, or the file stops being the source of truth.
+```bash
+EFFORT=high ./run_watchdog.sh s2 1     # this run's watchdog at high effort
+MODEL=claude-opus-5 EFFORT=medium ./run_watchdog.sh s2 1
+```
 
-The launchers echo both values at startup, so a typo is visible before the
-session begins (an unrecognised key is otherwise ignored with only a warning):
+**Study design: within a study batch the executor's model and effort are
+identical for every run — only the WatchDog's effort varies.** Override
+`MODEL`/`EFFORT` on `run_executor.sh` only when starting a new batch, and
+change `executor.settings.json` so the default moves with it.
+
+Each launcher also writes the run record
+`<session_dir>/agent_config_<role>.json`:
+
+```json
+{"role": "watchdog", "scenario": "s2", "assembly": "1",
+ "model": "claude-sonnet-5", "effort": "low",
+ "claude_cli_version": "2.1.287 (Claude Code)",
+ "launched_wall_time_iso": "..."}
+```
+
+(the executor's `scenario` is null — S1–S3 live entirely on the watchdog
+side). If the session pointer is dangling the record is skipped with a
+warning, and the session itself will refuse to start anyway.
+
+Still true and worth knowing: deleting `effortLevel` from a settings file
+restores the model's own default (what the CLI calls `auto` — there is no
+literal `"auto"` value to write), and both values are echoed at launch:
 
 ```
 launching watchdog session: watchdog_s2.mcp.json  (model=claude-sonnet-5 effort=low)
@@ -567,7 +586,16 @@ Operator-side scene perturbation for observation scoring. Full detail in
 
 - **Ground truth:** every executed action appends one line to
   `<session_dir>/ground_truth_injections.jsonl` (fsync'd; never on
-  `/watchdog/events`).
+  `/watchdog/events`). Every inject and move record also carries
+  `pixel_uv` (where the point projects in the 640x360 depth/RGB image),
+  `in_camera_view` (centre inside the image with a 20 px margin) and
+  `edge_margin_px`, computed from the fixed camera's extrinsics
+  (cameras.yaml) and intrinsics (fx=fy=554.2563, cx=320, cy=180 — verified
+  against /camera/depth/camera_info on 2026-09-30). `inject()` warns, and
+  still proceeds, when the point is out of view — the 2026-10-01 smoke
+  intruders at x≈-0.5 landed on the image's bottom-right edge, and a miss
+  on an invisible intruder must not score against the agent.
+  `list_injections()` shows the same fields.
 
 - **The agent-side record:** the WatchDog reports what it finds with the
   `record_observation` tool (every scenario). Observations are events of type

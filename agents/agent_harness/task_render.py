@@ -84,6 +84,15 @@ def render_task(template_text: str, task: dict) -> str:
 
     rendered = _PLACEHOLDER_RE.sub(replace, template_text)
 
+    # An empty run_notes must not leave a dangling "## Run notes" header in
+    # the rendered task: a header over nothing reads as missing content, and
+    # the field is empty BY DESIGN (a note here renders into every scenario's
+    # task, so it must never name a scenario-gated tool -- see the task
+    # files). Dropped here, in the one shared renderer, rather than per
+    # template.
+    if not str(task.get("run_notes", "")).strip():
+        rendered = re.sub(r"## Run notes\s*\n\s*\n(?=---|\Z)", "", rendered)
+
     survivors = _PLACEHOLDER_RE.findall(rendered)
     if survivors:
         raise ValueError(

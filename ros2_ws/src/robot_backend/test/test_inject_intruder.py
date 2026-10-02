@@ -121,6 +121,8 @@ def test_ground_truth_record_shape():
         "position_xyz_world", "yaw_deg", "color_rgb", "physics", "label",
         "expected_impact", "notes", "trigger", "wall_ns", "wall_time_iso",
         "session_dir", "script_sha256",
+        # camera-visibility triple (PREBATCH_FIXES item 9)
+        "pixel_uv", "in_camera_view", "edge_margin_px",
     }
     assert set(record) == expected_keys
     assert record["position_xyz_world"] == [0.4, -0.2, 0.78]
@@ -134,6 +136,7 @@ def test_ground_truth_record_shape():
     )
     assert set(sparse) == expected_keys
     assert sparse["shape"] is None and sparse["physics"] is None
+    assert sparse["pixel_uv"] is None and sparse["in_camera_view"] is None
 
 
 def test_append_jsonl_round_trips(tmp_path):
@@ -186,3 +189,49 @@ def test_module_imports_without_isaac():
     module may be required at import time."""
     assert "omni" not in sys.modules or ii is not None
     assert ii.INTRUDER_ROOT == "/World/WatchdogIntruders"
+
+
+# --- camera projection in ground truth (PREBATCH_FIXES item 9) ------------------
+
+
+def test_projection_matches_reference_pixels():
+    """Reference points measured against /camera/depth/camera_info 2026-09-30."""
+    for world, expected in (((-0.5, 0.1, 0.035), (576.0, 341.0)),
+                            ((0.25, -0.38, 0.0), (320.0, 180.0))):
+        pixel, depth = ii.project_world_point(world)
+        assert pixel is not None and depth > 0
+        assert abs(pixel[0] - expected[0]) <= 5.0, (world, pixel)
+        assert abs(pixel[1] - expected[1]) <= 5.0, (world, pixel)
+
+
+def test_camera_view_fields_margins():
+    centre = ii.camera_view_fields((0.25, -0.38, 0.0))  # projects to ~image centre
+    assert centre["in_camera_view"] is True
+    assert centre["edge_margin_px"] > 100
+
+    # The S2/S3 smoke-run placement that landed on the image edge.
+    edge = ii.camera_view_fields((-0.5, 0.1, 0.035))
+    assert edge["pixel_uv"] is not None
+    assert edge["edge_margin_px"] < ii.CAMERA_VIEW_MARGIN_PX
+    assert edge["in_camera_view"] is False
+
+    behind = ii.camera_view_fields((0.25, -0.2, 5.0))  # above the camera
+    assert behind["pixel_uv"] is None
+    assert behind["in_camera_view"] is False
+
+
+def test_ground_truth_records_carry_visibility():
+    record = ii.build_ground_truth_record(
+        action="inject", name="x", prim_path="/World/WatchdogIntruders/x",
+        trigger="immediate", wall_ns=1, session_dir="/tmp/s",
+        position_xyz_world=(0.25, -0.38, 0.0), sha256="f" * 64,
+    )
+    assert record["in_camera_view"] is True
+    assert record["pixel_uv"] == [320.0, 179.6]
+    moved = ii.build_ground_truth_record(
+        action="move", name="x", prim_path="/World/WatchdogIntruders/x",
+        trigger="immediate", wall_ns=2, session_dir="/tmp/s",
+        position_xyz_world=(-0.5, 0.1, 0.035), sha256="f" * 64,
+    )
+    assert moved["in_camera_view"] is False
+    assert moved["edge_margin_px"] < 20

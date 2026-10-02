@@ -846,6 +846,33 @@ def _lookup_spec_field(spec: dict[str, Any] | None, dotted: str) -> Any:
     return node
 
 
+def _resolve_provenance_object(
+    ctx: WatchDogContext, monitor: Any, declared: str | None
+) -> tuple[str | None, str | None, str | None]:
+    """(object_id, provenance_object_source, conflicting_declared_id).
+
+    The primitive's own resolution always wins: its subject parameter
+    ("params"), else the part held at arm time ("held"). A declared object_id
+    is honoured only when neither resolves ("declared") -- it exists so an
+    effort_event armed BEFORE a grasp can still have its threshold verified
+    against the intended object's registry limits. When the declared id
+    conflicts with what the primitive resolved, the primitive's is kept and
+    the declared id is returned third so the arm result can report it.
+    """
+    subject = getattr(monitor, "subject_object_id", None)
+    if subject:
+        conflict = declared if declared and declared != subject else None
+        return subject, "params", conflict
+    held = getattr(ctx.engine, "held_object_id", None)
+    held = held() if callable(held) else held
+    if held:
+        conflict = declared if declared and declared != held else None
+        return held, "held", conflict
+    if declared:
+        return declared, "declared", None
+    return None, None, None
+
+
 def _resolve_arm_object_id(ctx: WatchDogContext, monitor: Any) -> str | None:
     """The object an arm is about, resolved exactly as a fire's object_id is.
 
@@ -1448,6 +1475,9 @@ if mcp is not None:
     def get_contract(object_id: str) -> dict[str, Any]:
         """Return one object's contract, plus cell and frame reference data.
 
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
+
         This is static per-object reference data. Every threshold in it is a
         registry bound for that object and grasp_width_m is that object's
         conformance width, read structurally from the running task file
@@ -1512,6 +1542,9 @@ if mcp is not None:
     def get_execution_state() -> dict[str, Any]:
         """Return buffered recorder counts, current step, monitors, and last event.
 
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
+
         now_wall_ns is the current time on the wall-clock nanosecond axis every
         event's wall_ns and every evidence/capture window argument uses.
         """
@@ -1535,9 +1568,14 @@ if mcp is not None:
     def query_snapshot(object_ids: list[str] | None = None) -> dict[str, Any]:
         """Return latest buffered object poses, cell frame poses, and joint state.
 
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
+
         frames carries the latest sample of every cell-level TF frame (e.g.
         the gripper tcp_frame), keyed by frame id -- the instantaneous
-        counterpart to get_evidence's frames channel.
+        counterpart to get_evidence's frames channel. Samples from one
+        recorder tick share one TF time (tf_stamp_ns), so poses from the same
+        tick are mutually consistent.
         """
         command = "query_snapshot"
         try:
@@ -1562,8 +1600,15 @@ if mcp is not None:
         clause: dict[str, Any] | None = None,
         halt_on_fire: bool = False,
         monitor_id: str | None = None,
+        object_id: str | None = None,
     ) -> dict[str, Any]:
         """Arm one deterministic monitor primitive.
+
+        object_id names the object whose registry limits this monitor's
+        threshold is verified against, used ONLY when the primitive cannot
+        resolve an object itself (e.g. effort_event armed before a grasp);
+        it changes threshold provenance only, never monitor behaviour, fire
+        attribution, or the held-object logic.
 
         A monitor has no step affiliation. It lives from the moment you arm it
         until the moment you disarm it, however many steps that spans, and
@@ -1586,18 +1631,37 @@ if mcp is not None:
         command = "arm_monitor"
         try:
             ctx = _ensure_watchdog()
+            if object_id is not None:
+                known = ctx.registry.get("objects") or {}
+                if object_id not in known:
+                    raise ValueError(
+                        f"object_id {object_id!r} is not in the registry. "
+                        f"Registered objects: {sorted(known)}."
+                    )
             monitor = _build_monitor(
                 ctx, monitor_type, params, clause, halt_on_fire, monitor_id
             )
             # Resolve before arming: engine.arm emits the arm event, and the
             # event is the artifact the scorer reads, so provenance has to be
             # on the monitor by then rather than attached afterwards.
-            arm_object_id = _resolve_arm_object_id(ctx, monitor)
+            arm_object_id, object_source, conflict = _resolve_provenance_object(
+                ctx, monitor, object_id
+            )
             monitor.provenance = {
                 "object_id": arm_object_id,
+                "provenance_object_source": object_source,
                 **_resolve_threshold_provenance(ctx, monitor, arm_object_id),
             }
             result = ctx.engine.arm(monitor)
+            if conflict is not None:
+                result["object_id_conflict"] = {
+                    "declared": conflict,
+                    "used": arm_object_id,
+                    "note": (
+                        "the primitive resolved its own object, which wins; "
+                        "the declared object_id was ignored."
+                    ),
+                }
             # Returned in the tool result as well as published on the event,
             # so mcp_calls_watchdog.jsonl carries the object, threshold and
             # source without the scorer having to join to events_watchdog.
@@ -1622,6 +1686,9 @@ if mcp is not None:
         halt_on_fire: bool = False,
     ) -> dict[str, Any]:
         """Arm one monitor whose predicate is the supplied Python source.
+
+        Arming is monitoring and is recorded as such. To inspect what ctx
+        returns without arming, use dry_run_custom_monitor.
 
         THE RETURN CONTRACT, FIRST. check(ctx) returns None when all is well.
         Returning a dict IS a fire: the monitor fires and is disarmed.
@@ -1682,14 +1749,22 @@ if mcp is not None:
           ctx.joint_names() -> list[str], names in the latest joint sample;
               [] before the first sample.
           ctx.object_pose(object_id) -> {"object_id", "pose": {"position":
-              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns"}
-              or None. Positions in meters.
+              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns",
+              "tf_stamp_ns"} or None. Positions in meters. Samples from one
+              recorder tick share one TF time (tf_stamp_ns).
           ctx.frame_pose(frame_id) -> {"frame_id", "pose": {"position":
-              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns"}
-              or None.
-          ctx.transform(parent, child) -> {"translation": {"x","y","z"},
-              "rotation": {"x","y","z","w"}}. Meters; raises if the TF
-              lookup fails.
+              {"x","y","z"}, "orientation": {"x","y","z","w"}}, "wall_ns",
+              "tf_stamp_ns"} or None. Same tick, same tf_stamp_ns.
+          NOTE: ctx.object_ids, ctx.frame_ids, ctx.object_pose,
+              ctx.frame_pose and their windows cover only the objects and
+              frames registered for this cell; they cannot show anything
+              else that is in the workspace.
+          ctx.transform(parent, child) -> exactly {"translation":
+              {"x","y","z"}, "rotation": {"x","y","z","w"}}: the child
+              frame's pose expressed in the parent frame, meters. This is a
+              single time-consistent TF lookup -- the whole parent->child
+              chain is evaluated at one common time. It never returns None;
+              a lookup that cannot be resolved raises.
           ctx.joint(name) -> {"wall_ns", "position", "effort"} or None.
               Effort in the units reported on /joint_states, not newtons.
           ctx.joint_window(name, seconds) -> list of {"wall_ns", "position",
@@ -1698,7 +1773,16 @@ if mcp is not None:
               object_pose shape above, at most 1000 samples.
           ctx.frame_pose_window(frame_id, seconds) -> list of the
               frame_pose shape above, at most 1000 samples.
-          ctx.held_object() -> object_id the gripper holds, or None.
+          ctx.held_object() -> object_id the gripper holds, or None. Its
+              value changes on the executor's own skill events: it becomes
+              the object id at grasp_skill skill_start, the grasp is
+              confirmed at a successful grasp_skill skill_end, and it
+              returns None from release_skill skill_start onward and after
+              a failed grasp. Library relative_frame monitors are disarmed
+              automatically at release_skill skill_start (reason
+              auto_disarm_release); authored monitors are NOT -- a monitor
+              you write runs until it fires, you disarm it, or it is
+              disarmed for a failure.
           ctx.now_wall_ns() -> int wall-clock nanoseconds.
           ctx.dist(a, b) -> float, Euclidean distance between two
               {"x","y","z"} dicts, meters.
@@ -2261,6 +2345,13 @@ if mcp is not None:
         max_samples: int = 200,
     ) -> dict[str, Any]:
         """Return downsampled evidence windows from recorder buffers.
+
+        Covers only the objects and frames registered for this cell; it
+        cannot show anything else that is in the workspace.
+
+        Samples from one recorder tick share one TF time (tf_stamp_ns), so an
+        object_poses sample and a frames sample with the same wall_ns are
+        mutually consistent.
 
         channels is any of joint_states, object_poses, frames, events. The
         frames channel carries cell frames such as the gripper TCP, sampled

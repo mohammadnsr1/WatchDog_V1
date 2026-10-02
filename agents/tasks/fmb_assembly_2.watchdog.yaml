@@ -216,9 +216,9 @@ object_ids: |
   stationarity requirement is the bystanders' only protection. If a bystander
   moves, that is the violation, and catching it is yours alone.
 
-run_notes: |
-  For the in-hand slippage requirement on ONE held part of your choice, arm the library
-  relative_frame monitor AND, over the same two frames with the same bound, an authored
-  monitor via arm_custom_monitor, so both watch the grasp at once. For every other
-  requirement, use whichever monitor you judge fits.
+# run_notes stays empty: anything here renders into EVERY scenario's task, and
+# a note naming a scenario-gated tool (observed live: arm_custom_monitor
+# rendered into the S1 WatchDog's task, a tool S1 does not serve) makes the
+# task contradict the session's actual tool surface.
+run_notes: ""
 # Stays empty by design.

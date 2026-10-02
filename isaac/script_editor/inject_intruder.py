@@ -168,6 +168,82 @@ def _xyz(value: Any, label: str) -> tuple[float, float, float]:
     return (x, y, z)
 
 
+# ---------------------------------------------------------------------------
+# Camera projection: where a world point lands in the depth/RGB image, so the
+# ground truth can say whether an injected intruder was even in view.
+#
+# Extrinsics are the static world -> camera_depth_optical_frame transform from
+# ros2_ws/src/sim_moveit_bringup/config/cameras.yaml (the camera never moves).
+# Intrinsics were read off /camera/depth/camera_info on 2026-09-30:
+# 640x360, fx = fy = 554.2563, cx = 320, cy = 180, no distortion.
+# ---------------------------------------------------------------------------
+
+CAMERA_EXTRINSICS = {
+    "translation_world": (0.25, -0.2, 1.7),
+    "rotation_xyzw": (0.0, 0.99863, -0.05234, 0.0),
+}
+CAMERA_INTRINSICS = {
+    "width": 640, "height": 360,
+    "fx": 554.2563, "fy": 554.2563, "cx": 320.0, "cy": 180.0,
+}
+# An intruder whose projected centre is within this many pixels of the image
+# border is treated as not reliably in view.
+CAMERA_VIEW_MARGIN_PX = 20.0
+
+
+def _quat_to_matrix(x: float, y: float, z: float, w: float) -> list[list[float]]:
+    n = (x * x + y * y + z * z + w * w) ** 0.5
+    x, y, z, w = x / n, y / n, z / n, w / n
+    return [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ]
+
+
+def project_world_point(
+    point_xyz_world: Any,
+) -> tuple[tuple[float, float] | None, float]:
+    """((u, v) pixel or None if behind the camera, depth along the optical axis)."""
+    px, py, pz = _xyz(point_xyz_world, "point_xyz_world")
+    tx, ty, tz = CAMERA_EXTRINSICS["translation_world"]
+    rotation = _quat_to_matrix(*CAMERA_EXTRINSICS["rotation_xyzw"])
+    d = (px - tx, py - ty, pz - tz)
+    # p_cam = R^T (p_world - t): the rotation columns are the camera axes in
+    # world, so the transpose maps a world vector into the optical frame
+    # (+Z forward, +X right, +Y down).
+    cam = [sum(rotation[r][c] * d[r] for r in range(3)) for c in range(3)]
+    if cam[2] <= 0:
+        return None, cam[2]
+    k = CAMERA_INTRINSICS
+    u = k["fx"] * cam[0] / cam[2] + k["cx"]
+    v = k["fy"] * cam[1] / cam[2] + k["cy"]
+    return (u, v), cam[2]
+
+
+def camera_view_fields(point_xyz_world: Any) -> dict[str, Any]:
+    """The three ground-truth fields describing a point's visibility.
+
+    pixel_uv is where the point's CENTRE projects ([u, v], rounded to 0.1 px;
+    null if behind the camera). edge_margin_px is the centre's distance to the
+    nearest image border (negative = outside the image). in_camera_view is
+    true when the centre is inside the image with at least
+    CAMERA_VIEW_MARGIN_PX of margin -- centre-only, so a large object whose
+    centre sits just inside the margin may still be partly cropped.
+    """
+    pixel, depth = project_world_point(point_xyz_world)
+    if pixel is None:
+        return {"pixel_uv": None, "in_camera_view": False, "edge_margin_px": None}
+    u, v = pixel
+    k = CAMERA_INTRINSICS
+    margin = min(u, v, k["width"] - u, k["height"] - v)
+    return {
+        "pixel_uv": [round(u, 1), round(v, 1)],
+        "in_camera_view": bool(depth > 0 and margin >= CAMERA_VIEW_MARGIN_PX),
+        "edge_margin_px": round(margin, 1),
+    }
+
+
 def resolve_session_dir(pointer_file: Path | None = None) -> Path:
     """The live session dir from ~/.watchdog/current_session, or raise."""
     pointer = pointer_file or _POINTER_FILE
@@ -249,8 +325,19 @@ def build_ground_truth_record(
     notes: str = "",
     sha256: str | None = None,
 ) -> dict[str, Any]:
-    """One ground-truth line, every key always present (null when n/a)."""
+    """One ground-truth line, every key always present (null when n/a).
+
+    inject and move records (the ones carrying a position) also carry the
+    camera-visibility triple from camera_view_fields, so scoring can tell an
+    intruder the camera could see from one it never could.
+    """
+    visibility = (
+        camera_view_fields(position_xyz_world)
+        if position_xyz_world is not None
+        else {"pixel_uv": None, "in_camera_view": None, "edge_margin_px": None}
+    )
     return {
+        **visibility,
         "action": action,
         "name": name,
         "prim_path": prim_path,
@@ -524,6 +611,14 @@ def inject(
     yaw = float(yaw_deg)
     trigger = trigger_text(at_step, delay_s)
     sha = script_sha256()
+    visibility = camera_view_fields(position)
+    if not visibility["in_camera_view"]:
+        print(
+            f"[inject_intruder] WARNING: {name} at {position} projects to "
+            f"pixel {visibility['pixel_uv']} (edge margin "
+            f"{visibility['edge_margin_px']} px) -- outside the camera's "
+            f"reliable view. Proceeding anyway; the ground truth records it."
+        )
 
     def apply() -> dict[str, Any]:
         session_dir = resolve_session_dir()
