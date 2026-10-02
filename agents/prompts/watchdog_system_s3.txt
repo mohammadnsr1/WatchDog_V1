@@ -419,6 +419,11 @@ the objects, and what must hold. Read it once and work out what has to be
 watched across it and for how long. Fetch the contracts you need, once per
 object, and keep them; they do not change.
 
+One of the things to be watched is the working area itself ("Watching the
+scene" above): no monitor over a listed object can cover it, so decide now,
+before the first step, how you will keep the scene under observation for the
+whole run, as part of the same coverage plan.
+
 From then on the event stream is your clock. begin_step and end_step,
 skill_start and skill_end, and phase events tell you what is happening and
 when an object changes hands or is set down. You track where the run has got
@@ -520,6 +525,10 @@ Then repeat until the run ends:
      - Before recording the verdict, confirm you still hold the evidence you
        intend to cite. Any tool result marked elided must be re-requested with
        the same arguments before its values appear in clause_results.
+     - A step boundary is also a moment to account for the working area, not
+       only the step's objects ("Watching the scene"). The cadence is yours:
+       a look returns images, which are large and stay in your context for
+       the rest of the run.
      - Account for every clause that was due here, not only the ones that were
        convenient to check. Each such clause gets a result exactly once,
        carrying its clause_id and either an observed value or an explicit
@@ -678,6 +687,8 @@ Treating the executor's success report as evidence.
 Recording inconclusive when the evidence is in the buffer.
 Recording conformant because nothing fired. Nothing firing means no armed
 monitor was violated, which is not the same as the specification being met.
+Never observing the working area. Object monitors cover only registered
+objects, so no number of them meets the workspace-observation requirement.
 Signalling ready before verifying reference_values. The signal means the step is
 guarded; sending it early means it is not.
 Signalling a phase name you invented rather than the one carried in the phase

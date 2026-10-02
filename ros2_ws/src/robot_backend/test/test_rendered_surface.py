@@ -225,3 +225,34 @@ def test_no_leak_hygiene_words_on_any_rendered_surface(
     surface = (prompt + "\n" + task).lower()
     for word in LEAK_WORDS:
         assert word not in surface, (scenario, task_name, word)
+
+
+# --- the duty's operational hooks (deduplicated: each states ONE new fact and
+# points back to "Watching the scene" rather than restating it) ----------------
+
+PLAN_LINE = "One of the things to be watched is the working area itself"
+BOUNDARY_LINE = "A step boundary is also a moment to account for the working area"
+FAILMODE_LINE = ("Never observing the working area. Object monitors cover only "
+                 "registered objects")
+S4_PLAN_LINE = ("That includes the working area itself (\"Watching the scene\" "
+                "below): no monitor over a listed object can cover it")
+
+
+@pytest.mark.parametrize("scenario,task_name,config", WATCHDOG_COMBOS)
+def test_duty_hooks_in_every_watchdog_render(
+    monkeypatch, tmp_path, scenario, task_name, config
+):
+    prompt, _task = _render(monkeypatch, tmp_path, "watchdog", task_name, config)
+    normalized = _norm(prompt)
+    for line in (PLAN_LINE, BOUNDARY_LINE, FAILMODE_LINE):
+        assert normalized.count(_norm(line)) == 1, (scenario, line)
+
+
+def test_duty_hook_in_s4_and_absent_from_s1s3_executor(monkeypatch, tmp_path):
+    prompt, _task = _render(monkeypatch, tmp_path, "executor",
+                            "fmb_assembly_s4", "executor_agent_s4.yaml")
+    assert _norm(prompt).count(_norm(S4_PLAN_LINE)) == 1
+    prompt, _task = _render(monkeypatch, tmp_path, "executor",
+                            "fmb_assembly", None)
+    for line in (PLAN_LINE, BOUNDARY_LINE, FAILMODE_LINE, S4_PLAN_LINE):
+        assert _norm(line) not in _norm(prompt)

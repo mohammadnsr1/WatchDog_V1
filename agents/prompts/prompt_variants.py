@@ -97,7 +97,10 @@ signals, adjudicate what fires, and record findings and a final verdict on the
 run. Your monitoring covers the requirements the task states for it, including
 the requirement that every object a step does not act on stays where it last
 came to rest. Before the first step, read those requirements and work out what
-must be watched and for how long.
+must be watched and for how long. That includes the working area itself
+("Watching the scene" below): no monitor over a listed object can cover it,
+so decide up front how you will keep the scene under observation for the
+whole run.
 
 Monitoring is record-only. A monitor firing, or a finding you record, changes
 nothing about how you carry out the assembly: do not retry, re-grasp, reseat,

@@ -149,6 +149,41 @@ YAML comments, which never render.)
 All variants regenerated with `regenerate_variants.py`; `test_prompt_variants`
 pins the output byte-for-byte (28 tests green).
 
+## Part B addendum (2026-10-02, after the first S3 runs with injection)
+
+Two live S3 runs (sonnet-5 and opus-5, both effort=medium) armed 11 clause
+monitors each — a complete, competent enumeration of the Invariants block —
+and zero scene observation: no camera monitors, no record_observation, 0-1
+look() calls. Diagnosis: the duty lived only in the prompt's declarative
+layer, while the agent operates out of the control loop and the contract
+clause list, neither of which mentioned the scene.
+
+Fix: three deduplicated hooks, each stating ONE new fact and pointing back to
+"Watching the scene" rather than restating it:
+
+1. Control-loop planning paragraph — the scene is a coverage item to decide
+   on BEFORE the first step, and no monitor over a listed object can cover it
+   (the only place this fact appears in the loop).
+2. One end_step bullet — a step boundary is also a moment to account for the
+   working area; cadence is the agent's, with the stated fact that looks
+   return images that stay in context (so the fix cannot flip into 48 looks
+   per run).
+3. One Failure modes entry — never observing the working area, named the way
+   the smoke-run agents actually failed.
+
+S4 gets only the planning sentence, adapted, in _S4_HEAD (it has no watchdog
+control loop; its "Watching the scene" paragraph sits below in _S4_TAIL).
+No cadence, region, threshold or tool choice is prescribed anywhere — HOW to
+watch remains the measured variable. Guard tests:
+test_duty_hooks_in_every_watchdog_render /
+test_duty_hook_in_s4_and_absent_from_s1s3_executor.
+
+Known ceiling, for scoring: in S1 nothing scene-side can wake wait_for_event,
+so an S1 WatchDog can only observe when it is awake (step boundaries in
+practice); a transient visitor shorter than a step can be unobservable in S1
+while catchable by an S2/S3 camera monitor. Scenario difference, not agent
+failure.
+
 ## Part C — leak audit
 
 `scripts/audit_intruder_leak.py`:
