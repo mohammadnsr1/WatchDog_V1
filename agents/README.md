@@ -206,7 +206,7 @@ python3 run_agent.py --config config/executor_agent.yaml --task tasks/two_cube_s
 
 To run the orchestrator standalone instead of through cell bringup (e.g. for
 the gate tests below), `ros2 launch cell_orchestrator orchestrator.launch.py
-guard_mode:=guarded gate_timeout_sec:=90.0 log_dir:=~/.watchdog/orchestrator`
+guard_mode:=guarded gate_timeout_sec:=120.0 log_dir:=~/.watchdog/orchestrator`
 still works exactly as before.
 
 **Cell (with orchestrator), then WatchDog, then the executor — always**, for a

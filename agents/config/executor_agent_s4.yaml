@@ -42,7 +42,7 @@ mcp_servers:
       # begin_step/mark_phase's request_go calls. Must equal gate_timeout_sec
       # below -- config.py checks this at load time and refuses to start if
       # they've drifted apart.
-      CELL_GATE_TIMEOUT_SEC: "90.0"
+      CELL_GATE_TIMEOUT_SEC: "120.0"
 
 loop:
   # Budget the whole task, not one part. fmb_assembly is 24 steps; a run that
@@ -62,5 +62,5 @@ transcript_dir: transcripts
 # call while the orchestrator is still legitimately holding it open -- an
 # mcp_error that looks like a transport bug and is actually a configuration
 # mismatch. Keep this comfortably above gate_timeout_sec (here: +60s).
-gate_timeout_sec: 90.0
-mcp_client_timeout_sec: 150.0
+gate_timeout_sec: 120.0
+mcp_client_timeout_sec: 180.0

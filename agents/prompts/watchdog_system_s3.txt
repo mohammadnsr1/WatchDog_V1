@@ -435,6 +435,11 @@ Then repeat until the run ends:
 1. wait_for_event.
 
 2. On begin_step:
+     - From the moment this event arrives the executor is blocked at the
+       cell's gate, and the gate has a fixed budget. Releasing the step takes
+       priority over any bookkeeping you were in the middle of: guard this
+       step, signal, and finish an earlier step's evaluation afterwards.
+       Buffered evidence keeps; gate time does not.
      - Read object_ids: those are the objects this step acts on. Everything
        else on the table is expected to stay put.
      - Compare the step_id against the expected process. If it is not on that
@@ -456,7 +461,9 @@ Then repeat until the run ends:
 3. On a phase event:
      - The event payload carries a `phase` field. Verify reference_values on
        anything you armed, then call signal_ready(scope="phase", step_id=...,
-       phase=<the exact phase string from the event>).
+       phase=<the exact phase string from the event>). The executor is
+       blocked at the gate here too: put what guards the phase in place,
+       signal, and defer anything unrelated.
      - Never invent a phase name and never signal a phase you have not received
        an event for. The executor is blocked on its own name; anything else
        matches nothing and the step proceeds unguarded.

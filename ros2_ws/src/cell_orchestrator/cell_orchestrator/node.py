@@ -108,7 +108,7 @@ def _default_log_dir() -> Path:
 
 
 _DEFAULT_LOG_DIR = _default_log_dir()
-_DEFAULT_GATE_TIMEOUT_SEC = 90.0
+_DEFAULT_GATE_TIMEOUT_SEC = 120.0
 _DEFAULT_GUARD_MODE = "guarded"
 _VALID_GUARD_MODES = {"guarded", "unguarded"}
 

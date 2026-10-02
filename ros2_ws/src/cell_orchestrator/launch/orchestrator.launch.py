@@ -9,7 +9,7 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "gate_timeout_sec",
-                default_value="90.0",
+                default_value="120.0",
                 description=(
                     "Fallback gate timeout (seconds) used only when a "
                     "RequestGo caller sends timeout_sec <= 0. Callers "

@@ -47,7 +47,9 @@
         "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
       ],
       "env": {
-        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.executor.yaml"
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/fmb_assembly_2.executor.yaml",
+        "_gate_comment": "CELL_GATE_TIMEOUT_SEC is the REAL gate budget on the Claude Code path: robot_backend.cell.gate reads it at import and sends it as request_go's per-call timeout_sec, which the orchestrator honours (its own gate_timeout_sec param is only a fallback for timeout_sec <= 0). Raised from the implicit 90 after the 2026-10-02 S2 run measured an 81.6 s gate wait on pick_line_green -- 8.4 s from an aborted run. Claude Code's MCP client tolerates calls well past this (wait_for_event blocks 180 s routinely), so the ordering rule mcp-client-timeout > gate budget holds.",
+        "CELL_GATE_TIMEOUT_SEC": "120.0"
       }
     }
   },

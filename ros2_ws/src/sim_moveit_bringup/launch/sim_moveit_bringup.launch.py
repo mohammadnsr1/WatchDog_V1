@@ -651,7 +651,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "gate_timeout_sec",
-                default_value="90.0",
+                default_value="120.0",
                 description=(
                     "Passed through to cell_orchestrator as its fallback gate "
                     "timeout. Keep in sync with CELL_GATE_TIMEOUT_SEC in "

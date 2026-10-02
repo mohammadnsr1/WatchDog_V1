@@ -47,7 +47,7 @@ GO_SERVICE = "/cell/request_go"
 # Read once at import time so both begin_step and mark_phase use the same
 # value without each having to know about the env var individually. See the
 # module docstring above for why this must stay below the MCP client timeout.
-DEFAULT_GATE_TIMEOUT_SEC = float(os.environ.get("CELL_GATE_TIMEOUT_SEC", "90.0"))
+DEFAULT_GATE_TIMEOUT_SEC = float(os.environ.get("CELL_GATE_TIMEOUT_SEC", "120.0"))
 
 _CLIENT_ATTR = "_cell_gate_request_go_client"
 

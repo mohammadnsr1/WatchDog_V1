@@ -2202,9 +2202,10 @@ if mcp is not None:
         # 180s, not 120s. Measured worst-case LEGITIMATE executor silence:
         # inter-event gaps on a clean 12-step fmb_assembly_2 run peaked at
         # 17.1s (p95 6.7s), but the dominant gap is the cell gate wait and
-        # gate_timeout_sec is 90.0 -- a gate that runs to its limit yields a
-        # ~95s gap with nothing wrong. At 120s that left only ~25s of headroom
-        # on a single wait. Tripping mid-run truncates a live run, which is far
+        # the gate budget is 120.0 (CELL_GATE_TIMEOUT_SEC; raised from 90
+        # after a measured 81.6s gate wait on 2026-10-02) -- a gate that runs
+        # to its limit yields a ~125s gap with nothing wrong, leaving ~55s of
+        # headroom on a single wait. Tripping mid-run truncates a live run, which is far
         # worse than waiting longer on a real crash; and now that run_ended
         # covers every executor-initiated ending, this timeout fires only on a
         # hard crash, so erring long costs essentially nothing.

@@ -249,6 +249,17 @@ byte-identical on every run):
 
 The manual commands below remain the reference for what the scripts do.
 
+**Gate budget (2026-10-02):** the cell gate now allows **120 s** per
+begin_step/mark_phase (was 90; an S2 run measured an 81.6 s wait on a pick
+gate, 8.4 s from an aborted run). The live knob on the Claude Code path is
+`CELL_GATE_TIMEOUT_SEC` in the executor mcp.json scene-server env — the scene
+server sends it as request_go's per-call timeout, which the orchestrator
+honours; the orchestrator's own `gate_timeout_sec` launch default (also now
+120) is only a fallback for callers that send no timeout, so no rebuild is
+needed for the new budget to apply. The WatchDog prompt now also tells the
+agent to release a gated step before finishing the previous step's
+bookkeeping, which is the actual fix; the budget raise is margin.
+
 ### Terminal 1 — watchdog
 
 ```bash

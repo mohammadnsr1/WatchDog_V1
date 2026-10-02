@@ -256,3 +256,20 @@ def test_duty_hook_in_s4_and_absent_from_s1s3_executor(monkeypatch, tmp_path):
                             "fmb_assembly", None)
     for line in (PLAN_LINE, BOUNDARY_LINE, FAILMODE_LINE, S4_PLAN_LINE):
         assert _norm(line) not in _norm(prompt)
+
+
+# --- gate-priority ordering (the 2026-10-02 81.6 s near-miss fix) ----------------
+
+GATE_PRIORITY_LINE = ("Releasing the step takes priority over any bookkeeping "
+                      "you were in the middle of")
+PHASE_GATE_LINE = "The executor is blocked at the gate here too"
+
+
+@pytest.mark.parametrize("scenario,task_name,config", WATCHDOG_COMBOS)
+def test_gate_priority_in_every_watchdog_render(
+    monkeypatch, tmp_path, scenario, task_name, config
+):
+    prompt, _task = _render(monkeypatch, tmp_path, "watchdog", task_name, config)
+    normalized = _norm(prompt)
+    assert normalized.count(_norm(GATE_PRIORITY_LINE)) == 1
+    assert normalized.count(_norm(PHASE_GATE_LINE)) == 1
