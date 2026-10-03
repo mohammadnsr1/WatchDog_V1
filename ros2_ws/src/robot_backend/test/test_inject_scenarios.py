@@ -163,3 +163,51 @@ def test_presets_prints_every_scenario_and_cancel_all(capsys):
     for needle in ("place_object(", "visit(", "nudge_object(", "cancel_all()",
                    "importlib.reload"):
         assert needle in out, needle
+
+
+# --- the per-frame pose tracker (pure core) --------------------------------------
+
+
+def test_tracker_adopts_new_prims_silently():
+    state = {}
+    assert sc.tracker_tick(state, {"a": (0.4, 0.0, 0.03)}, now=0.0) == []
+    assert "a" in state
+
+
+def test_tracker_records_motion_with_rate_limit_and_settle():
+    state = {}
+    sc.tracker_tick(state, {"a": (0.4, 0.0, 0.03)}, now=0.0)
+    # 2 mm wiggle: below TRACK_MOVE_EPS_M, nothing recorded.
+    assert sc.tracker_tick(state, {"a": (0.402, 0.0, 0.03)}, now=0.5) == []
+    # 2 cm displacement: one "moved"...
+    out = sc.tracker_tick(state, {"a": (0.42, 0.0, 0.03)}, now=1.5)
+    assert out == [("a", "moved", (0.42, 0.0, 0.03))]
+    # ...and further motion within the emit interval is rate-limited...
+    assert sc.tracker_tick(state, {"a": (0.44, 0.0, 0.03)}, now=1.9) == []
+    # ...then recorded again once the interval has passed.
+    out = sc.tracker_tick(state, {"a": (0.46, 0.0, 0.03)}, now=2.6)
+    assert out == [("a", "moved", (0.46, 0.0, 0.03))]
+    # Still for TRACK_SETTLE_S after moving -> exactly one "settled".
+    assert sc.tracker_tick(state, {"a": (0.46, 0.0, 0.03)}, now=3.0) == []
+    out = sc.tracker_tick(state, {"a": (0.46, 0.0, 0.03)}, now=3.7)
+    assert out == [("a", "settled", (0.46, 0.0, 0.03))]
+    assert sc.tracker_tick(state, {"a": (0.46, 0.0, 0.03)}, now=5.0) == []
+
+
+def test_tracker_vanish_and_forget():
+    state = {}
+    sc.tracker_tick(state, {"a": (0.4, 0.0, 0.03)}, now=0.0)
+    out = sc.tracker_tick(state, {}, now=1.0)
+    assert out == [("a", "vanished", (0.4, 0.0, 0.03))]
+    assert state == {}
+    # forget: a module removal must not produce a vanish afterwards.
+    sc.tracker_tick(state, {"b": (0.4, 0.0, 0.03)}, now=2.0)
+    sc.tracker_forget(state, "b")
+    assert sc.tracker_tick(state, {}, now=3.0) == []
+
+
+def test_tracked_move_is_a_known_event_kind():
+    assert "tracked_move" in sc.EVENT_KINDS
+    record = _record("tracked_move", "moved")
+    assert record["event_kind"] == "tracked_move"
+    assert record["in_camera_view"] is True

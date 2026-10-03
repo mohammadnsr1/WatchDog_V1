@@ -7,6 +7,28 @@ plus zero or more step-scoped findings. Scores verdict, cadence, detection (TP/F
 arming (coverage/provenance/type with WINDOW TIMING enforced), latency, and independence.
 
 USAGE:  python3 watchdog_scorer.py <session_dir> <label.yaml> [--out row.json]
+        python3 watchdog_scorer.py --summarize results.csv [more.csv ...]
+
+SCENARIOS (this scorer covers S1/S2/S3; S4 has its own scorer, s4_scorer.py):
+  S1 = library primitives only; observation only via look() at step boundaries
+  S2 = library primitives + authored monitors (arm_custom_monitor)
+  S3 = authored monitors only
+S2 and S3 may also run continuous watch monitors (purpose="observation").
+
+MONITOR ORIGIN SPLIT (never merged into one accuracy number):
+  - LIBRARY monitors keep the family-based scoring below (family coverage,
+    window timing, registry provenance).
+  - AUTHORED monitors are scored BOOLEAN per injected fault: TP/FP/FN/TN,
+    reported in their own columns (authored_*). No family is inferred for them.
+  - purpose=="observation" monitors (agent-chosen thresholds that only trigger
+    a look, never judge a clause) are EXCLUDED from detection, false-alarm and
+    parameter-accuracy metrics; their count is reported separately.
+  - Release-time fires of authored monitors on the just-released object get
+    their own bucket (authored monitors have no release auto-disarm by design)
+    and are never counted as FP.
+
+Scene-observation quality (intruders, ground truth, engagement) is scored by
+the SEPARATE observation_scorer.py — its metrics live in their own table.
 
 TERMINAL MODEL (post-cadence-change):
   - Final verdict is ALWAYS present: run_verdict.verdict in {conformant, non_conformant,
@@ -62,6 +84,79 @@ FAMILY = {
 FIXTURES = {"base1", "base2"}
 FINDING_VERDICTS = {"non_conformant", "inconclusive"}   # a step verdict that IS a finding
 
+def _origin(p):   return p.get("origin") or "library"
+def _purpose(p):  return p.get("purpose") or "clause"
+
+def _median(xs):
+    xs = sorted(xs)
+    if not xs: return None
+    n = len(xs)
+    return round(xs[n//2] if n % 2 else (xs[n//2 - 1] + xs[n//2]) / 2, 2)
+
+def _p95(xs):
+    xs = sorted(xs)
+    if not xs: return None
+    # nearest-rank p95 (ceil), correct for the small-n lists runs produce
+    import math as _m
+    return round(xs[max(0, _m.ceil(0.95 * len(xs)) - 1)], 2)
+
+
+def score_authored_faults(real_pairs, authored_clause_fires, step_window,
+                          release_windows, violation_occurred,
+                          grace_s=3.0):
+    """Boolean per injected fault for AUTHORED monitors: TP/FP/FN (+TN).
+
+    Shared by watchdog_scorer (S2/S3) and s4_scorer (where ALL monitors are
+    authored). No family is inferred for authored monitors — a fault is either
+    caught by an authored fire or it is not.
+
+    real_pairs            {(step_id, object)} ground-truth violations (label).
+    authored_clause_fires payload dicts (wall_time_iso present), ALREADY
+                          excluding probe fires and purpose=="observation".
+    step_window           callable step_id -> (t0, t1) datetimes (t1 None = run end).
+    release_windows       [(object_id, t0, t1)] spans where an authored fire on
+                          that object is a RELEASE ARTIFACT (authored monitors
+                          have no release auto-disarm by design) — own bucket,
+                          never FP.
+    violation_occurred    label bool, for the TN cell.
+
+    Returns {"tp": [...], "fp": [...], "fn": [...], "release_fires": [...],
+             "tn": bool|None} — tn is only defined on clean runs.
+    """
+    from datetime import timedelta
+    grace = timedelta(seconds=float(grace_s))
+
+    def _fire_row(f):
+        return {"object": f.get("object_id"), "monitor_id": f.get("monitor_id"),
+                "value": f.get("triggering_value"), "threshold": f.get("threshold"),
+                "time": f.get("wall_time_iso")}
+
+    matched_pairs, fp, release_fires = set(), [], []
+    for f in authored_clause_fires:
+        ft, obj = ts(f["wall_time_iso"]), f.get("object_id")
+        if any(o == obj and t0 <= ft <= t1 for (o, t0, t1) in release_windows):
+            release_fires.append(_fire_row(f))
+            continue
+        hit = False
+        for (s, o) in real_pairs:
+            if o != obj and obj is not None:
+                continue
+            t0, t1 = step_window(s)
+            if t0 is None:
+                continue
+            if ft >= t0 - grace and (t1 is None or ft <= t1 + grace):
+                matched_pairs.add((s, o)); hit = True
+        if not hit:
+            fp.append(_fire_row(f))
+    fn = real_pairs - matched_pairs
+    tn = None
+    if not violation_occurred:
+        tn = (len(fp) == 0)
+    def pretty(pairs):
+        return [f"{s}:{o}" for (s, o) in sorted(pairs, key=lambda x: (x[0] or '', x[1] or ''))]
+    return {"tp": pretty(matched_pairs), "fp": fp, "fn": pretty(fn),
+            "release_fires": release_fires, "tn": tn}
+
 def load_jsonl(p):
     p = Path(p)
     return [json.loads(l) for l in p.read_text().splitlines() if l.strip()] if p.exists() else []
@@ -116,6 +211,34 @@ def score_run(session_dir, label):
 
     row = {"run_id": label.get("run_id", Path(session_dir).name),
            "task": label.get("task"), "scenario": label.get("scenario"), "class": label.get("class")}
+    scn = str(label.get("scenario") or "").upper()
+
+    # ---- monitor ORIGIN / PURPOSE partition --------------------------------
+    # Library and authored monitors are scored in SEPARATE columns, never one
+    # merged accuracy number. purpose=="observation" monitors (agent-chosen
+    # look-trigger thresholds) are excluded from detection/false-alarm/parameter
+    # metrics entirely — they are a legitimate observation strategy, scored by
+    # observation_scorer.py.
+    lib_arms         = [a for a in arms if _origin(a) == "library"]
+    auth_arms        = [a for a in arms if _origin(a) == "authored"]
+    obs_arms         = [a for a in auth_arms if _purpose(a) == "observation"]
+    auth_clause_arms = [a for a in auth_arms if _purpose(a) != "observation"]
+    obs_fires        = [f for f in fires if _purpose(f) == "observation"]
+    clause_fires     = [f for f in fires if _purpose(f) != "observation"]
+    row["n_library_arms"]  = len(lib_arms)
+    row["n_authored_arms"] = len(auth_arms)
+    row["n_authored_obs_monitors"] = len({a.get("monitor_id") for a in obs_arms})
+    row["n_observation_fires"] = len(obs_fires)
+
+    # scenario consistency: what was armed must match what the scenario allows
+    scn_warns = []
+    if scn == "S1" and auth_arms:
+        scn_warns.append(f"S1 run has {len(auth_arms)} authored monitor arms — "
+                         "S1 is library-primitives only; check the scenario label / mcp config.")
+    if scn == "S3" and lib_arms:
+        scn_warns.append(f"S3 run has {len(lib_arms)} library monitor arms — "
+                         "S3 is authored-only; check the scenario label / mcp config.")
+    row["scenario_consistency_warning"] = scn_warns or None
 
     # ---- final verdict (ALWAYS present now) --------------------------------
     final = run_v[-1] if run_v else None
@@ -173,7 +296,10 @@ def score_run(session_dir, label):
                 t0 = ts(t); t1 = ts(bs_win[i+1][0]) if i+1 < len(bs_win) else None
                 return t0, t1
         return None, None
-    fires_ev = wd_events(ev, "monitor_fire")
+    # observation-purpose fires never attribute a conformance finding — they are
+    # look triggers, not clause judgements.
+    fires_ev = [e for e in wd_events(ev, "monitor_fire")
+                if _purpose(_pl(e)) != "observation"]
     finding_steps = {sv.get("step_id") for sv in step_v if sv.get("verdict") in FINDING_VERDICTS}
     finding_pairs = set()
     for sid in finding_steps:
@@ -224,32 +350,90 @@ def score_run(session_dir, label):
     def _is_probe(f):
         return (f.get("origin", "library") == "authored"
                 and float(f.get("triggering_value") or 0.0) == 0.0)
-    real_fires  = [f for f in fires if not _is_probe(f)]
-    probe_fires = [f for f in fires if _is_probe(f)]
+    # false-alarm universe = CLAUSE fires only: observation-purpose fires are a
+    # look-trigger strategy, not an alarm about conformance.
+    real_fires  = [f for f in clause_fires if not _is_probe(f)]
+    probe_fires = [f for f in clause_fires if _is_probe(f)]
     n_fires = len(fires)
-    row["n_fires"] = n_fires                     # total, probes included
+    row["n_fires"] = n_fires                     # total, probes + observation included
     row["authored_probe_fires"] = len(probe_fires)
+
+    # RELEASE WINDOWS: authored monitors have no release auto-disarm by design,
+    # so an authored fire on the just-released object during/right after the
+    # release is an artifact of that design, bucketed on its own — never FP,
+    # never a false alarm. Window: release_skill start -1s .. end +5s.
+    from datetime import timedelta as _td
+    release_windows = []
+    rel_open = {}   # object_id -> start time
+    for e in ev["gripper"]:
+        p = e.get("payload", {})
+        if p.get("skill_name") != "release_skill":
+            continue
+        obj = (p.get("params") or {}).get("object_id")
+        t = ts(e["wall_time_iso"])
+        if e.get("event_type") == "skill_start":
+            rel_open[obj] = t
+        elif e.get("event_type") == "skill_end":
+            t0 = rel_open.pop(obj, t)
+            release_windows.append((obj, t0 - _td(seconds=1), t + _td(seconds=5)))
+    for obj, t0 in rel_open.items():   # start with no end: window to +10s
+        release_windows.append((obj, t0 - _td(seconds=1), t0 + _td(seconds=10)))
+
+    def _in_release_window(f):
+        ft, obj = ts(f["wall_time_iso"]), f.get("object_id")
+        return any(o == obj and t0 <= ft <= t1 for (o, t0, t1) in release_windows)
+
     if not label.get("violation_occurred"):
-        row["monitor_false_alarms"] = len(real_fires)   # a REAL fire on a clean run is a false alarm
+        fa = [f for f in real_fires
+              if not (_origin(f) == "authored" and _in_release_window(f))]
+        row["monitor_false_alarms"] = len(fa)    # a REAL clause fire on a clean run
         row["monitor_false_alarm_detail"] = [
             {"object": f.get("object_id"), "type": f.get("monitor_type"),
-             "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in real_fires]
+             "origin": _origin(f),
+             "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in fa]
     else:
         row["monitor_false_alarms"] = None      # fires may be true detections; see detection block
+
+    # ---- AUTHORED monitors: boolean per injected fault (TP/FP/FN/TN) --------
+    # Own columns, never merged with the library family scoring. S1 should have
+    # no authored monitors at all — columns stay n/a there.
+    if scn in ("S2", "S3") or auth_arms:
+        authored_clause_fires = [f for f in real_fires if _origin(f) == "authored"]
+        auth = score_authored_faults(
+            real_pairs, authored_clause_fires, step_window, release_windows,
+            bool(label.get("violation_occurred")),
+            grace_s=float(label.get("boundary_grace_s", 3.0)))
+        row["authored_detection"] = auth
+        row["authored_TP"] = len(auth["tp"]); row["authored_FP"] = len(auth["fp"])
+        row["authored_FN"] = len(auth["fn"]); row["authored_TN"] = auth["tn"]
+        row["authored_release_false_fires"] = len(auth["release_fires"])
+        row["authored_release_fire_detail"] = auth["release_fires"] or None
+    else:
+        row["authored_detection"] = None
+        row["authored_TP"] = row["authored_FP"] = row["authored_FN"] = None
+        row["authored_TN"] = None
+        row["authored_release_false_fires"] = None
 
     # ---- TIME TO VERDICT ---------------------------------------------------
     ttv = None
     if final and ended:
         ttv = (ts(final["wall_time_iso"]) - ts(exec_events(ev, "run_ended")[0]["wall_time_iso"])).total_seconds()
     row["time_to_verdict_s"] = round(ttv, 2) if ttv is not None else None
-    # per-finding latency (fire -> step verdict), for finding runs
-    if finding_steps and fires:
-        fire_ts = sorted(ts(_pl(e)["wall_time_iso"]) for e in wd_events(ev, "monitor_fire"))
+    # per-finding latency (fire -> step verdict), for finding runs. Uses
+    # wall_time_iso ONLY: timestamp_ns is per-process monotonic and must never
+    # be compared across processes. Observation-purpose fires excluded.
+    if finding_steps and clause_fires:
+        fire_ts = sorted(ts(f["wall_time_iso"]) for f in clause_fires)
         gaps = []
         for e in wd_events(ev, "verdict"):
             vt = ts(_pl(e)["wall_time_iso"]); prior = [t for t in fire_ts if t <= vt]
             if prior: gaps.append(round((vt - prior[-1]).total_seconds(), 2))
         row["fire_to_finding_s"] = gaps or None
+        row["fire_to_verdict_median_s"] = _median(gaps)
+        row["fire_to_verdict_p95_s"] = _p95(gaps)
+    else:
+        row["fire_to_verdict_median_s"] = None
+        row["fire_to_verdict_p95_s"] = None
 
     # ---- ARMING: coverage (WINDOW-TIMED), provenance, type -----------------
     expected = label.get("expected_monitors", [])
@@ -452,6 +636,40 @@ def score_run(session_dir, label):
     row["arming_provenance"] = f"{prov_ok}/{prov_total}" if prov_total else "n/a"
     row["arming_provenance_fail"] = prov_fail
 
+    # AUTHORED parameter accuracy: a clause-judging authored monitor's threshold
+    # must trace to the registry like a library one (threshold_verified at arm
+    # time). purpose=="observation" thresholds are AGENT-CHOSEN by design — they
+    # only trigger a look, never judge a clause — so they are reported in their
+    # own count and NEVER counted as parameter errors.
+    ap_total = ap_ok = 0; ap_fail = []
+    for a in auth_clause_arms:
+        if a.get("threshold") is None:    # no scalar threshold: nothing to verify
+            continue
+        obj = _obj(a)
+        if obj in FIXTURES:
+            continue
+        ap_total += 1
+        if a.get("threshold_verified") is True:
+            ap_ok += 1
+        else:
+            ap_fail.append({"object": obj, "monitor_id": a.get("monitor_id"),
+                            "threshold": a.get("threshold"),
+                            "source": a.get("threshold_source"),
+                            "registry_value": a.get("threshold_registry_value")})
+    row["authored_param_accuracy"] = f"{ap_ok}/{ap_total}" if ap_total else "n/a"
+    row["authored_param_fail"] = ap_fail
+    row["agent_chosen_obs_thresholds"] = len(obs_arms)
+
+    # S3 is authored-only: the library family coverage grid does not apply, and
+    # leaving it populated would read as wall-to-wall misses. Blanked AFTER
+    # computation so S1/S2 behavior is untouched.
+    if scn == "S3":
+        row["per_step_coverage"] = []
+        row["stationarity_coverage"] = "n/a"
+        row["grip_coverage"] = "n/a"
+        row["arming_coverage"] = "n/a"
+        row["effort_late"] = []
+
     # ---- INDEPENDENCE ------------------------------------------------------
     exec_status = ended.get("status") if ended else "no_terminal_event"
     row["executor_terminal_status"] = exec_status
@@ -484,16 +702,23 @@ CSV_COLUMNS = [
     "TP_list", "FP_list", "FN_list",
     "scorer_raw_n_TP", "scorer_raw_n_FP", "scorer_raw_n_FN",
     "scorer_raw_TP_list", "scorer_raw_FP_list", "scorer_raw_FN_list",
-    # arming
+    # authored monitors — boolean per injected fault, own columns (never merged
+    # with the library family columns)
+    "n_authored_arms", "authored_TP", "authored_FP", "authored_FN", "authored_TN",
+    "authored_release_false_fires", "authored_param_accuracy",
+    # observation-purpose monitors (agent-chosen thresholds; excluded elsewhere)
+    "n_authored_obs_monitors", "agent_chosen_obs_thresholds", "n_observation_fires",
+    # arming (LIBRARY lane)
     "arming_coverage", "stationarity_coverage", "grip_coverage",
     "arming_provenance", "provenance_fail_objs",
-    # monitor false alarms (specificity)
+    # monitor false alarms (specificity; clause fires only)
     "n_fires", "authored_probe_fires", "monitor_false_alarms",
     # latency / independence
-    "time_to_verdict_s", "independence_gap",
+    "time_to_verdict_s", "fire_to_verdict_median_s", "fire_to_verdict_p95_s",
+    "independence_gap",
     "executor_terminal_status",
     # flags
-    "label_consistency_warning", "label_used",
+    "label_consistency_warning", "scenario_consistency_warning", "label_used",
     # human-owned
     "exclude", "manual_note",
 ]
@@ -521,6 +746,14 @@ def flatten_row(row):
         "scorer_raw_n_TP": len(tp), "scorer_raw_n_FP": len(fp), "scorer_raw_n_FN": len(fn),
         "scorer_raw_TP_list": _joinpairs(tp), "scorer_raw_FP_list": _joinpairs(fp),
         "scorer_raw_FN_list": _joinpairs(fn),
+        "n_authored_arms": row.get("n_authored_arms"),
+        "authored_TP": row.get("authored_TP"), "authored_FP": row.get("authored_FP"),
+        "authored_FN": row.get("authored_FN"), "authored_TN": row.get("authored_TN"),
+        "authored_release_false_fires": row.get("authored_release_false_fires"),
+        "authored_param_accuracy": row.get("authored_param_accuracy"),
+        "n_authored_obs_monitors": row.get("n_authored_obs_monitors"),
+        "agent_chosen_obs_thresholds": row.get("agent_chosen_obs_thresholds"),
+        "n_observation_fires": row.get("n_observation_fires"),
         "arming_coverage": row.get("arming_coverage"),
         "stationarity_coverage": row.get("stationarity_coverage"),
         "grip_coverage": row.get("grip_coverage"),
@@ -530,9 +763,12 @@ def flatten_row(row):
         "authored_probe_fires": row.get("authored_probe_fires"),
         "monitor_false_alarms": row.get("monitor_false_alarms"),
         "time_to_verdict_s": row.get("time_to_verdict_s"),
+        "fire_to_verdict_median_s": row.get("fire_to_verdict_median_s"),
+        "fire_to_verdict_p95_s": row.get("fire_to_verdict_p95_s"),
         "independence_gap": row.get("independence_gap"),
         "executor_terminal_status": row.get("executor_terminal_status"),
         "label_consistency_warning": " | ".join(warn) if warn else "",
+        "scenario_consistency_warning": " | ".join(row.get("scenario_consistency_warning") or []),
         "label_used": row.get("_label_used"),
         "exclude": "",         # human-owned: set to 1 to drop from aggregation
         "manual_note": "",     # human-owned: free text
@@ -554,13 +790,15 @@ def _read_existing(csv_path):
                  f"       before re-scoring, otherwise this run would be appended to a broken table.")
     return [{k: (v or "").strip() for k, v in zip(header, r)} for r in raw[1:]]
 
-def _write_aligned(csv_path, rows):
+def _write_aligned(csv_path, rows, columns=None):
     """Write a column-ALIGNED csv: still comma-separated & parseable, but each field padded to
     its column's max width so it reads like a table in a monospace editor (VSCode). The aggregator
-    (and _read_existing) strip the padding on read, so it round-trips cleanly."""
+    (and _read_existing) strip the padding on read, so it round-trips cleanly.
+    `columns` lets observation_scorer / s4_scorer reuse this with their own tables."""
+    cols = columns or CSV_COLUMNS
     # compute width per column = max(header, all values)
     widths = {}
-    for c in CSV_COLUMNS:
+    for c in cols:
         w = len(c)
         for r in rows:
             w = max(w, len(str(r.get(c, ""))))
@@ -568,18 +806,19 @@ def _write_aligned(csv_path, rows):
     def fmt(vals):
         # pad each cell; last column not padded (avoids trailing spaces on the widest edits)
         cells = []
-        for i, c in enumerate(CSV_COLUMNS):
+        for i, c in enumerate(cols):
             v = str(vals.get(c, ""))
             # quote any value containing a comma (CSV correctness) BEFORE padding
             if "," in v or '"' in v:
                 v = '"' + v.replace('"', '""') + '"'
-            cells.append(v.ljust(widths[c]) if i < len(CSV_COLUMNS)-1 else v)
+            cells.append(v.ljust(widths[c]) if i < len(cols)-1 else v)
         return ", ".join(cells).rstrip()
-    header = {c: c for c in CSV_COLUMNS}
+    header = {c: c for c in cols}
     lines = [fmt(header)] + [fmt(r) for r in rows]
     Path(csv_path).write_text("\n".join(lines) + "\n")
 
-def append_csv(csv_path, flat):
+def append_csv(csv_path, flat, columns=None):
+    cols = columns or CSV_COLUMNS
     csv_path = Path(csv_path)
     rows = _read_existing(csv_path)
     if any(r.get("run_id") == flat["run_id"] for r in rows):
@@ -587,19 +826,89 @@ def append_csv(csv_path, flat):
               f"DUPLICATE row. (Append-only expects one row per run; edit the CSV instead of "
               f"re-scoring, or change run_id.)")
     # keep existing rows as-is (preserving any human edits), append the new one, rewrite aligned
-    rows.append({c: flat.get(c, "") for c in CSV_COLUMNS})
-    _write_aligned(csv_path, rows)
+    rows.append({c: flat.get(c, "") for c in cols})
+    _write_aligned(csv_path, rows, cols)
     return csv_path
+
+
+# ---------------------------------------------------------------------------
+# Per-scenario summary over one or more results.csv files (after any hand
+# corrections — the aggregator reads the CSV and never recomputes).
+# ---------------------------------------------------------------------------
+def summarize(csv_paths):
+    rows = []
+    for p in csv_paths:
+        rows += _read_existing(p)
+    rows = [r for r in rows if str(r.get("exclude", "")).strip() not in ("1", "true", "True", "x")]
+    by_scn = defaultdict(list)
+    for r in rows:
+        by_scn[str(r.get("scenario", "?")).upper()].append(r)
+
+    def _num(r, k):
+        v = str(r.get(k, "")).strip()
+        try: return float(v)
+        except ValueError: return None
+    def _nums(rs, k): return [x for x in (_num(r, k) for r in rs) if x is not None]
+    def _frac(rs, k):
+        """average of 'a/b' cells, pooled numerator/denominator."""
+        a = b = 0
+        for r in rs:
+            cell = str(r.get(k, "")).strip()
+            if "/" in cell:
+                try:
+                    x, y = cell.split("/"); a += int(x); b += int(y)
+                except ValueError: pass
+        return f"{a}/{b}" if b else "n/a"
+    def _avg(xs): return round(sum(xs)/len(xs), 3) if xs else None
+
+    print(f"\n{'='*78}\n  PER-SCENARIO SUMMARY   ({len(rows)} runs from {len(csv_paths)} csv)\n{'='*78}")
+    for scn in sorted(by_scn):
+        rs = by_scn[scn]
+        n_vc = sum(1 for r in rs if str(r.get("verdict_correct")) == "True")
+        print(f"\n  {scn}  ({len(rs)} runs)")
+        print(f"    verdict_correct        : {n_vc}/{len(rs)}")
+        print(f"    detection recall/prec  : avg {_avg(_nums(rs,'recall'))} / {_avg(_nums(rs,'precision'))}")
+        print(f"    verdict TP/FP/FN       : {int(sum(_nums(rs,'n_TP')))}/{int(sum(_nums(rs,'n_FP')))}/{int(sum(_nums(rs,'n_FN')))}")
+        if scn in ("S2", "S3", "S4"):
+            atp, afp = sum(_nums(rs,'authored_TP')), sum(_nums(rs,'authored_FP'))
+            afn = sum(_nums(rs,'authored_FN'))
+            tns = [str(r.get('authored_TN')) for r in rs if str(r.get('authored_TN')).strip() not in ('', 'None')]
+            print(f"    authored TP/FP/FN      : {int(atp)}/{int(afp)}/{int(afn)}   TN(clean runs): "
+                  f"{sum(1 for t in tns if t=='True')}/{len(tns)}")
+            print(f"    authored release fires : {int(sum(_nums(rs,'authored_release_false_fires')))}")
+            print(f"    authored param accuracy: {_frac(rs,'authored_param_accuracy')}   "
+                  f"agent-chosen obs thresholds: {int(sum(_nums(rs,'agent_chosen_obs_thresholds')))}")
+        if scn != "S3":
+            print(f"    library coverage       : {_frac(rs,'arming_coverage')}   provenance: {_frac(rs,'arming_provenance')}")
+        print(f"    monitor false alarms   : {int(sum(_nums(rs,'monitor_false_alarms')))} "
+              f"(over {sum(1 for r in rs if str(r.get('monitor_false_alarms','')).strip() not in ('','None'))} clean runs)")
+        med = _nums(rs, 'fire_to_verdict_median_s')
+        mm = _median(med)
+        print(f"    fire->verdict latency  : median-of-medians "
+              f"{f'{mm}s' if mm is not None else '-'}   "
+              f"p95s seen: {_nums(rs,'fire_to_verdict_p95_s') or '-'}")
+        print(f"    time_to_verdict        : avg {_avg(_nums(rs,'time_to_verdict_s'))}s")
+        warn = sum(1 for r in rs for k in ("label_consistency_warning","scenario_consistency_warning")
+                   if str(r.get(k, "")).strip())
+        if warn: print(f"    !! rows with warnings  : {warn}")
+    print(f"\n{'='*78}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("session_dir")
+    ap.add_argument("session_dir", nargs="?", default=None)
     ap.add_argument("label", nargs="?", default=None,
                     help="label YAML; if omitted, the single *.yaml inside session_dir is used")
     ap.add_argument("--out", default=None)
     ap.add_argument("--csv", default=None, help="results.csv path (default: <class folder>/results.csv)")
+    ap.add_argument("--summarize", nargs="+", default=None, metavar="CSV",
+                    help="print a per-scenario summary over these results.csv files and exit")
     a = ap.parse_args()
+    if a.summarize:
+        summarize(a.summarize)
+        return
+    if not a.session_dir:
+        ap.error("session_dir is required (or use --summarize)")
     label_path = a.label
     if label_path is None:
         yamls = sorted(Path(a.session_dir).glob("*.yaml")) + sorted(Path(a.session_dir).glob("*.yml"))
@@ -657,6 +966,30 @@ def main():
     if row.get('authored_probe_fires'):
         print(f"    authored probe/debug fires (excluded from false alarms): "
               f"{row.get('authored_probe_fires')}")
+
+    # authored lane (S2/S3): boolean per injected fault, own columns
+    if row.get("authored_detection") is not None:
+        ad = row["authored_detection"]
+        print(f"\n  AUTHORED MONITORS  (boolean per injected fault; "
+              f"{row.get('n_authored_arms')} arms, "
+              f"{row.get('n_authored_obs_monitors')} observation-purpose)")
+        print(f"    TP={row.get('authored_TP')}  FP={row.get('authored_FP')}  "
+              f"FN={row.get('authored_FN')}  TN={row.get('authored_TN')}")
+        if ad.get("fn"):
+            print(f"    {BAD}missed faults: {ad['fn']}{X}")
+        if ad.get("fp"):
+            print(f"    {BAD}false fires  : "
+                  f"{[(f['object'], f['monitor_id']) for f in ad['fp']]}{X}")
+        if row.get("authored_release_false_fires"):
+            print(f"    release-time fires (own bucket, not FP): "
+                  f"{row.get('authored_release_false_fires')}")
+        print(f"    param accuracy={row.get('authored_param_accuracy')}   "
+              f"agent-chosen observation thresholds (exempt): "
+              f"{row.get('agent_chosen_obs_thresholds')}")
+    scn_warn = row.get("scenario_consistency_warning")
+    if scn_warn:
+        print(f"\n  {BAD}!! SCENARIO WARNING:{X}")
+        for wln in scn_warn: print(f"     - {wln}")
 
     # arming coverage with the actual misses laid out
     print(f"\n  ARMING")

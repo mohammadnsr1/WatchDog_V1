@@ -525,6 +525,12 @@ def prim_world_position(prim: Any) -> tuple[float, float, float] | None:
         return None
 
 
+# Set by inject_scenarios so its pose tracker can forget a prim THIS module
+# removes (the removal writes its own record; a tracker "vanished" on top of
+# it would be a duplicate). Called with the prim name just before removal.
+REMOVAL_LISTENER: Callable[[str], None] | None = None
+
+
 def _apply_remove(name: str) -> tuple[str, tuple[float, float, float] | None]:
     """Remove the prim; returns (path, its LAST world position before removal)
     so the ground-truth record can carry where the thing was when it vanished."""
@@ -534,6 +540,11 @@ def _apply_remove(name: str) -> tuple[str, tuple[float, float, float] | None]:
     if not prim:
         raise ValueError(f"{path} does not exist.")
     last_position = prim_world_position(prim)
+    if REMOVAL_LISTENER is not None:
+        try:
+            REMOVAL_LISTENER(name)
+        except Exception:
+            pass
     stage.RemovePrim(path)
     return path, last_position
 

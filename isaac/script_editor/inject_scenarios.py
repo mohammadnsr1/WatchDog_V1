@@ -58,6 +58,23 @@ per-event_kind actions (the `action` field):
     removal               : "removed" (remove()/cancel_all()); cancel_all
                             also writes "cancelled" for tasks stopped before
                             they ever created a prim
+    tracked_move          : "moved" / "settled" / "vanished" -- written by the
+                            PER-FRAME POSE TRACKER, which watches every prim
+                            under /World/WatchdogIntruders regardless of what
+                            moved it (physics drift, arm contact, an operator
+                            dragging it in the viewport). "moved" is emitted
+                            when a prim is > TRACK_MOVE_EPS_M from its last
+                            recorded position (rate-limited to one record per
+                            TRACK_EMIT_INTERVAL_S while in motion), "settled"
+                            once it has been still for TRACK_SETTLE_S after
+                            moving, "vanished" if a tracked prim disappears
+                            without a removal record (e.g. deleted in the UI;
+                            a module remove() writes its own record and the
+                            tracker forgets the prim instead). Ground truth
+                            therefore captures moves nobody commanded -- the
+                            gap found when a hand-dragged cube produced a true
+                            object_moved observation with nothing to score it
+                            against.
 
 visit() extras: dwell_position_world, dwell_s, speed_mps, collide,
 entry_offset_world.
@@ -94,6 +111,7 @@ import inject_intruder as ii
 
 EVENT_KINDS = (
     "foreign_object", "transient_visitor", "external_displacement", "removal",
+    "tracked_move",
 )
 SCENARIO_IMPACTS = ("benign", "violation")
 VISIT_SHAPES = ("hand", "person")
@@ -241,6 +259,69 @@ def visit_geometry(
             "entry_offset": off}
 
 
+# ---------------------------------------------------------------------------
+# Per-frame pose tracker (pure core). The Isaac layer samples every prim under
+# /World/WatchdogIntruders and feeds the positions here; this function decides
+# what to record. Pure and stateless apart from the caller-owned `state` dict,
+# so the whole policy is unit-testable offline.
+# ---------------------------------------------------------------------------
+
+TRACK_MOVE_EPS_M = 0.005      # displacement from the last RECORDED position
+TRACK_EMIT_INTERVAL_S = 1.0   # at most one "moved" record per prim per second
+TRACK_SETTLE_S = 1.0          # still this long after moving -> one "settled"
+TRACK_JITTER_EPS_M = 0.0005   # below this per-frame delta counts as still
+
+
+def _dist3(a, b) -> float:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
+
+
+def tracker_tick(
+    state: dict[str, dict[str, Any]],
+    observed: dict[str, tuple[float, float, float]],
+    now: float,
+) -> list[tuple[str, str, tuple[float, float, float] | None]]:
+    """Advance tracker state; return [(name, action, position)] to record.
+
+    state maps prim name -> {"ref": last recorded pos, "last_pos": last frame
+    pos, "last_motion_t": when it last visibly moved, "last_emit_t": when a
+    record was last written, "was_moving": bool}. A NEW name is adopted
+    silently (its creation record was already written by whatever placed it).
+    """
+    out: list[tuple[str, str, tuple[float, float, float] | None]] = []
+
+    for name in list(state):
+        if name not in observed:
+            entry = state.pop(name)
+            out.append(("vanished", name, entry.get("last_pos")))
+    for name, pos in observed.items():
+        entry = state.get(name)
+        if entry is None:
+            state[name] = {"ref": pos, "last_pos": pos, "last_motion_t": now,
+                           "last_emit_t": now, "was_moving": False}
+            continue
+        if _dist3(pos, entry["last_pos"]) > TRACK_JITTER_EPS_M:
+            entry["last_motion_t"] = now
+        entry["last_pos"] = pos
+
+        displaced = _dist3(pos, entry["ref"]) > TRACK_MOVE_EPS_M
+        if displaced and now - entry["last_emit_t"] >= TRACK_EMIT_INTERVAL_S:
+            out.append(("moved", name, pos))
+            entry.update(ref=pos, last_emit_t=now, was_moving=True)
+        elif (entry["was_moving"]
+              and now - entry["last_motion_t"] >= TRACK_SETTLE_S):
+            out.append(("settled", name, pos))
+            entry.update(ref=pos, last_emit_t=now, was_moving=False)
+    # out was built vanish-first; reorder to (action, name, pos) -> callers
+    # expect (name, action, pos)
+    return [(name, action, pos) for action, name, pos in out]
+
+
+def tracker_forget(state: dict[str, Any], name: str) -> None:
+    """Drop a prim the MODULE is removing, so no spurious vanish record."""
+    state.pop(name, None)
+
+
 def scenario_record(
     *,
     scenario: str,
@@ -382,6 +463,10 @@ class _Runtime:
         self.created: dict[str, dict[str, str]] = {}
         self.articulation: Any = None
         self.articulation_path: str | None = None
+        # pose tracker (see tracker_tick): name -> tracking state
+        self.tracker: dict[str, dict[str, Any]] = {}
+        self.frame_count = 0
+        self.tracker_error_printed = False
 
     def cancel_subscription(self) -> None:
         self.subscription = None  # dropping the handle unsubscribes
@@ -507,8 +592,56 @@ def _submit(task: dict[str, Any]) -> dict[str, Any]:
     return task
 
 
+# The tracker samples every N frames (~10 Hz at 60 fps): per-frame USD reads
+# over a handful of prims are cheap, but there is no reason to pay them 60x.
+TRACK_DECIMATE_FRAMES = 6
+
+
+def _tracker_frame(now: float) -> None:
+    """Sample every intruder prim's world position and record uncommanded
+    motion (physics drift, arm contact, viewport drags) into ground truth."""
+    try:
+        stage = ii._stage()
+        root = stage.GetPrimAtPath(ii.INTRUDER_ROOT)
+        observed: dict[str, tuple[float, float, float]] = {}
+        if root:
+            for child in root.GetChildren():
+                name = child.GetName()
+                meta = _RUNTIME.created.get(name)
+                # Visit prims are animated BY this module every frame; their
+                # motion is already fully recorded by the visit phase records.
+                if meta and meta.get("scenario") == "visit":
+                    continue
+                position = ii.prim_world_position(child)
+                if position is not None:
+                    observed[name] = position
+        emits = tracker_tick(_RUNTIME.tracker, observed, now)
+        if not emits:
+            return
+        session_dir = str(ii.resolve_session_dir())
+        for name, action, position in emits:
+            meta = _RUNTIME.created.get(name, {})
+            _write(scenario_record(
+                scenario="tracker", event_kind="tracked_move",
+                episode_id=meta.get("episode_id", "untracked"),
+                action=action, name=name,
+                prim_path=f"{ii.INTRUDER_ROOT}/{name}",
+                session_dir=session_dir, position_xyz_world=position,
+                notes=("pose tracker: prim disappeared without a removal "
+                       "record" if action == "vanished" else
+                       "pose tracker: motion not commanded by this module"),
+            ))
+    except Exception as exc:
+        if not _RUNTIME.tracker_error_printed:
+            _RUNTIME.tracker_error_printed = True
+            print(f"[inject_scenarios] tracker error (reported once): {exc}")
+
+
 def _on_update(_event: Any = None) -> None:
     now = time.monotonic()
+    _RUNTIME.frame_count += 1
+    if _RUNTIME.frame_count % TRACK_DECIMATE_FRAMES == 0:
+        _tracker_frame(now)
     done: list[dict[str, Any]] = []
     for task in list(_RUNTIME.tasks):
         try:
@@ -974,6 +1107,7 @@ def remove(
 
     def run(_task: dict[str, Any]) -> str:
         session_dir = ii.resolve_session_dir()
+        tracker_forget(_RUNTIME.tracker, name)
         path, last_position = ii._apply_remove(name)
         _RUNTIME.created.pop(name, None)
         _write(scenario_record(
@@ -1015,6 +1149,7 @@ def cancel_all() -> None:
     for name, meta in list(_RUNTIME.created.items()):
         prim = stage.GetPrimAtPath(meta["prim_path"])
         last_position = ii.prim_world_position(prim) if prim else None
+        tracker_forget(_RUNTIME.tracker, name)
         if prim:
             stage.RemovePrim(meta["prim_path"])
         _RUNTIME.created.pop(name, None)
@@ -1030,10 +1165,22 @@ def cancel_all() -> None:
           "created prims removed.")
 
 
+# Inside Isaac: start the frame subscription NOW so the pose tracker runs from
+# module import, not from the first scenario call, and let inject_intruder's
+# own remove() tell the tracker to forget a prim it is removing. Outside Isaac
+# (offline tests) the omni import fails and both lines are no-ops.
+try:
+    _ensure_subscription()
+    ii.REMOVAL_LISTENER = lambda name: tracker_forget(_RUNTIME.tracker, name)
+    print("[inject_scenarios] pose tracker active over " + ii.INTRUDER_ROOT)
+except Exception:
+    pass
+
+
 __all__ = [
     "EVENT_KINDS", "MIN_EDGE_MARGIN_PX", "PRESETS", "SCENARIO_IMPACTS",
     "VISIT_PHASES", "VISIT_SHAPES", "ViewRefusal", "cancel_all", "check_view",
     "new_episode_id", "nudge_object", "parse_start", "place_object",
     "presets", "remove", "scenario_record", "start_trigger_text",
-    "visit", "visit_geometry",
+    "visit", "visit_geometry", "tracker_tick", "tracker_forget",
 ]

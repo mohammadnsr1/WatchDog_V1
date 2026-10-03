@@ -34,6 +34,18 @@ from robot_backend.contracts.schema import (
 RED_CUBE_STEP_SPEC = {"step_id": "pick_red_cube", "object_id": "red_cube", "grasp_width_m": 0.06}
 GREEN_CUBE_STEP_SPEC = {"step_id": "pick_green_cube", "object_id": "green_cube", "grasp_width_m": 0.04}
 
+_REGISTRY_FILE = Path(__file__).resolve().parents[1] / "config" / "model_registry.yaml"
+
+
+def _registry_spec(object_id: str) -> dict:
+    """The object's live spec block. The registry-backed tests below compare
+    the CONTRACT against THIS, not against hardcoded numbers: the cube values
+    were deliberately retuned once already (0.18 -> 70/95/130) and hardcoded
+    expectations turned five loader tests into permanent known-failures that
+    masked real regressions. What the loader owes is a faithful mapping."""
+    data = yaml.safe_load(_REGISTRY_FILE.read_text(encoding="utf-8"))
+    return data["objects"][object_id]["spec"]
+
 
 @pytest.fixture(scope="module")
 def red_cube_contract() -> PickContract:
@@ -138,29 +150,36 @@ class TestLoadFromRegistry:
         assert lift_clause.threshold == pytest.approx(0.02)
         assert lift_clause.comparison == Comparison.GE
 
-    def test_green_cube_has_lower_force_limit(
+    def test_grasp_effort_invariant_matches_each_cubes_registry_limit(
         self,
         red_cube_contract: PickContract,
         green_cube_contract: PickContract,
     ) -> None:
-        # invariants[0] is grasp_effort_instantaneous (spec.grasp.force_threshold_n) —
-        # there is no separate hardware force limit; the registry defines a lower
-        # effort ceiling for the smaller/lighter green cube.
-        red_force = red_cube_contract.invariants[0].threshold
-        green_force = green_cube_contract.invariants[0].threshold
-        assert green_force < red_force
+        # invariants[0] is grasp_effort_instantaneous, sourced from
+        # spec.limits.max_clamp_effort. The old assertion (green < red) pinned
+        # an ordering of values that were later retuned; the loader's actual
+        # obligation is that each contract carries ITS object's registry limit.
+        for object_id, contract in (("red_cube", red_cube_contract),
+                                    ("green_cube", green_cube_contract)):
+            assert contract.invariants[0].threshold == pytest.approx(
+                _registry_spec(object_id)["limits"]["max_clamp_effort"]
+            ), object_id
 
     # ------------------------------------------------------------------
     # force_threshold_n and new clauses
     # ------------------------------------------------------------------
 
     def test_red_cube_force_threshold_n(self, red_cube_contract: PickContract) -> None:
-        # From registry spec.grasp.force_threshold_n: 0.18
-        assert red_cube_contract.force_threshold_n == pytest.approx(0.18)
+        # From registry spec.grasp.force_threshold_n, read live.
+        assert red_cube_contract.force_threshold_n == pytest.approx(
+            _registry_spec("red_cube")["grasp"]["force_threshold_n"]
+        )
 
     def test_green_cube_force_threshold_n(self, green_cube_contract: PickContract) -> None:
-        # From registry spec.grasp.force_threshold_n: 0.18
-        assert green_cube_contract.force_threshold_n == pytest.approx(0.18)
+        # From registry spec.grasp.force_threshold_n, read live.
+        assert green_cube_contract.force_threshold_n == pytest.approx(
+            _registry_spec("green_cube")["grasp"]["force_threshold_n"]
+        )
 
     def test_green_cube_force_threshold_matches_red(
         self,
@@ -301,8 +320,10 @@ class TestLoadFromRegistry:
             if c.field == "grasp_effort_instantaneous"
         )
         assert clause.comparison == Comparison.LE
-        # Threshold sourced from spec.grasp.force_threshold_n = 0.18
-        assert clause.threshold == pytest.approx(0.18)
+        # Threshold sourced from spec.limits.max_clamp_effort, read live.
+        assert clause.threshold == pytest.approx(
+            _registry_spec("red_cube")["limits"]["max_clamp_effort"]
+        )
         assert clause.unit == "sim_effort"
 
     def test_grasp_effort_cap_matches_per_object_registry_values(
@@ -318,7 +339,13 @@ class TestLoadFromRegistry:
             c.threshold for c in green_cube_contract.invariants
             if c.field == "grasp_effort_instantaneous"
         )
-        assert green_cap == red_cap == pytest.approx(0.18)
+        # Per-object values, read live (the two cubes deliberately differ).
+        assert red_cap == pytest.approx(
+            _registry_spec("red_cube")["limits"]["max_clamp_effort"]
+        )
+        assert green_cap == pytest.approx(
+            _registry_spec("green_cube")["limits"]["max_clamp_effort"]
+        )
 
     def test_missing_object_raises(self) -> None:
         step_spec = {"step_id": "x", "object_id": "no_such_object", "grasp_width_m": 0.05}
