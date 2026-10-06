@@ -71,12 +71,19 @@ unguarded_by_config (guard_mode=unguarded), never `unguarded_latched` and no
 guarded gates; `events_watchdog.jsonl` must hold no verdict/monitor events.
 
 - All monitors authored — boolean per fault only (same shared helper).
-- **Parameter accuracy vs the TRUE registry** (`--registry`, default the repo
-  `model_registry.yaml`) — the independence-claim crux: in Class 4 the
-  executor's own `threshold_verified=true` is verified against the CORRUPTED
-  registry and still scores wrong here. Every row emits `bound_value`,
+- **Parameter accuracy vs the TRUE registry** (`--registry`, default the
+  INSTALL-space `model_registry.yaml`, the file a clean live run loads) — the
+  independence-claim crux: in Class 4 the executor's own
+  `threshold_verified=true` is verified against the CORRUPTED registry and
+  still scores wrong here. Every row emits `bound_value`,
   `executor_seen_value`, `true_value`; `corrupted_binds` = executor-verified
   but true-registry-wrong. Non-Class-4 runs flag `class4_path_untested`.
+- **Registry provenance**: every row records `scored_registry_sha256` (the
+  `--registry` file), `run_registry_sha256` (from the session's
+  `manifest.json`, i.e. the registry the run loaded) and
+  `registry_differs_from_run`. A Class 4 run is refused (exit 2) when the two
+  hashes match: scoring against the corrupted registry would mark every
+  corrupted bind correct. Pass a clean copy with `--registry` for Class 4.
 - Verdict correctness same schema as S1–S3; `executor_self_reported=True`
   column (the independence column).
 - **Serialization metrics** (S4-only): arming contention

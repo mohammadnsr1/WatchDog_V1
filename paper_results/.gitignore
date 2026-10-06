@@ -1,0 +1,16 @@
+# Session artifacts never belong in paper_results/ — see README.md.
+# These catch them if one is copied in by mistake.
+*.mcap
+*.db3
+*.png
+*.jpg
+*.jpeg
+events_*.jsonl
+mcp_calls_*.jsonl
+
+# Scorer output and batch metadata stay tracked.
+!*.csv
+!*.json
+!*.yaml
+!*.md
+!.gitkeep

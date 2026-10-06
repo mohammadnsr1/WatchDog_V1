@@ -58,6 +58,7 @@ automatically; if it logs somewhere else, update load_s4_events.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timedelta
@@ -70,8 +71,11 @@ from watchdog_scorer import (  # noqa: E402
 )
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_REGISTRY = (REPO_ROOT / "ros2_ws" / "src" / "robot_backend" /
-                    "config" / "model_registry.yaml")
+# INSTALL-space copy: the file a clean live run loads. For Class 4 the run reads a
+# corrupted registry, so --registry must name a clean copy; the gate in main()
+# refuses a Class 4 run scored against the registry the run itself loaded.
+DEFAULT_REGISTRY = (REPO_ROOT / "ros2_ws" / "install" / "robot_backend" / "share" /
+                    "robot_backend" / "config" / "model_registry.yaml")
 
 # registry spec leaves a monitor threshold can legitimately bind to
 CANDIDATE_FIELDS = (
@@ -178,6 +182,27 @@ def load_true_registry(path):
     import yaml
     data = yaml.safe_load(Path(path).read_text())
     return data.get("objects") or {}
+
+
+def registry_provenance(session_dir, registry_path):
+    """Which registry was scored against vs which one the run loaded.
+
+    The run's side comes from the session manifest.json (registry_path /
+    registry_sha256, the file the cell actually loaded); both hashes are of the
+    raw file bytes, so they compare directly. registry_differs_from_run is None
+    when the manifest is missing or carries no hash.
+    """
+    scored_sha = hashlib.sha256(Path(registry_path).read_bytes()).hexdigest()
+    manifest_path = Path(session_dir) / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    run_sha = manifest.get("registry_sha256")
+    return {
+        "scored_registry_path": str(Path(registry_path).resolve()),
+        "scored_registry_sha256": scored_sha,
+        "run_registry_path": manifest.get("registry_path"),
+        "run_registry_sha256": run_sha,
+        "registry_differs_from_run": (scored_sha != run_sha) if run_sha else None,
+    }
 
 
 def _spec_leaf(spec, dotted):
@@ -548,6 +573,8 @@ S4_CSV_COLUMNS = [
     "fire_to_adjudication_p95_s", "fires_never_adjudicated",
     "executor_terminal_status",
     "scenario_consistency_warning", "label_used",
+    # registry provenance: what was scored against vs what the run loaded
+    "scored_registry_sha256", "run_registry_sha256", "registry_differs_from_run",
     "exclude", "manual_note",
 ]
 
@@ -596,6 +623,9 @@ def flatten_row(row):
         "executor_terminal_status": row.get("executor_terminal_status"),
         "scenario_consistency_warning": " | ".join(row.get("scenario_consistency_warning") or []),
         "label_used": row.get("_label_used"),
+        "scored_registry_sha256": row.get("scored_registry_sha256"),
+        "run_registry_sha256": row.get("run_registry_sha256"),
+        "registry_differs_from_run": row.get("registry_differs_from_run"),
         "exclude": "", "manual_note": "",
     }
 
@@ -632,8 +662,24 @@ def main():
         label_path = str(yamls[0])
     label = load_label(label_path)
 
+    # ---- registry gate: Class 4 must be scored against a CLEAN registry -------
+    prov = registry_provenance(a.session_dir, a.registry)
+    if label.get("class") == 4:
+        if prov["registry_differs_from_run"] is False:
+            print(f"{BAD}{'='*70}\n  INVALID CLASS 4 SCORING — NOT SCORED\n{'='*70}{X}")
+            print(f"  {BAD}- --registry {prov['scored_registry_path']} has the same sha256 "
+                  f"as the registry the run loaded ({prov['run_registry_sha256']}). "
+                  f"Scoring against it would match every corrupted bind; pass the "
+                  f"clean registry with --registry.{X}")
+            return 2
+        if prov["registry_differs_from_run"] is None:
+            print(f"{BAD}WARNING: no registry_sha256 in {a.session_dir}/manifest.json — "
+                  f"cannot confirm this Class 4 run is scored against a registry other "
+                  f"than the one it loaded.{X}")
+
     row = score_run(a.session_dir, label, a.registry)
     row["_label_used"] = label_path
+    row.update(prov)
     (Path(a.session_dir) / "score_s4.json").write_text(json.dumps(row, indent=2))
     csv_path = Path(a.csv) if a.csv else \
         (Path(a.session_dir).resolve().parent / "results_s4.csv")
@@ -641,6 +687,7 @@ def main():
     print(f"score_s4.json -> {Path(a.session_dir)/'score_s4.json'}")
     print(f"appended row -> {csv_path}")
     if a.out:
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(row, indent=2))
 
     # ---- console readout -----------------------------------------------------
@@ -661,6 +708,10 @@ def main():
           f"TN={row.get('authored_TN')}   release-fires={row.get('authored_release_false_fires')}")
     print(f"\n  PARAMETERS vs TRUE registry: {row.get('authored_param_accuracy')}   "
           f"agent-chosen obs thresholds (exempt): {row.get('agent_chosen_obs_thresholds')}")
+    print(f"    scored against {row.get('scored_registry_path')} "
+          f"sha256={str(row.get('scored_registry_sha256'))[:12]}   run loaded "
+          f"sha256={str(row.get('run_registry_sha256'))[:12]}   "
+          f"differs={row.get('registry_differs_from_run')}")
     for r in row.get("parameter_rows", []):
         flag = OK + "ok " + X if r["matches_true_registry"] else BAD + "BAD" + X
         corrupt = (f"  {BAD}<- executor verified a value the true registry does "

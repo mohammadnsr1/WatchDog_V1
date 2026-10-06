@@ -5,7 +5,7 @@ operator's ground truth. SEPARATE from conformance scoring (watchdog_scorer.py /
 s4_scorer.py): its metrics live in their own table and are reported separately.
 
 USAGE:  python3 observation_scorer.py <session_dir> [--role watchdog|executor]
-                                      [--csv observation_results.csv]
+                                      [--csv observation_results.csv] [--out row.json]
         --role executor scores an S4 session (same metrics, so scene observation
         is comparable across all four scenarios).
 
@@ -455,6 +455,8 @@ def main():
     ap.add_argument("--csv", default=None,
                     help="observation_results.csv path "
                          "(default: <class folder>/observation_results.csv)")
+    ap.add_argument("--out", default=None,
+                    help="also write the JSON record here (the session copy is always written)")
     a = ap.parse_args()
 
     row = score_observation(a.session_dir, a.role)
@@ -465,6 +467,10 @@ def main():
     append_csv(csv_path, flatten_obs_row(row, a.scenario), OBS_CSV_COLUMNS)
     print(f"observation_score.json -> {out_path}")
     print(f"appended row -> {csv_path}")
+    if a.out:
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(row, indent=2))
+        print(f"wrote {a.out}")
 
     OK, BAD, HL, X = "\033[92m", "\033[91m", "\033[96m", "\033[0m"
     print("\n" + "=" * 70)

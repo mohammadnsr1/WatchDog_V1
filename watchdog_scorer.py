@@ -815,6 +815,7 @@ def _write_aligned(csv_path, rows, columns=None):
         return ", ".join(cells).rstrip()
     header = {c: c for c in cols}
     lines = [fmt(header)] + [fmt(r) for r in rows]
+    Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
     Path(csv_path).write_text("\n".join(lines) + "\n")
 
 def append_csv(csv_path, flat, columns=None):
@@ -932,7 +933,9 @@ def main():
     append_csv(csv_path, flat)
     print(f"score.json -> {Path(a.session_dir)/'score.json'}")
     print(f"appended row -> {csv_path}")
-    if a.out: Path(a.out).write_text(out); print(f"wrote {a.out}")
+    if a.out:
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(out); print(f"wrote {a.out}")
 
     # ---- SCORE-FRESH CONSOLE READOUT ----
     W, X = "\033[0m", "\033[0m"
