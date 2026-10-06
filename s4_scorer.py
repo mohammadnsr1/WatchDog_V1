@@ -34,7 +34,21 @@ SCORING:
      S1–S3: arming contention, unmonitored steps, fire-to-adjudication latency
      (trigger -> next get_monitor_fires drain). Engine-level halting is
      identical in S4 and S1–S3; the measured difference is adjudication
-     latency and independence, not halt speed.
+     latency and independence, not halt speed. NOTE n_unmonitored_steps is
+     "any clause monitor live at all" — a serialization statistic, not a
+     coverage check; per-duty coverage is item 6.
+  6. Arming coverage against the label's expected_monitors (object, kind,
+     window) — the same ground-truth schema as the S1–S3 labels. S4 monitors
+     are authored, so kind cannot come from monitor_type; a monitor COUNTS
+     toward a duty kind only if the saved source that actually ran (matched
+     to the arm event by code_sha256) reads the channels that kind requires
+     (see _KIND_READS). That is measured from the run's own artifact, not
+     inferred from names — but it is still a textual read of the source, so
+     every duty row carries the monitor it credited and the misses are
+     listed for hand review. First live S4 run (20261006T215544Z) showed why
+     the coarse check alone is not enough: base1/base2 were never monitored
+     and no grasp-retention monitor was ever armed, yet four whole-run
+     bystander monitors kept "unmonitored steps" at zero.
   5. Scene observation: run the SAME observation scorer as S1–S3
      (observation_scorer.py --role executor) so observation is comparable
      across all four scenarios. Not duplicated here.
@@ -448,7 +462,193 @@ def score_run(session_dir, label, registry_path):
 
     # ---- 4. serialization metrics (the S4-specific contribution) -------------
     row.update(serialization_metrics(session_dir, events, arms, fires, bs))
+
+    # ---- 6. arming coverage vs expected_monitors ------------------------------
+    row.update(score_coverage(
+        session_dir, events, label, label.get("boundary_grace_s", 3.0)))
     return row
+
+
+# ---------------------------------------------------------------------------
+# 6. arming coverage vs the label's expected_monitors (authored-only lane)
+# ---------------------------------------------------------------------------
+# What a monitor's source must READ for it to count toward a duty kind. A
+# monitor that never reads the object's world pose cannot be holding its
+# stationarity duty; one that never reads a joint cannot be watching clamp
+# effort; one that never reads a gripper/cell frame or a TF transform cannot
+# be watching grasp retention. Matching is textual over the saved source that
+# actually ran (sha-pinned), so it is auditable; the per-duty rows name the
+# monitor credited.
+_KIND_READS = {
+    "position_static":    ("object_pose",),
+    "clamp_effort":       (".joint(", ".joint_window("),
+    "grip_relative_pose": (".frame_pose", ".transform("),
+}
+
+
+def _authored_sources_by_sha(session_dir):
+    import hashlib
+    out = {}
+    mon_dir = Path(session_dir) / "authored_monitors"
+    if mon_dir.is_dir():
+        for path in sorted(mon_dir.glob("*.py")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            out[hashlib.sha256(text.encode("utf-8")).hexdigest()] = text
+    return out
+
+
+def score_coverage(session_dir, events, label, grace_s):
+    """Per-duty arming coverage against the label's expected_monitors.
+
+    Windows:
+      whole_run      first begin_step -> last end_step (the executor's own
+                     wind-down after the last step — final checks, verdict,
+                     disarm_all — is not exposure)
+      while_inactive every step whose active object is not the duty's object
+      held_span      grasp confirm (grasp_skill skill_end ok, else its start)
+                     -> release_skill skill_start, per grasp of the object
+
+    A duty is covered over a window when one clause-purpose monitor on the
+    duty's object, whose saved source reads what the kind requires
+    (_KIND_READS), is live for the bulk of it (grace_s at each edge, as in
+    watchdog_scorer.is_live).
+    """
+    expected = label.get("expected_monitors") or []
+    out = {
+        "coverage_detail": None, "coverage_misses": None,
+        "arming_coverage": "n/a", "stationarity_coverage": "n/a",
+        "grip_coverage": "n/a",
+    }
+    if not expected:
+        out["coverage_note"] = ("label has no expected_monitors — coverage not "
+                                "scored; fill the duty list to score it")
+        return out
+    grace = timedelta(seconds=float(grace_s))
+    sources = _authored_sources_by_sha(session_dir)
+
+    # monitor liveness intervals, with each monitor's object and source text
+    live = []   # (object_id, text, t0, t1)
+    open_arms = {}
+    last_t = None
+    for e in events:
+        et = e.get("event_type")
+        p = _pl(e)
+        t = ts(p["wall_time_iso"])
+        last_t = t if last_t is None or t > last_t else last_t
+        if et == "monitor_armed" and _purpose(p) != "observation":
+            obj = p.get("object_id") or (p.get("clause") or {}).get("object_id")
+            open_arms[p.get("monitor_id")] = (obj, sources.get(p.get("code_sha256"), ""), t)
+        elif et == "monitor_disarmed":
+            opened = open_arms.pop(p.get("monitor_id"), None)
+            if opened:
+                live.append((*opened, t))
+    for obj, text, t0 in open_arms.values():   # never disarmed: live to the end
+        live.append((obj, text, t0, last_t))
+
+    def covered(obj, kind, w0, w1):
+        need0, need1 = w0 + grace, w1 - grace
+        if need1 <= need0:
+            need0, need1 = w0, w1
+        reads = _KIND_READS.get(kind, ())
+        for (o, text, t0, t1) in live:
+            if o != obj or not any(tok in text for tok in reads):
+                continue
+            if t0 <= need0 and t1 >= need1:
+                return True
+        return False
+
+    # step windows (begin -> its end_step, else next begin, else last event)
+    begins = [( ts(p["wall_time_iso"]), p.get("step_id"),
+                (p.get("object_ids") or [None])[0] )
+              for p in of_type(events, "begin_step")]
+    ends = {}
+    for p in of_type(events, "end_step"):
+        ends.setdefault(p.get("step_id"), ts(p["wall_time_iso"]))
+    steps = []
+    for i, (t0, sid, active) in enumerate(sorted(begins)):
+        t1 = ends.get(sid) or (begins[i + 1][0] if i + 1 < len(begins) else last_t)
+        steps.append((sid, active, t0, t1))
+    run_w0 = steps[0][2] if steps else None
+    run_w1 = max((t1 for (_, _, _, t1) in steps), default=None)
+
+    # held spans per object: grasp confirm -> release start
+    held = {}
+    grasp_open = None   # (object, start)
+    for e in events:
+        p = e.get("payload") or {}
+        skill = p.get("skill_name")
+        if skill not in ("grasp_skill", "release_skill"):
+            continue
+        t = ts(e["wall_time_iso"])
+        obj = (p.get("params") or {}).get("object_id")
+        if skill == "grasp_skill":
+            if e.get("event_type") == "skill_start":
+                grasp_open = (obj, t)
+            elif e.get("event_type") == "skill_end" and grasp_open:
+                o, t_start = grasp_open
+                if p.get("ok"):
+                    held.setdefault(o, []).append([t, None])
+                grasp_open = None
+        elif skill == "release_skill" and e.get("event_type") == "skill_start":
+            spans = held.get(obj) or []
+            if spans and spans[-1][1] is None:
+                spans[-1][1] = t
+    for spans in held.values():
+        for span in spans:
+            if span[1] is None:
+                span[1] = last_t
+
+    detail, misses = [], []
+    counts = {"position_static": [0, 0], "clamp_effort": [0, 0],
+              "grip_relative_pose": [0, 0]}
+
+    def judge(obj, kind, window_name, w0, w1):
+        ok = covered(obj, kind, w0, w1)
+        counts.setdefault(kind, [0, 0])
+        counts[kind][1] += 1
+        if ok:
+            counts[kind][0] += 1
+        else:
+            misses.append({"object": obj, "kind": kind, "window": window_name})
+        detail.append({"object": obj, "kind": kind, "window": window_name,
+                       "covered": ok})
+
+    for duty in expected:
+        obj, kind = duty.get("object"), duty.get("kind")
+        window = duty.get("window")
+        if window == "whole_run":
+            if run_w0 is not None:
+                judge(obj, kind, "whole_run", run_w0, run_w1)
+        elif window == "while_inactive":
+            for (sid, active, t0, t1) in steps:
+                if active != obj:
+                    judge(obj, kind, f"step:{sid}", t0, t1)
+        elif window == "held_span":
+            for (t0, t1) in held.get(obj, []):
+                judge(obj, kind, f"held:{obj}", t0, t1)
+        else:
+            misses.append({"object": obj, "kind": kind,
+                           "window": f"unknown window {window!r} — not scored"})
+
+    stat = counts["position_static"]
+    grip = [counts["clamp_effort"][0] + counts["grip_relative_pose"][0],
+            counts["clamp_effort"][1] + counts["grip_relative_pose"][1]]
+    total = [stat[0] + grip[0], stat[1] + grip[1]]
+    out.update(
+        coverage_detail=detail, coverage_misses=misses or None,
+        stationarity_coverage=f"{stat[0]}/{stat[1]}" if stat[1] else "n/a",
+        grip_coverage=f"{grip[0]}/{grip[1]}" if grip[1] else "n/a",
+        arming_coverage=f"{total[0]}/{total[1]}" if total[1] else "n/a",
+        coverage_by_kind={k: f"{a}/{b}" for k, (a, b) in counts.items() if b},
+        coverage_note=(
+            "duty kind credited only when the monitor's saved source (matched "
+            "by code_sha256) reads what the kind requires — textual, auditable "
+            "via coverage_detail"),
+    )
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -564,6 +764,11 @@ S4_CSV_COLUMNS = [
     "TP_list", "FP_list", "FN_list",
     "n_authored_arms", "authored_TP", "authored_FP", "authored_FN", "authored_TN",
     "authored_release_false_fires", "authored_param_accuracy",
+    # coverage vs the label's expected_monitors (same names as the S1–S3 CSV;
+    # duty-kind credit requires the monitor's saved source to read what the
+    # kind requires — see score_coverage)
+    "arming_coverage", "stationarity_coverage", "grip_coverage",
+    "n_coverage_misses",
     "n_corrupted_binds", "class4_path_untested",
     "n_authored_obs_monitors", "agent_chosen_obs_thresholds", "n_observation_fires",
     "n_fires", "authored_probe_fires", "monitor_false_alarms",
@@ -603,6 +808,10 @@ def flatten_row(row):
         "authored_FN": row.get("authored_FN"), "authored_TN": row.get("authored_TN"),
         "authored_release_false_fires": row.get("authored_release_false_fires"),
         "authored_param_accuracy": row.get("authored_param_accuracy"),
+        "arming_coverage": row.get("arming_coverage"),
+        "stationarity_coverage": row.get("stationarity_coverage"),
+        "grip_coverage": row.get("grip_coverage"),
+        "n_coverage_misses": len(row.get("coverage_misses") or []),
         "n_corrupted_binds": len(row.get("corrupted_binds") or []),
         "class4_path_untested": row.get("class4_path_untested"),
         "n_authored_obs_monitors": row.get("n_authored_obs_monitors"),
@@ -707,6 +916,24 @@ def main():
     print(f"  AUTHORED  (all S4 monitors)  TP={row.get('authored_TP')}  "
           f"FP={row.get('authored_FP')}  FN={row.get('authored_FN')}  "
           f"TN={row.get('authored_TN')}   release-fires={row.get('authored_release_false_fires')}")
+    print(f"\n  COVERAGE vs expected_monitors  "
+          f"total={row.get('arming_coverage')}  "
+          f"(stationarity {row.get('stationarity_coverage')}, "
+          f"grip {row.get('grip_coverage')})")
+    if row.get("coverage_by_kind"):
+        print(f"    by kind: {row['coverage_by_kind']}")
+    cov_misses = row.get("coverage_misses") or []
+    if cov_misses:
+        print(f"    {BAD}misses:{X}")
+        by_duty = {}
+        for m in cov_misses:
+            by_duty.setdefault((m['object'], m['kind']), []).append(m['window'])
+        for (obj, kind), windows in by_duty.items():
+            shown = ", ".join(windows[:4]) + (f", +{len(windows)-4} more" if len(windows) > 4 else "")
+            print(f"      {BAD}{str(obj):<18} {kind:<19} {shown}{X}")
+    elif row.get("coverage_note") and row.get("arming_coverage") == "n/a":
+        print(f"    {row['coverage_note']}")
+
     print(f"\n  PARAMETERS vs TRUE registry: {row.get('authored_param_accuracy')}   "
           f"agent-chosen obs thresholds (exempt): {row.get('agent_chosen_obs_thresholds')}")
     print(f"    scored against {row.get('scored_registry_path')} "

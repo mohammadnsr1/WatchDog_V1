@@ -1,0 +1,38 @@
+# Batch provenance. See paper_results/README.md.
+batch_id: S1
+date_utc: TBD                   # UTC date of the batch's first run
+purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
+
+# Provenance
+git_sha: TBD                    # git rev-parse HEAD at run time
+registry_sha256: TBD            # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
+                                # (INSTALL space copy — that is what a live run reads).
+                                # This is the CLEAN registry; Class 4 sessions record
+                                # their corrupted one per session below.
+
+assembly: TBD                   # e.g. fmb_assembly_2
+scenarios: [S1]
+
+per_role:
+  executor:
+    model: TBD
+    effort: TBD
+  watchdog:
+    model: TBD                  # n/a for S4 sessions (unguarded)
+    effort: TBD
+
+sessions:
+  - session_id: TBD
+    scenario: S1
+    class: TBD
+    injection_scenarios: []     # names passed to inject_scenarios.py; [] if none
+    run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
+                                # Class 4: the corrupted registry's sha256, from the
+                                # session's manifest.json (registry_sha256).
+    notes: ""
+
+# Sessions scored but excluded from paper numbers. Also set exclude=1 on their
+# rows in corrected/ and log it in corrected/CORRECTIONS.md.
+known_invalid: []
+#  - session_id: TBD
+#    reason: TBD

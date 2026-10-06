@@ -91,6 +91,18 @@ unguarded_by_config (guard_mode=unguarded), never `unguarded_latched` and no
 guarded gates; `events_watchdog.jsonl` must hold no verdict/monitor events.
 
 - All monitors authored — boolean per fault only (same shared helper).
+- **Arming coverage vs the label's `expected_monitors`** (same duty schema and
+  CSV column names as S1–S3: `arming_coverage` / `stationarity_coverage` /
+  `grip_coverage`, plus `n_coverage_misses`). Authored monitors have no
+  monitor_type, so a duty kind is credited only when the monitor's SAVED
+  source (matched to the arm event by code_sha256) reads what that kind
+  requires: `object_pose` for position_static, `.joint(` for clamp_effort,
+  `.frame_pose`/`.transform(` for grip_relative_pose. Windows: whole_run =
+  first begin_step → last end_step; while_inactive = per step where the duty's
+  object is not active; held_span = grasp confirm → release start. The
+  serialization metric `n_unmonitored_steps` ("any clause monitor live") is
+  NOT a coverage check — the first live S4 run kept it at 0 while base1/base2
+  were never monitored and no grasp-retention monitor existed.
 - **Parameter accuracy vs the TRUE registry** (`--registry`, default the
   INSTALL-space `model_registry.yaml`, the file a clean live run loads) — the
   independence-claim crux: in Class 4 the executor's own
