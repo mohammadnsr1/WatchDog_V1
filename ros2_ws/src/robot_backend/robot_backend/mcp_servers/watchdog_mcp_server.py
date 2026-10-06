@@ -1100,8 +1100,16 @@ def _prepare_authored_monitor(
     threshold_rationale: str | None = None,
     halt_on_fire: bool = False,
     for_arm: bool = True,
+    ctx: Any | None = None,
 ) -> tuple[Any | None, dict[str, Any] | None]:
     """Build one AuthoredMonitor and resolve its provenance, WITHOUT arming it.
+
+    ctx is the hosting server's context (anything carrying recorder, engine,
+    registry and camera_streams). Omitted, it resolves this process's
+    WatchDogContext — the S1–S3 behaviour, unchanged. The S4 executor-side
+    host (executor_monitor_mcp_server) passes its own context instead, so the
+    same preparation path serves both hosts without this module ever booting
+    a watchdog node inside the executor's session.
 
     Everything arm_custom_monitor does up to, but not including, engine.arm():
     AuthoredMonitor construction -- which validates the source, compiles it into
@@ -1141,7 +1149,8 @@ def _prepare_authored_monitor(
             "real value.",
         )
         return None, {"exc": exc, "stage": exc.stage, "lineno": exc.lineno}
-    ctx = _ensure_watchdog()
+    if ctx is None:
+        ctx = _ensure_watchdog()
     try:
         monitor = AuthoredMonitor(
             source=code,

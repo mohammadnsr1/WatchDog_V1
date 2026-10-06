@@ -32,8 +32,21 @@ verdict-detection logic; verified on live data). Added, per run:
 - **Authored parameter accuracy**: clause-judging authored thresholds must
   carry `threshold_verified` (arm-time registry check) →
   `authored_param_accuracy`.
-- **Latency**: `fire_to_verdict_median_s` / `_p95_s` (wall_time_iso only;
-  timestamp_ns is per-process monotonic and never crosses processes).
+- **Verdict vs fault split, never merged**: `verdict_TP/FP/TN/FN` scores the
+  run-level verdict call (positive = non_conformant; `incomplete` counts as
+  not-flagged on both sides; exact three-way match stays in
+  `verdict_correct`). `fault_TP/FP/TN/FN` is the step-level (step, object)
+  pairing (`fault_TN` = steps with neither a real violation nor a finding).
+  They can disagree on one run — that is signal, not a bug.
+- **Latency**: `fire_to_next_verdict_median_s` / `_p95_s` +
+  `n_fires_adjudicated` / `n_fires_never_adjudicated`. Fire time is the
+  payload's `trigger_wall_ns` (engine-stamped wall clock at trigger — NOT the
+  envelope time, which is when `get_monitor_fires` drained it). No verdict
+  record names the fire it adjudicates, so pairing is heuristic (first
+  same-step verdict after the fire, else the final run_verdict if its
+  clause_results cover that step) — hence "next_verdict" in the name.
+  Cross-process comparisons use wall-clock stamps only; timestamp_ns is
+  per-process monotonic and never crosses processes.
 - **Scenario consistency**: authored arms in S1 / library arms in S3 warn in
   `scenario_consistency_warning`. S3 blanks the library coverage grid (n/a).
 - **Summary**: `--summarize results.csv [...]` prints the per-scenario rollup
@@ -49,12 +62,19 @@ observations / observation-purpose monitors from every `events_*.jsonl`.
   foreign_object, transient_visitor (in-view span), external_displacement,
   tracked_move bursts (>30 s gap splits), removal/vanished. Episodes never in
   camera view are reported but excluded from the detection denominator.
-- **Detection** = first acknowledging `record_observation` (location within
-  0.15 m when both sides have world positions, else earliest category-
-  compatible unassigned observation). An observation-monitor fire alone is NOT
-  a detection (reported beside it as `fire_latency_s`).
+- **Detection** = first acknowledging `record_observation`, matched on
+  category + time window ONLY (earliest unconsumed category-compatible
+  observation at/after t0; a report is consumed by the first episode it
+  matches, so one report naming two objects credits one episode).
+  Localization is not a metric and a reported location never affects
+  matching. An observation-monitor fire alone is NOT a detection (reported
+  beside it as `fire_latency_s`).
+- **Per-episode confusion**: `obs_TP` (detectable episodes acknowledged),
+  `obs_FN` (never acknowledged), `obs_FP` (reports matching no episode),
+  `obs_TN` (1 iff zero detectable episodes and zero observations).
+  Out-of-view episodes are in none of the four.
 - **Scoring rule**: an unexpected object is NOT a violation by itself — scored
-  on noticed / identified / located / appearance-time-reported
+  on noticed / identified / appearance-time-reported
   (`appearance_reported`, ±30 s). Requirement breaks are conformance scoring's
   job.
 - **Strategy** per run: none / polling_by_look / continuous_<depth|rgb|array>_monitor / other.

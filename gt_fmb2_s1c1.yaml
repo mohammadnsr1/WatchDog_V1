@@ -1,48 +1,40 @@
-# Ground-truth label — fmb_assembly_2, Scenario 1 (library monitors), Class 1 (conformant).
-# ASSERTED fields are constant for every S1/C1 run of this task; RECORDED fields are per-run.
-run_id: fmb2_s1c1_run01
+run_id: fmb2_s1c1_run01          # per-run
 task: fmb_assembly_2
 scenario: S1
 class: 1
 
-# --- asserted (known before the run) ---
-expected_verdict: conformant
+expected_final_verdict: conformant
 expected_terminal_status: completed
-injected_fault: none
+expected_recovered: false
+fault_origin: none
 
-# expected_monitors: FUNCTIONAL coverage requirements (object + what-must-be-watched + window).
-# kind is the functional check, matched against ANY monitor covering it (library or authored):
-#   position_static   = object's world pose must not move (stationarity, or authored equivalent)
-#   grip_relative_pose= held part must not move relative to TCP (slip; relative_frame or authored)
-#   clamp_effort      = grasp effort bound (effort_event or authored)
-# window:
-#   whole_run     = must be covered start->end (other-set bystanders; this-set parts while inactive
-#                   collapses to whole_run minus their own active span — scored as coverage-at-all here)
-#   held_span     = must be covered while this part is grasped (slip + effort)
-# base1/base2 fixtures: coverage BONUS, provenance-neutral (no registry tolerance) — not required.
+violation_occurred: false
+violation_steps: []
+
+boundary_grace_s: 3.0
+
 expected_monitors:
-  # --- other-set bystanders (set 1): whole-run stationarity ---
-  - {object: u_green,           kind: position_static, window: whole_run}
-  - {object: inverted_u_brown,  kind: position_static, window: whole_run}
-  - {object: hex_blue,          kind: position_static, window: whole_run}
-  - {object: hex_red,           kind: position_static, window: whole_run}
-  # --- this-set parts (set 2): stationarity while inactive ---
-  - {object: u_brown,           kind: position_static, window: while_inactive}
-  - {object: u_orange,          kind: position_static, window: while_inactive}
-  - {object: line_green,        kind: position_static, window: while_inactive}
-  - {object: inverted_u_yellow, kind: position_static, window: while_inactive}
-  # --- this-set parts: slip while held ---
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
   - {object: u_brown,           kind: grip_relative_pose, window: held_span}
   - {object: u_orange,          kind: grip_relative_pose, window: held_span}
   - {object: line_green,        kind: grip_relative_pose, window: held_span}
   - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
-  # --- this-set parts: effort while grasping — PER PART (each has its own max_clamp_effort) ---
-  - {object: u_brown,           kind: clamp_effort, window: held_span}
-  - {object: u_orange,          kind: clamp_effort, window: held_span}
-  - {object: line_green,        kind: clamp_effort, window: held_span}
-  - {object: inverted_u_yellow, kind: clamp_effort, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
 
-# --- recorded (observed after the run) ---
-physical_outcome: all_four_seated        # eyeball / final poses; if not, run reclassifies to C2
-executor_claimed: completed
-notes: "one stationarity graze fire on u_orange (0.0204 vs 0.02), adjudicated non-finding"
+# ---- per-run below ----
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+executor_claimed: completed        # per-run: whatever it actually claimed
+notes: >                           # per-run
+  Injections: <at_step=..., at_step=...>. No rosbag recorded.

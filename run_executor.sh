@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Launch the executor Claude Code session for a scored run.
 #
-# Usage: ./run_executor.sh [1|2]
+# Usage: ./run_executor.sh [1|2]        S1-S3 run (the default path)
+#        ./run_executor.sh s4 [1|2]     S4 run (executor self-monitoring)
 #   assembly  1 = fmb_assembly, 2 = fmb_assembly_2
 # Default: 1
 #
@@ -12,14 +13,25 @@
 # The executor's config is the same in S1-S3; scenario selection lives
 # entirely on the watchdog side (see run_watchdog.sh and RUN.md). Launch the
 # watchdog first and wait for it to arm before running this.
+#
+# S4 is the one exception: there is NO watchdog session at all. "s4" selects
+# executor_s4.mcp.json / executor_2_s4.mcp.json, which point the SAME servers
+# at the _s4 task file and executor_agent_s4.yaml and add the executor-side
+# monitor host (executor_monitor_mcp_server). The cell bringup must be running
+# guard_mode:=unguarded, and no run_watchdog.sh is launched.
 set -euo pipefail
 cd "$(dirname "$0")"
 
+scenario=""
+if [ "${1:-}" = "s4" ]; then
+  scenario="s4"
+  shift
+fi
 assembly="${1:-1}"
 
 case "$assembly" in
-  1) config="executor.mcp.json" ;;
-  2) config="executor_2.mcp.json" ;;
+  1) config="executor${scenario:+_s4}.mcp.json" ;;
+  2) config="executor_2${scenario:+_s4}.mcp.json" ;;
   *) echo "assembly must be 1 or 2 (got: $assembly)" >&2; exit 1 ;;
 esac
 
@@ -35,18 +47,19 @@ EFFORT="${EFFORT:-$(python3 -c "import json; print(json.load(open('executor.sett
 
 session_dir=$(cat ~/.watchdog/current_session 2>/dev/null || true)
 if [ -n "$session_dir" ] && [ -d "$session_dir" ]; then
-  python3 - "$session_dir" "$assembly" "$MODEL" "$EFFORT" <<'PYEOF'
+  python3 - "$session_dir" "$assembly" "$MODEL" "$EFFORT" "$scenario" <<'PYEOF'
 import datetime, json, subprocess, sys
-session_dir, assembly, model, effort = sys.argv[1:5]
+session_dir, assembly, model, effort, scenario = sys.argv[1:6]
 try:
     cli = subprocess.run(["claude", "--version"], capture_output=True,
                          text=True, timeout=15).stdout.strip()
 except Exception as exc:
     cli = f"unavailable: {exc}"
 record = {
-    # scenario is null: S1-S3 live entirely on the watchdog side, and the
-    # executor's surface is identical across them.
-    "role": "executor", "scenario": None, "assembly": assembly,
+    # scenario is null in S1-S3 (those live entirely on the watchdog side,
+    # and the executor's surface is identical across them) and "s4" on an S4
+    # run, where the scenario lives entirely on the executor side.
+    "role": "executor", "scenario": scenario or None, "assembly": assembly,
     "model": model, "effort": effort, "claude_cli_version": cli,
     "launched_wall_time_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }

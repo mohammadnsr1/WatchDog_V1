@@ -39,12 +39,16 @@ TERMINAL MODEL (post-cadence-change):
   - The (final_verdict, recovered) PAIR distinguishes: clean (conformant,False),
     recovery (conformant,True), broken (non_conformant,-), aborted (incomplete,-).
 
-DETECTION SCORING (the confusion matrix the paper's claim lives in):
-  The label states, per run, whether a REAL violation occurred and where (violation_steps).
-  Each watchdog finding is classified TP (matched a real violation) or FP (flagged where none was).
-  Each real violation with no matching finding is FN (missed). Clean steps with no finding are TN.
-  This is what turns "the watchdog said X" into "the watchdog correctly detects real violations at
-  rate R with false-alarm rate F" — recall/precision/specificity.
+DETECTION SCORING — two SEPARATE confusion matrices, never merged or averaged:
+  verdict_TP/FP/TN/FN  the RUN-LEVEL verdict call: did the final run_verdict flag a violation
+                       (non_conformant) when the label expected one. Positive class =
+                       non_conformant; "incomplete" counts as not-flagged on both sides, and
+                       exact three-way correctness stays in verdict_correct.
+  fault_TP/FP/TN/FN    the STEP-LEVEL pairing: each watchdog finding matched to a real
+                       violation per (step, object) as before. fault_TN = steps with neither a
+                       real violation nor a finding.
+  The two can legitimately disagree on one run (correct final verdict, missed step-level
+  pairing) — that disagreement is signal, so they are reported side by side.
 
 LABEL SCHEMA (per run):
   run_id, task, scenario, class
@@ -71,7 +75,7 @@ FIELD PATHS (confirmed against post-change fmb_assembly_2 run):
 """
 from __future__ import annotations
 import json, sys, argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
 
@@ -251,6 +255,17 @@ def score_run(session_dir, label):
     row["expected_final_verdict"] = exp_fv
     row["verdict_correct"] = (row["watchdog_final_verdict"] == exp_fv)
 
+    # ---- VERDICT confusion cells (run-level; SEPARATE from the fault_* step
+    # pairing below — the two can legitimately disagree on one run and are
+    # never merged). Positive = non_conformant; "incomplete" counts as
+    # not-flagged on both sides (three-way exactness stays in verdict_correct).
+    exp_pos = (exp_fv == "non_conformant")
+    got_pos = (row["watchdog_final_verdict"] == "non_conformant")
+    row["verdict_TP"] = int(exp_pos and got_pos)
+    row["verdict_FN"] = int(exp_pos and not got_pos)
+    row["verdict_FP"] = int(not exp_pos and got_pos)
+    row["verdict_TN"] = int(not exp_pos and not got_pos)
+
     # recovered pair check
     exp_rec = label.get("expected_recovered")
     if exp_rec is not None:
@@ -331,13 +346,19 @@ def score_run(session_dir, label):
         if (s,o) in real_pairs: continue
         if o is None and any(rs == s for (rs,ro) in real_pairs): continue
         fp.add((s,o))
+    # fault_TN: steps with neither a real violation nor a finding (step-level cell;
+    # the (step, object) pairing has no natural negative universe per object).
+    all_steps = {s for (_, s) in bs_win if s}
+    tn_steps = all_steps - {s for (s, _) in real_pairs} - {s for (s, _) in finding_pairs}
     row["detection"] = {
         "true_positives":  pretty(tp),
         "false_negatives": pretty(fn),
         "false_positives": pretty(fp),
+        "clean_steps_no_finding": sorted(tn_steps),
         "n_real_violations": len(real_pairs),
         "n_findings": len(finding_pairs),
     }
+    row["fault_TN"] = len(tn_steps)
     row["detection_recall"]    = (len(tp) / len(real_pairs)) if real_pairs else None
     row["detection_precision"] = (len(tp) / len(finding_pairs)) if finding_pairs else None
 
@@ -419,21 +440,54 @@ def score_run(session_dir, label):
     if final and ended:
         ttv = (ts(final["wall_time_iso"]) - ts(exec_events(ev, "run_ended")[0]["wall_time_iso"])).total_seconds()
     row["time_to_verdict_s"] = round(ttv, 2) if ttv is not None else None
-    # per-finding latency (fire -> step verdict), for finding runs. Uses
-    # wall_time_iso ONLY: timestamp_ns is per-process monotonic and must never
-    # be compared across processes. Observation-purpose fires excluded.
-    if finding_steps and clause_fires:
-        fire_ts = sorted(ts(f["wall_time_iso"]) for f in clause_fires)
-        gaps = []
-        for e in wd_events(ev, "verdict"):
-            vt = ts(_pl(e)["wall_time_iso"]); prior = [t for t in fire_ts if t <= vt]
-            if prior: gaps.append(round((vt - prior[-1]).total_seconds(), 2))
-        row["fire_to_finding_s"] = gaps or None
-        row["fire_to_verdict_median_s"] = _median(gaps)
-        row["fire_to_verdict_p95_s"] = _p95(gaps)
-    else:
-        row["fire_to_verdict_median_s"] = None
-        row["fire_to_verdict_p95_s"] = None
+
+    # ---- FIRE -> VERDICT latency (per fire, HEURISTIC pairing) --------------
+    # Fire time = the payload's trigger_wall_ns: the engine stamps it with
+    # wall_ns() at trigger, so it is wall clock and comparable to the verdict
+    # envelope's wall_time_iso (never the fire's own envelope time, which is
+    # when get_monitor_fires DRAINED it, nor timestamp_ns, which is
+    # per-process monotonic). No verdict record identifies which fire it
+    # adjudicates, so pairing is heuristic — FIRST verdict at/after the fire
+    # whose step_id matches the step the fire landed in, else the final
+    # run_verdict if its clause_results cover that step. The column names
+    # carry "next_verdict" so the heuristic stays visible. Probe and
+    # observation-purpose fires are excluded; a fire without trigger_wall_ns
+    # (pre-schema session) is skipped and counted apart, never measured by
+    # drain time.
+    verdicts_t = sorted((ts(sv["wall_time_iso"]), sv.get("step_id")) for sv in step_v)
+    final_t = ts(final["wall_time_iso"]) if final else None
+    final_steps = {str(c.get("step_id")) for c in (final.get("clause_results") or [])} \
+        if final else set()
+
+    def _fire_step(ft):
+        for i, (t, s) in enumerate(bs_win):
+            t0 = ts(t); t1 = ts(bs_win[i+1][0]) if i+1 < len(bs_win) else None
+            if ft >= t0 and (t1 is None or ft < t1):
+                return s
+        return None
+
+    gaps, n_adj, n_never, n_no_stamp = [], 0, 0, 0
+    for f in real_fires:
+        if f.get("trigger_wall_ns") is None:
+            n_no_stamp += 1
+            continue
+        ft = datetime.fromtimestamp(int(f["trigger_wall_ns"]) / 1e9, tz=timezone.utc)
+        fstep = _fire_step(ft)
+        vt = next((t for (t, s) in verdicts_t if t >= ft and s == fstep), None)
+        if vt is None and final_t is not None and final_t >= ft \
+                and str(fstep) in final_steps:
+            vt = final_t
+        if vt is not None:
+            n_adj += 1
+            gaps.append(round((vt - ft).total_seconds(), 2))
+        else:
+            n_never += 1
+    row["fire_to_next_verdict_s"] = gaps or None
+    row["fire_to_next_verdict_median_s"] = _median(gaps)
+    row["fire_to_next_verdict_p95_s"] = _p95(gaps)
+    row["n_fires_adjudicated"] = n_adj
+    row["n_fires_never_adjudicated"] = n_never
+    row["n_fires_missing_trigger_stamp"] = n_no_stamp
 
     # ---- ARMING: coverage (WINDOW-TIMED), provenance, type -----------------
     expected = label.get("expected_monitors", [])
@@ -697,11 +751,16 @@ CSV_COLUMNS = [
     # verdict / cadence
     "watchdog_final_verdict", "expected_final_verdict", "verdict_correct",
     "watchdog_recovered", "expected_recovered_ok", "cadence_compliant",
-    # detection (editable) + audit mirrors
-    "n_real_violations", "n_TP", "n_FP", "n_FN", "recall", "precision",
-    "TP_list", "FP_list", "FN_list",
-    "scorer_raw_n_TP", "scorer_raw_n_FP", "scorer_raw_n_FN",
-    "scorer_raw_TP_list", "scorer_raw_FP_list", "scorer_raw_FN_list",
+    # run-level verdict confusion (positive = non_conformant; incomplete =
+    # not-flagged; exact three-way correctness stays in verdict_correct)
+    "verdict_TP", "verdict_FP", "verdict_TN", "verdict_FN",
+    # step-level fault pairing (editable) + audit mirrors — SEPARATE from the
+    # verdict_* group above; the two can disagree on one run by design
+    "n_real_violations", "fault_TP", "fault_FP", "fault_TN", "fault_FN",
+    "fault_recall", "fault_precision",
+    "fault_TP_list", "fault_FP_list", "fault_FN_list",
+    "scorer_raw_fault_TP", "scorer_raw_fault_FP", "scorer_raw_fault_FN",
+    "scorer_raw_fault_TP_list", "scorer_raw_fault_FP_list", "scorer_raw_fault_FN_list",
     # authored monitors — boolean per injected fault, own columns (never merged
     # with the library family columns)
     "n_authored_arms", "authored_TP", "authored_FP", "authored_FN", "authored_TN",
@@ -713,8 +772,11 @@ CSV_COLUMNS = [
     "arming_provenance", "provenance_fail_objs",
     # monitor false alarms (specificity; clause fires only)
     "n_fires", "authored_probe_fires", "monitor_false_alarms",
-    # latency / independence
-    "time_to_verdict_s", "fire_to_verdict_median_s", "fire_to_verdict_p95_s",
+    # latency / independence. fire_to_NEXT_verdict: pairing is heuristic
+    # (first same-step verdict after the fire's trigger_wall_ns) — no verdict
+    # record names the fire it adjudicates.
+    "time_to_verdict_s", "fire_to_next_verdict_median_s", "fire_to_next_verdict_p95_s",
+    "n_fires_adjudicated", "n_fires_never_adjudicated",
     "independence_gap",
     "executor_terminal_status",
     # flags
@@ -739,13 +801,19 @@ def flatten_row(row):
         "watchdog_recovered": row.get("watchdog_recovered"),
         "expected_recovered_ok": row.get("recovered_correct"),
         "cadence_compliant": row.get("cadence_compliant"),
+        "verdict_TP": row.get("verdict_TP"), "verdict_FP": row.get("verdict_FP"),
+        "verdict_TN": row.get("verdict_TN"), "verdict_FN": row.get("verdict_FN"),
         "n_real_violations": det.get("n_real_violations"),
-        "n_TP": len(tp), "n_FP": len(fp), "n_FN": len(fn),
-        "recall": row.get("detection_recall"), "precision": row.get("detection_precision"),
-        "TP_list": _joinpairs(tp), "FP_list": _joinpairs(fp), "FN_list": _joinpairs(fn),
-        "scorer_raw_n_TP": len(tp), "scorer_raw_n_FP": len(fp), "scorer_raw_n_FN": len(fn),
-        "scorer_raw_TP_list": _joinpairs(tp), "scorer_raw_FP_list": _joinpairs(fp),
-        "scorer_raw_FN_list": _joinpairs(fn),
+        "fault_TP": len(tp), "fault_FP": len(fp), "fault_TN": row.get("fault_TN"),
+        "fault_FN": len(fn),
+        "fault_recall": row.get("detection_recall"),
+        "fault_precision": row.get("detection_precision"),
+        "fault_TP_list": _joinpairs(tp), "fault_FP_list": _joinpairs(fp),
+        "fault_FN_list": _joinpairs(fn),
+        "scorer_raw_fault_TP": len(tp), "scorer_raw_fault_FP": len(fp),
+        "scorer_raw_fault_FN": len(fn),
+        "scorer_raw_fault_TP_list": _joinpairs(tp), "scorer_raw_fault_FP_list": _joinpairs(fp),
+        "scorer_raw_fault_FN_list": _joinpairs(fn),
         "n_authored_arms": row.get("n_authored_arms"),
         "authored_TP": row.get("authored_TP"), "authored_FP": row.get("authored_FP"),
         "authored_FN": row.get("authored_FN"), "authored_TN": row.get("authored_TN"),
@@ -763,8 +831,10 @@ def flatten_row(row):
         "authored_probe_fires": row.get("authored_probe_fires"),
         "monitor_false_alarms": row.get("monitor_false_alarms"),
         "time_to_verdict_s": row.get("time_to_verdict_s"),
-        "fire_to_verdict_median_s": row.get("fire_to_verdict_median_s"),
-        "fire_to_verdict_p95_s": row.get("fire_to_verdict_p95_s"),
+        "fire_to_next_verdict_median_s": row.get("fire_to_next_verdict_median_s"),
+        "fire_to_next_verdict_p95_s": row.get("fire_to_next_verdict_p95_s"),
+        "n_fires_adjudicated": row.get("n_fires_adjudicated"),
+        "n_fires_never_adjudicated": row.get("n_fires_never_adjudicated"),
         "independence_gap": row.get("independence_gap"),
         "executor_terminal_status": row.get("executor_terminal_status"),
         "label_consistency_warning": " | ".join(warn) if warn else "",
@@ -849,7 +919,16 @@ def summarize(csv_paths):
         v = str(r.get(k, "")).strip()
         try: return float(v)
         except ValueError: return None
-    def _nums(rs, k): return [x for x in (_num(r, k) for r in rs) if x is not None]
+    def _nums(rs, *keys):
+        # first key present per row wins — lets one summary span this scorer's
+        # fault_*/fire_to_next_* CSVs and s4_scorer's older n_TP/fire_to_verdict names
+        out = []
+        for r in rs:
+            for k in keys:
+                v = _num(r, k)
+                if v is not None:
+                    out.append(v); break
+        return out
     def _frac(rs, k):
         """average of 'a/b' cells, pooled numerator/denominator."""
         a = b = 0
@@ -868,8 +947,14 @@ def summarize(csv_paths):
         n_vc = sum(1 for r in rs if str(r.get("verdict_correct")) == "True")
         print(f"\n  {scn}  ({len(rs)} runs)")
         print(f"    verdict_correct        : {n_vc}/{len(rs)}")
-        print(f"    detection recall/prec  : avg {_avg(_nums(rs,'recall'))} / {_avg(_nums(rs,'precision'))}")
-        print(f"    verdict TP/FP/FN       : {int(sum(_nums(rs,'n_TP')))}/{int(sum(_nums(rs,'n_FP')))}/{int(sum(_nums(rs,'n_FN')))}")
+        print(f"    verdict TP/FP/TN/FN    : {int(sum(_nums(rs,'verdict_TP')))}/"
+              f"{int(sum(_nums(rs,'verdict_FP')))}/{int(sum(_nums(rs,'verdict_TN')))}/"
+              f"{int(sum(_nums(rs,'verdict_FN')))}   (run-level verdict call)")
+        print(f"    fault recall/prec      : avg {_avg(_nums(rs,'fault_recall','recall'))} / "
+              f"{_avg(_nums(rs,'fault_precision','precision'))}")
+        print(f"    fault TP/FP/TN/FN      : {int(sum(_nums(rs,'fault_TP','n_TP')))}/"
+              f"{int(sum(_nums(rs,'fault_FP','n_FP')))}/{int(sum(_nums(rs,'fault_TN')))}/"
+              f"{int(sum(_nums(rs,'fault_FN','n_FN')))}   (step-level pairing)")
         if scn in ("S2", "S3", "S4"):
             atp, afp = sum(_nums(rs,'authored_TP')), sum(_nums(rs,'authored_FP'))
             afn = sum(_nums(rs,'authored_FN'))
@@ -883,11 +968,13 @@ def summarize(csv_paths):
             print(f"    library coverage       : {_frac(rs,'arming_coverage')}   provenance: {_frac(rs,'arming_provenance')}")
         print(f"    monitor false alarms   : {int(sum(_nums(rs,'monitor_false_alarms')))} "
               f"(over {sum(1 for r in rs if str(r.get('monitor_false_alarms','')).strip() not in ('','None'))} clean runs)")
-        med = _nums(rs, 'fire_to_verdict_median_s')
+        med = _nums(rs, 'fire_to_next_verdict_median_s', 'fire_to_verdict_median_s')
         mm = _median(med)
-        print(f"    fire->verdict latency  : median-of-medians "
+        print(f"    fire->next-verdict     : median-of-medians "
               f"{f'{mm}s' if mm is not None else '-'}   "
-              f"p95s seen: {_nums(rs,'fire_to_verdict_p95_s') or '-'}")
+              f"p95s seen: {_nums(rs,'fire_to_next_verdict_p95_s','fire_to_verdict_p95_s') or '-'}   "
+              f"adjudicated {int(sum(_nums(rs,'n_fires_adjudicated')))} / never "
+              f"{int(sum(_nums(rs,'n_fires_never_adjudicated')))}")
         print(f"    time_to_verdict        : avg {_avg(_nums(rs,'time_to_verdict_s'))}s")
         warn = sum(1 for r in rs for k in ("label_consistency_warning","scenario_consistency_warning")
                    if str(r.get(k, "")).strip())
@@ -949,6 +1036,8 @@ def main():
     # verdict / cadence / recovery
     vc = row.get("verdict_correct")
     print(f"  VERDICT   watchdog={row.get('watchdog_final_verdict')}  expected={row.get('expected_final_verdict')}   [{mark(vc)}]")
+    print(f"            verdict cells TP={row.get('verdict_TP')} FP={row.get('verdict_FP')} "
+          f"TN={row.get('verdict_TN')} FN={row.get('verdict_FN')}  (run-level; separate from fault_*)")
     rc = row.get("recovered_correct")
     print(f"  RECOVERED watchdog={row.get('watchdog_recovered')}  expected={label.get('expected_recovered')}   [{mark(rc) if rc is not None else '-'}]")
     print(f"  CADENCE   one final verdict = {row.get('cadence_compliant')}   [{mark(row.get('cadence_compliant'))}]")
@@ -957,12 +1046,13 @@ def main():
     # detection: expected vs got
     det = row.get("detection", {})
     real = [f"{v.get('step')}:{v.get('object')}" for v in (label.get('violation_steps') or [])]
-    print(f"\n  DETECTION  (per step:object)")
+    print(f"\n  FAULT DETECTION  (step-level pairing, per step:object)")
     print(f"    expected real violations : {real if real else '(none — clean run)'}")
     print(f"    TP (caught)              : {det.get('true_positives') or '-'}")
     fn = det.get('false_negatives'); fp = det.get('false_positives')
     print(f"    FN (MISSED)              : {BAD+str(fn)+X if fn else '-'}")
     print(f"    FP (false alarm)         : {BAD+str(fp)+X if fp else '-'}")
+    print(f"    TN (clean steps)         : {row.get('fault_TN')}")
     print(f"    recall={row.get('detection_recall')}  precision={row.get('detection_precision')}")
     if row.get('monitor_false_alarms'):
         print(f"    monitor false alarms (fires on a clean run): {row.get('monitor_false_alarms')}")
@@ -1057,8 +1147,14 @@ def main():
 
     # latency
     print(f"\n  LATENCY   time_to_verdict={row.get('time_to_verdict_s')}s")
-    if row.get('fire_to_finding_s'):
-        print(f"            fire->finding={row.get('fire_to_finding_s')}s")
+    print(f"            fire->next-verdict (heuristic pairing): "
+          f"median={row.get('fire_to_next_verdict_median_s')}s "
+          f"p95={row.get('fire_to_next_verdict_p95_s')}s   "
+          f"adjudicated={row.get('n_fires_adjudicated')} "
+          f"never={row.get('n_fires_never_adjudicated')}")
+    if row.get('n_fires_missing_trigger_stamp'):
+        print(f"            {BAD}{row.get('n_fires_missing_trigger_stamp')} fire(s) lack "
+              f"trigger_wall_ns (pre-schema session) — skipped, not drain-timed{X}")
 
     # top-line + warnings
     warn = row.get("label_consistency_warning")

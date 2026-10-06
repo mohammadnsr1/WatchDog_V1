@@ -19,8 +19,8 @@ INPUTS (all under <session_dir>):
                                   monitors, filtered to --role
 
 SCORING RULE: an unexpected object in the workspace is NOT a violation by
-itself. It must be NOTICED, IDENTIFIED as far as the evidence allows, LOCATED,
-and REPORTED with its appearance time. Only an actual requirement break (e.g.
+itself. It must be NOTICED, IDENTIFIED as far as the evidence allows, and
+REPORTED with its appearance time. Only an actual requirement break (e.g.
 collision with another object) is a violation — and that is conformance
 scoring's job, not this scorer's.
 
@@ -32,9 +32,17 @@ WHAT IS SCORED, per run:
                    observation-purpose monitor is reported beside it as
                    fire_latency_s but an unacknowledged fire is NOT a detection
                    — the agent has to notice, not just own a tripwire.
-  characterization identity text vs ground truth, location error (m), and
-                   whether the agent reported WHEN the thing appeared
-                   (first_seen_wall_ns vs ground-truth wall_ns).
+  characterization identity text vs ground truth, and whether the agent
+                   reported WHEN the thing appeared (first_seen_wall_ns vs
+                   ground-truth wall_ns). Location is NOT scored.
+  confusion        obs_TP  detectable episodes acknowledged by a record_observation
+                   obs_FN  detectable episodes never acknowledged
+                   obs_FP  record_observation reports (distinct observation_id,
+                           status=new) matching no episode
+                   obs_TN  1 if the run had zero detectable episodes and zero
+                           record_observation calls, else 0
+                   Out-of-view episodes are in none of the four; TP/FN share
+                   detection_rate's denominator (uncounted removals excluded).
   false reports    observation events on a run with NO ground-truth episodes
                    (clean run); on injected runs, observations matching no
                    episode are listed as unmatched (reviewed by hand — the
@@ -61,6 +69,12 @@ visit (enter/in_view/dwell/leave/out_of_view/removed) or one dragged move
 An episode whose every ground-truth sample has in_camera_view=false is
 UNDETECTABLE: reported, excluded from the detection denominator.
 
+MATCHING: category + time window only. An episode is acknowledged by the
+earliest category-compatible observation at or after t0 (minus
+PRE_T0_SLACK_S). Each report (observation_id, including its updates) is
+CONSUMED by the first episode, in t0 order, that it matches — one report
+naming two objects credits one episode and leaves the other FN, by design.
+
 Timestamps: ground-truth wall_ns and event-envelope wall_time_iso are both
 WALL CLOCK, so they compare across processes. Event payloads' timestamp_ns is
 per-process monotonic and is never used here.
@@ -69,7 +83,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,8 +92,7 @@ from watchdog_scorer import (  # noqa: E402
     _median, _origin, _p95, _purpose, append_csv, load_jsonl,
 )
 
-MATCH_RADIUS_M = 0.15        # world-location agreement for a strong obs<->episode match
-EPISODE_GAP_S = 30.0         # tracked_move records further apart start a new episode
+EPISODE_GAP_S = 30.0        # tracked_move records further apart start a new episode
 APPEARANCE_TOL_S = 30.0      # |first_seen claim - ground truth| within this = accurate
 PRE_T0_SLACK_S = 2.0         # an obs may precede t0 by this much (clock/record ordering)
 
@@ -209,53 +221,38 @@ def load_role_events(session_dir, role):
 
 
 # ---------------------------------------------------------------------------
-# matching: episode -> first acknowledgment
+# matching: episode -> first acknowledgment (category + time window ONLY;
+# localization is not a metric and a reported location never affects matching)
 # ---------------------------------------------------------------------------
-def _location_error_m(episode, obs):
-    loc = obs.get("location") or {}
-    if episode["position"] is None or loc.get("frame") != "world":
-        return None
-    ex, ey = episode["position"][0], episode["position"][1]
-    return math.hypot(loc["x"] - ex, loc["y"] - ey)   # planar: z conventions differ
-
-
 def match_observations(episodes, observations):
     """Assign each episode its FIRST acknowledging observation (status=new or
-    update): location within MATCH_RADIUS_M when both sides have a world
-    position, else the earliest unassigned category-compatible observation
-    after t0. One observation may acknowledge several episodes only via the
-    location rule (e.g. one summary covering a move and a settle); the weak
-    rule consumes the observation."""
+    update): the earliest unconsumed category-compatible observation at or
+    after t0 (PRE_T0_SLACK_S of clock slack). An observation is CONSUMED by
+    the first episode (in t0 order) it matches, so one report naming two
+    objects credits one episode and leaves the other unmatched — intended."""
     assigned = [None] * len(episodes)
-    used_weak = set()
+    consumed = set()
     for i, ep in enumerate(episodes):
         t0 = ns_to_dt(ep["t0_wall_ns"])
         best = None
         for obs in observations:
-            if obs.get("status") == "resolved":
+            if obs.get("status") == "resolved" or id(obs) in consumed:
                 continue
             ot = iso_to_dt(obs["wall_time_iso"])
             if (ot - t0).total_seconds() < -PRE_T0_SLACK_S:
                 continue
-            err = _location_error_m(ep, obs)
-            strong = err is not None and err <= MATCH_RADIUS_M
-            cat_ok = obs.get("category") in EXPECTED_CATEGORY.get(ep["kind"], set())
-            weak = (err is None and cat_ok
-                    and id(obs) not in used_weak)
-            if strong or weak:
-                cand = (ot, strong, err, obs)
-                if best is None or cand[0] < best[0]:
-                    best = cand
+            if obs.get("category") not in EXPECTED_CATEGORY.get(ep["kind"], set()):
+                continue
+            if best is None or ot < best[0]:
+                best = (ot, obs)
         if best is not None:
-            ot, strong, err, obs = best
-            if not strong:
-                used_weak.add(id(obs))
+            ot, obs = best
+            consumed.add(id(obs))
             assigned[i] = {
                 "observation_id": obs.get("observation_id"),
-                "match": "location" if strong else "category",
+                "match": "category",
                 "category": obs.get("category"),
                 "latency_s": round((ot - t0).total_seconds(), 2),
-                "location_error_m": round(err, 3) if err is not None else None,
                 "identity": obs.get("identity"),
                 "summary": (obs.get("summary") or "")[:200],
                 "confidence": obs.get("confidence"),
@@ -377,15 +374,21 @@ def score_observation(session_dir, role):
     row["detection_rate"] = round(n_hit / n_counted, 3) if n_counted else None
     row["detection_latency_median_s"] = _median(latencies)
     row["detection_latency_p95_s"] = _p95(latencies)
-    loc_errs = [er["location_error_m"] for er in ep_rows
-                if er.get("location_error_m") is not None]
-    row["location_error_median_m"] = _median(loc_errs)
     row["appearance_reported_accurate"] = sum(
         1 for er in ep_rows if er.get("appearance_reported") == "accurate")
 
     # false reports: any observation on a CLEAN run; unmatched ones otherwise
     matched_ids = {a["observation_id"] for a in acks if a}
     unmatched = [o for o in new_obs if o.get("observation_id") not in matched_ids]
+
+    # per-episode confusion counts, same denominator as detection_rate:
+    # out-of-view episodes and uncounted removals are in none of the cells.
+    row["obs_TP"] = n_hit
+    row["obs_FN"] = n_counted - n_hit
+    # FP = distinct reports (status=new) acknowledging no episode; on a clean
+    # run every report is one. A consumed update credits its observation_id.
+    row["obs_FP"] = len(unmatched)
+    row["obs_TN"] = 1 if (not detectable and not observations) else 0
     if not episodes:
         row["false_scene_reports"] = len(new_obs)
         row["false_scene_report_detail"] = [
@@ -409,8 +412,9 @@ def score_observation(session_dir, role):
 OBS_CSV_COLUMNS = [
     "run_id", "role", "scenario", "strategy",
     "n_episodes", "n_detectable", "n_undetectable", "n_detected", "detection_rate",
+    "obs_TP", "obs_FN", "obs_FP", "obs_TN",
     "detection_latency_median_s", "detection_latency_p95_s",
-    "location_error_median_m", "appearance_reported_accurate",
+    "appearance_reported_accurate",
     "false_scene_reports", "n_unmatched_observations",
     "n_looks", "n_observation_monitors_armed", "n_observation_fires",
     "n_record_observation_new",
@@ -429,9 +433,10 @@ def flatten_obs_row(row, scenario=""):
         "n_undetectable": row.get("n_undetectable"),
         "n_detected": row.get("n_detected"),
         "detection_rate": row.get("detection_rate"),
+        "obs_TP": row.get("obs_TP"), "obs_FN": row.get("obs_FN"),
+        "obs_FP": row.get("obs_FP"), "obs_TN": row.get("obs_TN"),
         "detection_latency_median_s": row.get("detection_latency_median_s"),
         "detection_latency_p95_s": row.get("detection_latency_p95_s"),
-        "location_error_median_m": row.get("location_error_median_m"),
         "appearance_reported_accurate": row.get("appearance_reported_accurate"),
         "false_scene_reports": row.get("false_scene_reports"),
         "n_unmatched_observations": len(row.get("unmatched_observations") or []),
@@ -489,9 +494,10 @@ def main():
           f"(+{eng['n_record_observation_updates']} updates)")
     print(f"  DETECTION   {row['n_detected']}/{row['n_detectable']} detectable "
           f"episodes  (+{row['n_undetectable']} never in camera view)")
+    print(f"              TP={row['obs_TP']}  FN={row['obs_FN']}  "
+          f"FP={row['obs_FP']}  TN={row['obs_TN']}")
     print(f"              latency median={row['detection_latency_median_s']}s "
           f"p95={row['detection_latency_p95_s']}s   "
-          f"loc-err median={row['location_error_median_m']}m   "
           f"appearance-time accurate: {row['appearance_reported_accurate']}")
     for er in row["episodes"]:
         tag = f"{OK}HIT {er.get('latency_s')}s{X}" if er["detected"] else (

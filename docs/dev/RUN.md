@@ -319,7 +319,7 @@ carries `WATCHDOG_SCENARIO` (which tools the server registers) and
 | S1 | `watchdog.mcp.json` / `watchdog_2.mcp.json` | library monitors | look at boundaries |
 | S2 | `watchdog_s2.mcp.json` / `watchdog_2_s2.mcp.json` | library + authored | look + camera-reading authored monitors |
 | S3 | `watchdog_s3.mcp.json` / `watchdog_2_s3.mcp.json` | authored only | look + camera-reading authored monitors |
-| S4 | not yet runnable (executor-side monitor server pending) | — | same as S2/S3 on the executor, pending host — the S4 prompt already documents record_observation, but the tool awaits the S4 monitor host (do NOT add it to the scene server before then) |
+| S4 | NO watchdog session at all — `./run_executor.sh s4 [1\|2]` selects `executor_s4.mcp.json` / `executor_2_s4.mcp.json` | authored only, on the executor's own monitor host (`executor_monitor_mcp_server`) | same as S2/S3, on the executor: look (scene server) + camera-reading authored monitors + record_observation (monitor host) |
 
 The executor uses `executor.mcp.json` / `executor_2.mcp.json` unchanged in
 S1–S3. The task pairing rule still applies: both sides must name the same
@@ -327,6 +327,22 @@ assembly — the plain configs pair with each other, the `_2` configs pair with
 each other. Each server reads only its own role's task-path variable, so a
 wrong pairing gives one role the wrong task rather than leaking the other's
 file. Always pass `--settings watchdog.settings.json` regardless of scenario.
+
+**S4 is launched differently.** There is no watchdog session: the cell comes
+up with `guard_mode:=unguarded` (s4_scorer's validity gate refuses anything
+else), and only the executor session is launched, with `./run_executor.sh s4
+[1|2]`. Its `_s4` config points the same three command servers at the `_s4`
+task file, sets `EXECUTOR_AGENT_CONFIG` to `executor_agent_s4.yaml` (so
+`get_rendered_task` renders `executor_system_s4.txt`), and adds the
+executor-side monitor host `executor_monitor_mcp_server`: arm_custom_monitor,
+dry_run_custom_monitor, disarm_monitor(_all), get_monitor_fires,
+query_snapshot, get_evidence, record_observation, record_verdict,
+record_run_verdict — in the executor role. Its events log to
+`events_executor_monitor.jsonl` (never `events_watchdog.jsonl`, whose
+emptiness is the scorer's independence evidence) and its tool calls append to
+`mcp_calls_executor.jsonl` beside the command servers'. Rebuild the workspace
+(`colcon build --packages-select robot_backend`) before the first S4 run so
+the `executor_monitor_mcp_server` entry point exists in the install space.
 
 ---
 
@@ -338,8 +354,11 @@ In each session, list the MCP tools:
   `grasp`, `begin_step` or `lift` appear, `--strict-mcp-config` was missing or
   you are in an extension window. The run is not scoreable — relaunch.
 - **Executor session** must contain **zero** watchdog tools (`arm_monitor`,
-  `record_verdict`, `halt_execution`, `get_evidence`). This holds for S1–S3;
-  S4 (executor-side monitoring) is not yet runnable and will change it.
+  `record_verdict`, `halt_execution`, `get_evidence`). This holds for S1–S3.
+  In S4 the executor session legitimately carries the monitor-host tools
+  (`arm_custom_monitor`, `get_monitor_fires`, `record_verdict`, ...) from
+  `executor_monitor_mcp_server`, but never `arm_monitor` (library monitors)
+  and never a watchdog session beside it.
 - **Scenario matches the launch.** The watchdog's `get_rendered_task` result
   carries `scenario` and `sources.system_prompt_path`, which must agree with
   the config you launched: `watchdog_system.txt` (S1),

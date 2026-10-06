@@ -49,11 +49,12 @@ the paper. The one rename: S1–S3's `watchdog_final_verdict` corresponds to
 `final_verdict` here (the verdict author differs; `executor_self_reported`
 disambiguates).
 
-EVENT SOURCES: the S4 executor-side host does not exist yet; this scorer reads
-monitor/verdict/phase events from EVERY events_*.jsonl in the session EXCEPT
-events_watchdog.jsonl (whose contents are a validity violation, not data).
-When the host lands, whatever events_<name>.jsonl it logs to is picked up
-automatically; if it logs somewhere else, update load_s4_events.
+EVENT SOURCES: this scorer reads monitor/verdict/phase events from EVERY
+events_*.jsonl in the session EXCEPT events_watchdog.jsonl (whose contents are
+a validity violation, not data). The S4 executor-side host
+(executor_monitor_mcp_server) logs to events_executor_monitor.jsonl, which
+this glob picks up; its tool calls land in mcp_calls_executor.jsonl, which the
+serialization metrics read.
 """
 from __future__ import annotations
 
