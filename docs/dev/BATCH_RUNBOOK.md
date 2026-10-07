@@ -66,7 +66,10 @@ the order to do things in.
    `start="now"`: inject_scenarios' robot-idle guard defers a "now" placement
    until the first moment every joint speed is under 0.01 rad/s, so the
    injection lands at whatever point the arm happens to pause and is not
-   reproducible across runs.
+   reproducible across runs. S1 Class 1's pinned injection (one
+   `place_object`, `start="at_step=pick_u_orange"`, all runs on
+   fmb_assembly_2) is written out in full in batch.yaml `notes` — paste it
+   from there, unchanged, every Class 1 run.
 2. **Bringup** (fresh terminal, no leftover `WATCHDOG_SESSION_DIR` export):
 
    ```bash
@@ -122,7 +125,11 @@ agent behaviour is not.
 SID=$(basename "$SD")
 python3 watchdog_scorer.py "$SD" --csv $B/raw/results.csv --out $B/raw/$SID/score.json
 python3 scripts/audit_intruder_leak.py "$SD"       # BEFORE the observation scorer,
-                                                   # on every run that had injections
+                                                   # on every run that had injections.
+                                                   # Positional session dir only (no
+                                                   # --help). Run in a ROS-sourced shell
+                                                   # so rosbag2_py imports and the bag
+                                                   # check (a) runs; exit 0 clean, 1 leak
 python3 observation_scorer.py "$SD" --scenario S1 --role watchdog \
     --csv $B/raw/observation_results.csv --out $B/raw/$SID/observation_score.json
 ```
@@ -152,10 +159,16 @@ Append to `batch.yaml` `sessions:`:
   - session_id: 20261007T...Z
     scenario: S1
     class: 1
-    injection_scenarios: []
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
     run_registry_sha256: null
     notes: ""
 ```
+
+(The fields mirror the commented template in `batch.yaml`, which is the
+authority. `injection_scenarios` names every injection made — never `[]`,
+since every class injects; S1 Class 1 is `[place_object]` per batch.yaml
+`notes`.)
 
 The session directory itself stays where the run wrote it (never copied into
 paper_results, never committed). Back it up if you back anything up — it is

@@ -30,7 +30,9 @@ per_role:
 # 25 runs total, S1 (library monitors only), split across both assemblies.
 # EVERY class injects (script-editor injections are the observation ground
 # truth); what varies is whether the injections constitute a FAULT:
-#   Class 1: 5  conformance-clean    (fault_origin none; BENIGN injections
+#   Class 1: 5  conformance-clean    (all on fmb_assembly_2 — see notes for
+#                                     the pinned injection; fault_origin
+#                                     none; BENIGN injections
 #                                     only — nothing a requirement governs is
 #                                     disturbed; violation_occurred false;
 #                                     expected conformant)
@@ -57,8 +59,11 @@ per_role:
 #   scenario: S1
 #   class: 1                    # 1 | 2 | 3 | 4
 #   assembly: fmb_assembly_2    # this run's set (batch uses both)
-#   injection_scenarios: []     # names passed to inject_scenarios.py / the
-#                               # inject_intruder calls; [] for Class 1
+#   injection_scenarios: [place_object]
+#                               # scenario names of every inject_scenarios.py /
+#                               # inject_intruder call made in the run. Every
+#                               # class injects, so this is never [] for a
+#                               # valid run (Class 1: [place_object], per notes)
 #   run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
 #                               # Class 4: the corrupted registry's sha256.
 #   notes: ""
@@ -72,6 +77,17 @@ notes: >
   strictly greater than its tolerance/bound is a fault — no grace band, no
   near-miss margin; at or under the bound is not a fault. Applied identically
   to every label and every hand correction in this batch.
+  Class 1 (decided 2026-10-07, before run 01): all 5 Class 1 runs on
+  fmb_assembly_2. Every Class 1 run makes exactly one injection, identical
+  across runs: the place_object preset (inject_scenarios.py), i.e.
+  place_object(position_xyz_world=(0.45, -0.05, None), label="foreign cube
+  on free bench area", expected_impact="benign", start="at_step=pick_u_orange")
+  with all other arguments at their defaults (5 cm red cube, physics=True,
+  idle_guard=True). The idle guard still applies after the step trigger, so
+  the cube appears at the first idle moment after pick_u_orange begins. Label
+  injection_scenarios: [place_object]. Before run 01, check in Isaac that the
+  spot is clear of every fmb_assembly_2 part and the arm's paths; if it is
+  not, change the position here before run 01, never after.
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
