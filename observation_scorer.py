@@ -61,6 +61,10 @@ visit (enter/in_view/dwell/leave/out_of_view/removed) or one dragged move
                                if the agent never catalogued the intruder)
   tracked_move (moved/settled bursts, gap > EPISODE_GAP_S starts a new episode)
                             -> expect object_moved/unlisted_object
+                               (a tracked_move within SETTLE_WINDOW_S and
+                               SETTLE_TOL_M of a placement is that object
+                               dropping onto the bench: folded into the
+                               foreign_object episode, not its own)
   removal / vanished        -> expect object_missing (only scored when the
                                agent had previously acknowledged the object —
                                you cannot miss the disappearance of something
@@ -101,6 +105,8 @@ from watchdog_scorer import (  # noqa: E402
 EPISODE_GAP_S = 30.0        # tracked_move records further apart start a new episode
 APPEARANCE_TOL_S = 30.0      # |first_seen claim - ground truth| within this = accurate
 PRE_T0_SLACK_S = 2.0         # an obs may precede t0 by this much (clock/record ordering)
+SETTLE_WINDOW_S = 5.0        # tracker move this soon after a placement ...
+SETTLE_TOL_M = 0.02          # ... and this close to it = the drop onto the bench
 
 EXPECTED_CATEGORY = {
     "foreign_object":        {"unlisted_object", "other_unexpected"},
@@ -132,6 +138,17 @@ def _event_kind(rec):
             "remove": "removal"}.get(rec.get("action"))
 
 
+def _is_settle(place_rec, rec):
+    """rec is the placed object settling: within SETTLE_WINDOW_S of the
+    placement and SETTLE_TOL_M of the placement position."""
+    p0, p1 = place_rec.get("position_xyz_world"), rec.get("position_xyz_world")
+    if not p0 or not p1:
+        return False
+    dt = (rec["wall_ns"] - place_rec["wall_ns"]) / 1e9
+    dist = sum((a - b) ** 2 for a, b in zip(p0, p1)) ** 0.5
+    return 0 <= dt <= SETTLE_WINDOW_S and dist <= SETTLE_TOL_M
+
+
 def build_episodes(gt_records):
     """Group ground-truth lines into one detection opportunity each."""
     episodes = []
@@ -150,6 +167,14 @@ def build_episodes(gt_records):
             # vanished tracker records score like removals
             if kind == "tracked_move" and rec.get("action") == "vanished":
                 kind = "removal"
+            # a physics=True placement spawns a few mm above its resting z and
+            # drops onto the bench; the tracker records that settle as an
+            # uncommanded move. It is the placement itself, not a second event.
+            if (kind == "tracked_move" and current is not None
+                    and current["kind"] == "foreign_object"
+                    and _is_settle(current["records"][0], rec)):
+                current["records"].append(rec)
+                continue
             new_needed = (
                 current is None
                 or current["kind"] != kind
