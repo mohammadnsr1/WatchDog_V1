@@ -97,7 +97,7 @@ sessions:
     assembly: fmb_assembly_2
     injection_scenarios: []
     run_registry_sha256: null
-    notes: "fmb2_s1c2_run01. Started as a Class 1 run; NATURAL fault (u_brown mis-seated at place_u_brown, base1 knocked during failed recovery), executor aborted, no injection fired (run ended before pick_u_orange). Scorer step-level FN on u_brown and coverage miss on base1 are under review (see notes)."
+    notes: "fmb2_s1c2_run01. Started as a Class 1 run; NATURAL fault (u_brown mis-seated at place_u_brown, base1 knocked during failed recovery), executor aborted, no injection fired (run ended before pick_u_orange). Its first-pass u_brown FN and base1 coverage miss were scorer artifacts, fixed in 643770e; score with 643770e or later."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -140,7 +140,10 @@ notes: >
   still needs 5 clean runs. First case: 20261007T223412Z.
   Fixture rule (operator decision 2026-10-07, all batches): base1/base2 have
   no numeric tolerance (task: "undisturbed"), so ANY real, settled
-  displacement of a fixture is a violation. Labels of all four sessions were rewritten
+  displacement of a fixture is a violation.
+  Scorer revision 643770e (2026-10-07): per-verdict object attribution +
+  fired-monitor coverage. Re-scoring runs 01-03 (C1) with it gives identical
+  numbers, so their f67ff37 rows stand; every later run is scored with it. Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 
