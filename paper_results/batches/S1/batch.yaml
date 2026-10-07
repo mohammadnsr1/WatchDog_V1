@@ -121,7 +121,13 @@ notes: >
   raw/ being append-only): the superseded rows (fmb1-label rows, pre-f67ff37
   observation rows, a duplicate) and the void run's rows + score folder were
   deleted, leaving one f67ff37 row per valid run; the deleted rows remain in
-  git history (commit f7b5339). Labels of all four sessions were rewritten
+  git history (commit f7b5339).
+  Stage file: assets/usd/assembly_room.usd was re-saved at 14:53 local
+  (between run01 and run02) after the operator deleted leftover intruder
+  prims; operator confirms no other edit, and the saved file has no
+  WatchdogIntruders prims. Committed as-is so later runs use a recorded
+  stage. From here on: clear intruders by reopening the stage WITHOUT
+  saving, so the file stops drifting. Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 
