@@ -68,6 +68,12 @@ visit (enter/in_view/dwell/leave/out_of_view/removed) or one dragged move
                                reported, not counted)
 An episode whose every ground-truth sample has in_camera_view=false is
 UNDETECTABLE: reported, excluded from the detection denominator.
+An episode whose t0 is AFTER the run's run_ended event is POST-RUN: reported
+(post_run_episodes), in none of the cells and not in n_episodes. Stopping or
+resetting the sim after a run moves leftover intruders, and the pose tracker
+records that into the still-current session — the agent was no longer
+watching, so it is not a detection opportunity. A run with no run_ended event
+is not clipped.
 
 MATCHING: category + time window only. An episode is acknowledged by the
 earliest category-compatible observation at or after t0 (minus
@@ -220,6 +226,15 @@ def load_role_events(session_dir, role):
             sorted(obs_arms, key=key), sorted(obs_fires, key=key))
 
 
+def run_end_dt(session_dir):
+    """Wall time of the earliest run_ended event in any events_*.jsonl, or None."""
+    ends = [iso_to_dt(e["wall_time_iso"])
+            for path in Path(session_dir).glob("events_*.jsonl")
+            for e in load_jsonl(path)
+            if e.get("event_type") == "run_ended" and e.get("wall_time_iso")]
+    return min(ends) if ends else None
+
+
 # ---------------------------------------------------------------------------
 # matching: episode -> first acknowledgment (category + time window ONLY;
 # localization is not a metric and a reported location never affects matching)
@@ -285,12 +300,19 @@ def score_observation(session_dir, role):
 
     looks, observations, obs_arms, obs_fires = load_role_events(session_dir, role)
     episodes = build_episodes(gt)
+    run_end = run_end_dt(session_dir)
+    post_run = [e for e in episodes
+                if run_end is not None and ns_to_dt(e["t0_wall_ns"]) > run_end]
+    episodes = [e for e in episodes if e not in post_run]
 
     row = {
         "run_id": session_dir.name,
         "role": role,
         "n_ground_truth_records": len(gt),
+        "run_ended_iso": run_end.isoformat() if run_end else None,
         "n_episodes": len(episodes),
+        "post_run_episodes": [
+            {k: e[k] for k in ("name", "kind", "t0_iso")} for e in post_run],
         "leak_audited": audit is not None,
         "leak": audit.get("leak") if audit else None,
         "excluded": bool(audit and audit.get("leak")),
@@ -505,6 +527,8 @@ def main():
             else "out-of-view" if not er["detectable"] else "uncounted")
         extra = f" fire+{er['fire_latency_s']}s" if er.get("fire_latency_s") is not None else ""
         print(f"    {er['name']:<22} {er['kind']:<22} {tag}{extra}")
+    for pr in row.get("post_run_episodes") or []:
+        print(f"    {pr['name']:<22} {pr['kind']:<22} post-run (not counted)")
     if row.get("false_scene_reports"):
         print(f"  {BAD}FALSE SCENE REPORTS on a clean run: "
               f"{row['false_scene_reports']}{X}")

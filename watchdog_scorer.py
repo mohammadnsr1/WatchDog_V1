@@ -554,6 +554,10 @@ def score_run(session_dir, label):
                    (b["payload"].get("object_ids") or [None])[0] )
                  for b in begins], key=lambda x: x[0])
     steps_tl = []
+    # next step's (begin_step time, active object) per step — see the
+    # stationarity loop: the next target's stationarity is only owed until
+    # the executor blocks at the next gate, not until that gate's release.
+    next_target = {}
     for i, (t, sid, active) in enumerate(bs):
         # window start = when the executor was RELEASED to act on this step
         w0 = ready_step.get(sid, ts(t))
@@ -561,6 +565,7 @@ def score_run(session_dir, label):
         if i+1 < len(bs):
             nxt_sid = bs[i+1][1]
             w1 = ready_step.get(nxt_sid, ts(bs[i+1][0]))
+            next_target[sid] = (ts(bs[i+1][0]), bs[i+1][2])
         else:
             w1 = end_all
         if w1 < w0: w1 = ts(t) if i+1 >= len(bs) else ts(bs[i+1][0])  # safety
@@ -606,12 +611,20 @@ def score_run(session_dir, label):
         offsets_here  = {}   # monitor family -> arm offset vs grasp-confirm (s)
         gates_here    = {}   # monitor family -> arm offset vs gate release (s), None if ungated
 
-        # STATIONARITY: every object except the active one
+        # STATIONARITY: every object except the active one. For the NEXT
+        # step's active object the window ends at the next begin_step, not the
+        # next release: during the gate pause the executor is blocked and the
+        # watchdog must disarm that object's stationarity before releasing the
+        # grasp, so a disarm inside the pause is correct preparation, not a
+        # coverage miss (decided 2026-10-07, before the first valid S1 run).
+        nxt_begin, nxt_active = next_target.get(sid, (None, None))
         for o in sorted(all_objs):
             if o == active: continue
             expected_here.append({"object": o, "monitor": "stationarity"})
             pos_exp += 1
-            if is_live(o, "position_static", w0, w1, GRACE):
+            w1_o = nxt_begin if (o == nxt_active and nxt_begin is not None
+                                 and w0 < nxt_begin < w1) else w1
+            if is_live(o, "position_static", w0, w1_o, GRACE):
                 pos_ok += 1; covered_here.append({"object": o, "monitor": "stationarity"})
             else:
                 missed_here.append({"object": o, "monitor": "stationarity"})
