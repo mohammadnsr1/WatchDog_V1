@@ -117,8 +117,11 @@ notes: >
   unchanged since). observation_scorer gained the placement-settle fold in
   f67ff37, AFTER runs 01-03 were first scored; every valid run was rescored
   with f67ff37 into raw/ (append-only), and all later runs are scored with it.
-  The superseded raw rows are listed in corrected/CORRECTIONS.md and get
-  exclude=1 when corrected/ is built. Labels of all four sessions were rewritten
+  raw/ cleanup (2026-10-07, operator decision, a one-time exception to
+  raw/ being append-only): the superseded rows (fmb1-label rows, pre-f67ff37
+  observation rows, a duplicate) and the void run's rows + score folder were
+  deleted, leaving one f67ff37 row per valid run; the deleted rows remain in
+  git history (commit f7b5339). Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 
@@ -129,5 +132,6 @@ known_invalid:
     reason: >
       Operator error: a leftover cube (foreign_3124e9 at 0.45,-0.05) from the
       pre-run spot check sat in the scene all run with no place record; label
-      was the fmb1 template; scored on pre-1d29e92 scorers. Rows in raw/ get
-      exclude=1 in corrected/. Not counted toward the 5 Class 1 runs.
+      was the fmb1 template; scored on pre-1d29e92 scorers. Its raw/ rows were
+      removed in the 2026-10-07 cleanup (see notes). Not counted toward the
+      5 Class 1 runs.
