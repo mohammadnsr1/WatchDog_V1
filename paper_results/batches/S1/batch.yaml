@@ -98,6 +98,20 @@ sessions:
     injection_scenarios: []
     run_registry_sha256: null
     notes: "fmb2_s1c2_run01. Started as a Class 1 run; NATURAL fault (u_brown mis-seated at place_u_brown, base1 knocked during failed recovery), executor aborted, no injection fired (run ended before pick_u_orange). Its first-pass u_brown FN and base1 coverage miss were scorer artifacts, fixed in 643770e; score with 643770e or later."
+  - session_id: 20261007T230224Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c2_run02. Started as a Class 1 run; NATURAL faults: line_green in-hand slip at place_line_green (0.15 mm over the bound), u_brown + line_green knocked off base1 at place_inverted_u_yellow; unplanned recover_pick_u_brown failed, executor aborted. Benign cube injection fired as planned."
+  - session_id: 20261007T232107Z
+    scenario: S1
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c1_run04. Conformance valid. OBSERVATION EXCLUDED (exclude=1 on its observation row when corrected/ is built): the injection script was started late, so the cube spawned at 23:27:31 during place_line_green instead of at pick_u_orange (23:24:14) -- not the pinned moment. Phase 1 step 2 was skipped: claude_cli_version.txt reconstructed from agent_config_*.json and the settings files copied afterwards (unchanged since fd7455a)."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -143,7 +157,10 @@ notes: >
   displacement of a fixture is a violation.
   Scorer revision 643770e (2026-10-07): per-verdict object attribution +
   fired-monitor coverage. Re-scoring runs 01-03 (C1) with it gives identical
-  numbers, so their f67ff37 rows stand; every later run is scored with it. Labels of all four sessions were rewritten
+  numbers, so their f67ff37 rows stand; every later run is scored with it.
+  Scorer revision 30d59a3 (2026-10-07): last step's coverage window ends at
+  run_ended (was: the watchdog's last event). All six runs so far rescore
+  identically except run04 (232107Z), which was scored with 30d59a3. Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 
