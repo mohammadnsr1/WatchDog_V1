@@ -583,6 +583,8 @@ def score_run(session_dir, label):
                    (b["payload"].get("object_ids") or [None])[0] )
                  for b in begins], key=lambda x: x[0])
     steps_tl = []
+    _ends = exec_events(ev, "run_ended")
+    run_end_t = ts(_ends[0]["wall_time_iso"]) if _ends else None
     # next step's (begin_step time, active object) per step — see the
     # stationarity loop: the next target's stationarity is only owed until
     # the executor blocks at the next gate, not until that gate's release.
@@ -596,7 +598,10 @@ def score_run(session_dir, label):
             w1 = ready_step.get(nxt_sid, ts(bs[i+1][0]))
             next_target[sid] = (ts(bs[i+1][0]), bs[i+1][2])
         else:
-            w1 = end_all
+            # last step: ends when the executor ended the run, not at the
+            # watchdog's last event — disarming after run_ended (wrap-up
+            # before the run verdict) is cleanup, not a coverage gap.
+            w1 = min(end_all, run_end_t) if run_end_t else end_all
         if w1 < w0: w1 = ts(t) if i+1 >= len(bs) else ts(bs[i+1][0])  # safety
         steps_tl.append((sid, active, w0, w1))
 
