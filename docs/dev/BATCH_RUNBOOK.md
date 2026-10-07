@@ -37,10 +37,18 @@ the order to do things in.
 
    plus `date_utc`, `assembly`, `per_role` models/efforts. `purpose: scored`.
 
-4. **Decide N and the stopping rule up front** (e.g. "10 clean runs; a run
-   voided by an operator/infra error is replaced, a run where the agents
-   merely behaved badly is NOT — that is data"). Write it in `batch.yaml`
-   `notes`. Deciding after seeing results is how batches go wrong.
+4. **Record the batch decisions in `batch.yaml` `notes` before run 01.**
+   Deciding after seeing results is how batches go wrong. Two fields, filled
+   literally:
+
+   - N per class and the stopping rule (S1 batch: 5×C1 / 10×C2 / 5×C3 /
+     5×C4; a run voided by an operator/infra error is replaced; a run where
+     the agents merely behaved badly is NOT — that is data).
+   - Fire adjudication rule (decided 2026-10-06, applied identically to every
+     label in every batch): **any measured value strictly greater than its
+     tolerance/bound is a fault — no grace band, no near-miss margin.** A
+     fire at or under the bound is not a fault; a fire over it is, however
+     small the excess. Hand corrections in corrected/ follow the same rule.
 
 5. `B=paper_results/batches/S1` in the shell you score from.
 
@@ -54,6 +62,11 @@ the order to do things in.
    truth; a hand-dragged prim is invisible to scoring. Class 1 injections
    must be benign (nothing a requirement governs is disturbed): the run stays
    conformance-clean while still giving the observation scorer episodes.
+   Scored-batch injections are pinned with `start="at_step=<step_id>"`, never
+   `start="now"`: inject_scenarios' robot-idle guard defers a "now" placement
+   until the first moment every joint speed is under 0.01 rad/s, so the
+   injection lands at whatever point the arm happens to pause and is not
+   reproducible across runs.
 2. **Bringup** (fresh terminal, no leftover `WATCHDOG_SESSION_DIR` export):
 
    ```bash

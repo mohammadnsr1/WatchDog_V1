@@ -1,7 +1,7 @@
 # Batch provenance. See paper_results/README.md.
-batch_id: 20261005_smoke
-date_utc: 2026-10-05
-purpose: smoke                  # smoke | scored — smoke batches never feed paper numbers
+batch_id: S2
+date_utc: TBD                   # UTC date of the batch's first run
+purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
 git_sha: TBD                    # git rev-parse HEAD at run time
@@ -11,7 +11,7 @@ registry_sha256: TBD            # sha256sum ros2_ws/install/robot_backend/share/
                                 # their corrupted one per session below.
 
 assembly: TBD                   # e.g. fmb_assembly_2
-scenarios: [S1, S2, S3, S4]     # TBD: trim to the scenarios this batch actually ran
+scenarios: [S2]
 
 per_role:
   executor:

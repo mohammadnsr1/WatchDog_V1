@@ -65,6 +65,15 @@ per_role:
 #   notes: ""
 sessions: []
 
+notes: >
+  Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
+  5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
+  is replaced and logged under known_invalid, a run where the agents merely
+  behaved badly stays — that is data. Fire adjudication: any measured value
+  strictly greater than its tolerance/bound is a fault — no grace band, no
+  near-miss margin; at or under the bound is not a fault. Applied identically
+  to every label and every hand correction in this batch.
+
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
 known_invalid: []

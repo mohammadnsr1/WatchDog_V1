@@ -1,15 +1,41 @@
-run_id: fmb2_s1c1_run01          # per-run
+# Label template — fmb_assembly_2, S1, Class 1. Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s1c1_run01          # per-run: unique, fmb2_s1c1_runNN
 task: fmb_assembly_2
 scenario: S1
 class: 1
 
 expected_final_verdict: conformant
-expected_terminal_status: completed
+expected_terminal_status: completed   # documentation-only
 expected_recovered: false
 fault_origin: none
 
+# Class 1 = conformance-clean. Benign script-editor injections are allowed and
+# expected (observation ground truth lives in ground_truth_injections.jsonl);
+# they do NOT go in violation_steps and do not flip violation_occurred.
 violation_occurred: false
-violation_steps: []
+violation_steps: []              # Class 2/3: [{step: <step_id>, object: <id>,
+                                 #              kind: <what>, note: <detail>}]
 
 boundary_grace_s: 3.0
 
@@ -33,8 +59,8 @@ expected_monitors:
   - {object: line_green,        kind: clamp_effort,       window: held_span}
   - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
 
-# ---- per-run below ----
+# ---- per-run below (documentation-only; the reviewer's record) --------------
 physical_outcome: >                # per-run: final measured offsets vs tolerance
 executor_claimed: completed        # per-run: whatever it actually claimed
-notes: >                           # per-run
-  Injections: <at_step=..., at_step=...>. No rosbag recorded.
+notes: >                           # per-run: name every injection made,
+  Injections: <at_step=..., at_step=...>.
