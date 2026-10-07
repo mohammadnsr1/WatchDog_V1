@@ -69,7 +69,28 @@ per_role:
 #   run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
 #                               # Class 4: the corrupted registry's sha256.
 #   notes: ""
-sessions: []
+sessions:
+  - session_id: 20261007T213533Z
+    scenario: S1
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c1_run01"
+  - session_id: 20261007T215407Z
+    scenario: S1
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c1_run02"
+  - session_id: 20261007T220959Z
+    scenario: S1
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c1_run03; the one stationarity miss (line_green at pick_inverted_u_yellow) is real: disarm 0.015 -> re-arm 0.02 left a 2.8 s gap after the gate release"
 
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
@@ -92,6 +113,14 @@ notes: >
   not, change the position here before run 01, never after. Position
   changed (0.45 -> -0.45, -0.05) after the spot check, before the first valid
   run; matches isaac/script_editor/s1_c1_inject.py.
+  Scorer revision (2026-10-07): runs execute on git_sha 1d29e92 (runtime code
+  unchanged since). observation_scorer gained the placement-settle fold in
+  f67ff37, AFTER runs 01-03 were first scored; every valid run was rescored
+  with f67ff37 into raw/ (append-only), and all later runs are scored with it.
+  The superseded raw rows are listed in corrected/CORRECTIONS.md and get
+  exclude=1 when corrected/ is built. Labels of all four sessions were rewritten
+  from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
+  rescore.
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
