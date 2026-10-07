@@ -1,6 +1,6 @@
 """Typed, ROS-free model-registry loading and geometry resolution."""
 
-from .loader import load_registry
+from .loader import REGISTRY_OVERRIDE_ENV, executor_registry_override, load_registry
 from .model import (
     BoxCollisionSpec,
     CollisionSpec,
@@ -17,5 +17,7 @@ __all__ = [
     "MeshGeometry",
     "RegisteredObject",
     "Registry",
+    "REGISTRY_OVERRIDE_ENV",
+    "executor_registry_override",
     "load_registry",
 ]

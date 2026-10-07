@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_backend.events.schema import EventEnvelope
-from robot_backend.registry import load_registry
+from robot_backend.registry import executor_registry_override, load_registry
 
 from .timebase import wall_ns
 
@@ -149,6 +149,10 @@ _DEFAULT_REGISTRY_PATH = (
 def _load_registry(path: Path | None = None) -> dict[str, Any]:
     if path is not None:
         resolved = path
+    elif (override := executor_registry_override()) is not None:
+        # Class 4: executor-role processes only (the executor_monitor host);
+        # in the watchdog server this returns None by its role guard.
+        resolved = override
     else:
         try:
             from ament_index_python.packages import get_package_share_directory

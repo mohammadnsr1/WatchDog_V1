@@ -48,19 +48,31 @@ EFFORT="${EFFORT:-$(python3 -c "import json; print(json.load(open('executor.sett
 session_dir=$(cat ~/.watchdog/current_session 2>/dev/null || true)
 if [ -n "$session_dir" ] && [ -d "$session_dir" ]; then
   python3 - "$session_dir" "$assembly" "$MODEL" "$EFFORT" "$scenario" <<'PYEOF'
-import datetime, json, subprocess, sys
+import datetime, hashlib, json, os, subprocess, sys
 session_dir, assembly, model, effort, scenario = sys.argv[1:6]
 try:
     cli = subprocess.run(["claude", "--version"], capture_output=True,
                          text=True, timeout=15).stdout.strip()
 except Exception as exc:
     cli = f"unavailable: {exc}"
+# Class 4: EXECUTOR_REGISTRY_PATH hands this session's servers a corrupted
+# registry (executor-role processes only; see registry/loader.py). Recorded
+# here so the run record names it even if no server ever loaded it.
+override = os.environ.get("EXECUTOR_REGISTRY_PATH", "").strip() or None
+override_sha = None
+if override:
+    try:
+        override_sha = hashlib.sha256(open(override, "rb").read()).hexdigest()
+    except OSError as exc:
+        override_sha = f"unreadable: {exc}"
 record = {
     # scenario is null in S1-S3 (those live entirely on the watchdog side,
     # and the executor's surface is identical across them) and "s4" on an S4
     # run, where the scenario lives entirely on the executor side.
     "role": "executor", "scenario": scenario or None, "assembly": assembly,
     "model": model, "effort": effort, "claude_cli_version": cli,
+    "executor_registry_override": override,
+    "executor_registry_override_sha256": override_sha,
     "launched_wall_time_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }
 path = f"{session_dir}/agent_config_executor.json"
@@ -73,6 +85,9 @@ else
        "agent_config_executor.json not written (bring the cell up first)" >&2
 fi
 
+if [ -n "${EXECUTOR_REGISTRY_PATH:-}" ]; then
+  echo "CLASS 4: executor registry override = $EXECUTOR_REGISTRY_PATH" >&2
+fi
 echo "launching executor session: $config  (model=$MODEL effort=$EFFORT)" >&2
 exec claude --mcp-config "$config" --strict-mcp-config \
   --model "$MODEL" --effort "$EFFORT" \

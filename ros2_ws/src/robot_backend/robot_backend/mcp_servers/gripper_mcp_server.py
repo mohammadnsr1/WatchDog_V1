@@ -30,7 +30,7 @@ from rclpy.node import Node
 
 from robot_backend.events.bus import configure_bus, shutdown_bus
 from robot_backend.events.decorator import emit_skill_events
-from robot_backend.registry import load_registry
+from robot_backend.registry import executor_registry_override, load_registry
 from robot_backend.ros_moveit_backend import create_ros_moveit_backend
 from robot_backend.watchdog import session as session_helper
 from robot_backend.skills.gripper_skills import close_gripper_skill
@@ -65,6 +65,11 @@ _REGISTRY: dict[str, Any] | None = None
 
 
 def _load_registry() -> dict[str, Any]:
+    # Class 4: an executor-role process may be handed a corrupted registry via
+    # EXECUTOR_REGISTRY_PATH (see registry/loader.py's role guard).
+    override = executor_registry_override()
+    if override is not None:
+        return load_registry(override).raw_dict
     try:
         from ament_index_python.packages import get_package_share_directory
         path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"

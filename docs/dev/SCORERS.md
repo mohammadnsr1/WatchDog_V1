@@ -1,7 +1,15 @@
-# Scorers (2026-10-02)
+# Scorers (updated 2026-10-06)
 
-Three scorers, two tables-of-record plus one observation table. Nothing has
-been run against pilot batches yet — commands below.
+Three scorers, two tables-of-record plus one observation table. Verified on
+live sessions (incl. the first S4 run, 20261006T215544Z); batch collection
+procedure in BATCH_RUNBOOK.md; batch output layout in paper_results/README.md.
+
+Changes of 2026-10-06, scored-batch relevant: watchdog_scorer's verdict/fault
+split (`verdict_TP/FP/TN/FN` vs `fault_TP/FP/TN/FN`, never merged) and
+`fire_to_next_verdict_*` latency (heuristic pairing off the fire's own
+`trigger_wall_ns`); observation_scorer's `obs_TP/FN/FP/TN` with
+category+time-only matching (localization dropped); s4_scorer's per-duty
+arming coverage and executor-registry provenance (Class 4).
 
 | scorer | scope | output |
 |---|---|---|
@@ -111,11 +119,15 @@ guarded gates; `events_watchdog.jsonl` must hold no verdict/monitor events.
   `executor_seen_value`, `true_value`; `corrupted_binds` = executor-verified
   but true-registry-wrong. Non-Class-4 runs flag `class4_path_untested`.
 - **Registry provenance**: every row records `scored_registry_sha256` (the
-  `--registry` file), `run_registry_sha256` (from the session's
-  `manifest.json`, i.e. the registry the run loaded) and
-  `registry_differs_from_run`. A Class 4 run is refused (exit 2) when the two
-  hashes match: scoring against the corrupted registry would mark every
-  corrupted bind correct. Pass a clean copy with `--registry` for Class 4.
+  `--registry` file), `run_registry_sha256` (what the EXECUTOR loaded: the
+  session's `registry_provenance_executor.json`, written by the executor's
+  servers when the Class 4 `EXECUTOR_REGISTRY_PATH` override is active, with
+  `manifest.json` — the CELL's registry — as the fallback), plus
+  `run_registry_source` and `registry_differs_from_run`. A Class 4 run is
+  refused (exit 2) when the two hashes match: scoring against the corrupted
+  registry would mark every corrupted bind correct. Pass a clean copy with
+  `--registry` for Class 4. Corrupted copies are built with
+  `scripts/make_corrupt_registry.py` (see RUN.md's Class 4 section).
 - Verdict correctness same schema as S1–S3; `executor_self_reported=True`
   column (the independence column).
 - **Serialization metrics** (S4-only): arming contention

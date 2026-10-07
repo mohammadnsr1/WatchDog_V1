@@ -176,20 +176,30 @@ def resolve_session_dir_strict() -> tuple[Path, str]:
 
 
 def _live_registry_provenance() -> tuple[str | None, str | None]:
-    """Return (path, sha256) of the registry this cell would load.
+    """Return (path, sha256) of the registry THIS role's servers load.
 
-    Resolved the way the servers resolve it: install space first, source tree
-    as fallback.
+    Resolved the way the servers resolve it: the executor-only Class 4
+    override first (registry/loader.py's executor_registry_override, a no-op
+    in a watchdog-role process), then install space, then the source tree.
+    On a Class 4 run this is what makes the executor's own get_rendered_task
+    record the corrupted registry's hash in its sources block.
 
     Never raises. Both agents call get_rendered_task before anything else, so
     a hashing failure must degrade to a reported null rather than block the
     run; the null is itself the signal that provenance could not be captured.
     """
+    path = None
     try:
-        from ament_index_python.packages import get_package_share_directory
-        path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+        from robot_backend.registry import executor_registry_override
+        path = executor_registry_override()
     except Exception:
-        path = Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
+        path = None
+    if path is None:
+        try:
+            from ament_index_python.packages import get_package_share_directory
+            path = Path(get_package_share_directory("robot_backend")) / "config" / "model_registry.yaml"
+        except Exception:
+            path = Path(__file__).resolve().parents[2] / "config" / "model_registry.yaml"
     try:
         return str(path), session_helper.sha256_file(path)
     except Exception:

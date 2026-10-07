@@ -48,13 +48,49 @@ fail loudly on their own; the rest are still on you.
 | 6 | Launch watchdog, then executor | manual |
 | 7 | Injection run only: after the run, `ros2_ws/.venv/bin/python3 scripts/audit_intruder_leak.py <session_dir>` — a run with `leak: true` is excluded from observation scoring | **manual** |
 
-S2/S3 runs may be collected now but must not be scored until the scorer
-recognises authored monitors.
+(S2/S3 authored monitors are scored since 2026-10-02 — origin split in
+watchdog_scorer, boolean per injected fault; see SCORERS.md.)
 
-> **ON HOLD.** This procedure corrupts the single shared registry, which the
-> WatchDog also reads, so the WatchDog would arm from the corrupted value.
-> Class 4 runs wait for the executor-only registry override. Do not run
-> Class 4 in any scenario until then.
+### Class 4 — executor-only registry corruption (runnable since 2026-10-06)
+
+The old hold ("corrupting the shared registry corrupts the WatchDog's copy
+too") is resolved by the **`EXECUTOR_REGISTRY_PATH`** override:
+
+- Honored ONLY by executor-role processes (`EXECUTOR_TASK_PATH` set,
+  `WATCHDOG_TASK_PATH` unset) — the guard lives in
+  `robot_backend/registry/loader.py::executor_registry_override`, so a stray
+  export in the watchdog's shell is ignored with a warning, and the cell-side
+  `scene_tf_sync_node` never consults it at all. Physics, planning and (in
+  S1–S3) the WatchDog always run on the real install-space registry.
+- A set-but-missing path fails the launch loudly rather than silently
+  falling back to the clean registry (which would score as "no corruption").
+- When active, the executor's servers write
+  `<session>/registry_provenance_executor.json` (path + sha256 of what they
+  actually loaded), and the executor's own `get_rendered_task` reports the
+  corrupted `registry_sha256` in its sources block. `run_executor.sh` echoes
+  the override and records it in `agent_config_executor.json`.
+
+Procedure:
+
+```bash
+# 1. build the corrupted copy (never edits the install registry; pins
+#    asset_root so mesh paths keep resolving; records every edit + sha256)
+python3 scripts/make_corrupt_registry.py /path/to/c4_runNN.yaml \
+    --set objects.u_brown.spec.limits.max_clamp_effort=400
+
+# 2. bringup as usual (cell loads the CLEAN registry), watchdog as usual
+#    (S1–S3) from its own shell WITHOUT the env var
+
+# 3. executor with the override
+EXECUTOR_REGISTRY_PATH=/path/to/c4_runNN.yaml ./run_executor.sh 2    # or: s4 2
+```
+
+Scoring: `s4_scorer.py` scores thresholds against the TRUE registry
+(`--registry`, default install space) and reads the run's side from
+`registry_provenance_executor.json` first (falling back to `manifest.json`,
+which records the CELL's clean registry and is NOT what the executor read on
+a Class 4 run). The corrupted file's sha256 goes in `batch.yaml`'s
+`run_registry_sha256` for the session.
 
 **Step 1 is the one with no guard.** The servers load the registry from install
 space via `get_package_share_directory`, so editing
@@ -566,7 +602,7 @@ mid-carry planner failures back with it.
   whether the code runs and reads what its author expected. It arms nothing,
   emits no `monitor_armed`/`monitor_fire`/`monitor_disarmed`, counts no strikes,
   and covers no requirement for the time it takes — a dry run is not monitoring.
-  S4 will reuse it on the executor-side monitor host.
+  The S4 executor-side monitor host serves the same tool.
 
 ### What lands on disk
 

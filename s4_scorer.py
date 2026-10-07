@@ -200,22 +200,37 @@ def load_true_registry(path):
 
 
 def registry_provenance(session_dir, registry_path):
-    """Which registry was scored against vs which one the run loaded.
+    """Which registry was scored against vs which one the EXECUTOR loaded.
 
-    The run's side comes from the session manifest.json (registry_path /
-    registry_sha256, the file the cell actually loaded); both hashes are of the
-    raw file bytes, so they compare directly. registry_differs_from_run is None
-    when the manifest is missing or carries no hash.
+    The run's side prefers <session>/registry_provenance_executor.json — the
+    record the executor-side servers write when the Class 4 override
+    (EXECUTOR_REGISTRY_PATH) is active, i.e. the registry the executor
+    actually read. Fallback: the session manifest.json (registry_path /
+    registry_sha256), which is the file the CELL loaded — correct for every
+    run without an override, but on a Class 4 run the cell deliberately stays
+    on the clean registry, so the manifest alone would make the corrupted run
+    look clean and trip the gate in main() backwards. Both hashes are of raw
+    file bytes, so they compare directly. registry_differs_from_run is None
+    when neither source carries a hash.
     """
     scored_sha = hashlib.sha256(Path(registry_path).read_bytes()).hexdigest()
+    exec_prov_path = Path(session_dir) / "registry_provenance_executor.json"
     manifest_path = Path(session_dir) / "manifest.json"
-    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
-    run_sha = manifest.get("registry_sha256")
+    run_path, run_sha, source = None, None, None
+    if exec_prov_path.exists():
+        prov = json.loads(exec_prov_path.read_text())
+        run_path, run_sha = prov.get("registry_path"), prov.get("registry_sha256")
+        source = "registry_provenance_executor.json (EXECUTOR_REGISTRY_PATH override)"
+    if run_sha is None and manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        run_path, run_sha = manifest.get("registry_path"), manifest.get("registry_sha256")
+        source = "manifest.json (cell registry; no executor override recorded)"
     return {
         "scored_registry_path": str(Path(registry_path).resolve()),
         "scored_registry_sha256": scored_sha,
-        "run_registry_path": manifest.get("registry_path"),
+        "run_registry_path": run_path,
         "run_registry_sha256": run_sha,
+        "run_registry_source": source,
         "registry_differs_from_run": (scored_sha != run_sha) if run_sha else None,
     }
 

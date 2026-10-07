@@ -103,12 +103,17 @@ because that is the file a live run loads. The source copy can differ from it
 if `colcon build` was not rerun after an edit. This is the clean registry for
 the batch.
 
-Class 4 runs deliberately load a corrupted registry. For these runs, the hash
-of the registry the run actually loaded goes in the session's
-`run_registry_sha256` field in `batch.yaml`. It can be read from the session's
-`manifest.json`. `s4_scorer.py` uses the install-space copy as its true
-registry by default. For a Class 4 run, pass the clean registry with
-`--registry`. The scorer records both hashes in every row
-(`scored_registry_sha256`, `run_registry_sha256`, `registry_differs_from_run`),
-and it refuses to score a Class 4 run if the two match, because the corruption
-would then be invisible.
+Class 4 runs hand the EXECUTOR a corrupted registry via the
+`EXECUTOR_REGISTRY_PATH` override (built with
+`scripts/make_corrupt_registry.py`; see RUN.md's Class 4 section). The cell
+and, in S1–S3, the WatchDog keep loading the clean install-space registry —
+so the session's `manifest.json` records the CLEAN hash on a Class 4 run.
+The hash of what the executor actually loaded is written by its servers to
+the session's `registry_provenance_executor.json`, and that is the value that
+goes in the session's `run_registry_sha256` field in `batch.yaml` (the
+corruption script prints it). `s4_scorer.py` reads the same file first
+(manifest as fallback), scores thresholds against the true install-space
+registry by default, records both hashes in every row
+(`scored_registry_sha256`, `run_registry_sha256`, `run_registry_source`,
+`registry_differs_from_run`), and refuses to score a Class 4 run if the two
+match, because the corruption would then be invisible.

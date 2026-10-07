@@ -48,8 +48,12 @@ the order to do things in.
 
 ## Phase 1 — per run: launch
 
-1. **Isaac**: scene loaded, **simulation time reset, playing**. For C1 do not
-   touch the scene from here on — no injections, no hand nudges.
+1. **Isaac**: scene loaded, **simulation time reset, playing**. Injections
+   (any class, C1 included) go through `inject_intruder.py` /
+   `inject_scenarios.py` in the script editor ONLY — they write the ground
+   truth; a hand-dragged prim is invisible to scoring. Class 1 injections
+   must be benign (nothing a requirement governs is disturbed): the run stays
+   conformance-clean while still giving the observation scorer episodes.
 2. **Bringup** (fresh terminal, no leftover `WATCHDOG_SESSION_DIR` export):
 
    ```bash
@@ -69,7 +73,8 @@ the order to do things in.
 
 ## Phase 2 — per run: during
 
-Hands off. Do not inject, don't touch the scene, don't talk to either
+Run the planned injections from the script editor at their planned moments;
+otherwise hands off — don't touch the scene by hand, don't talk to either
 session. Watch for (note in the label's `notes` if seen): gate timeouts,
 halts, retries, anything physically odd. If YOU break the run (wrong config,
 Isaac hiccup, accidental input), kill it, log the session id under
@@ -91,22 +96,27 @@ agent behaviour is not.
 
    Edit in `$SD`: unique `run_id` (e.g. `fmb2_s1c1_run03`),
    `physical_outcome` (what you measured/observed at run end),
-   `executor_claimed` (its actual run_ended status), `notes`. For C1:
-   `violation_occurred: false`, `violation_steps: []`, `fault_origin: none`
-   stay as the template has them. One `.yaml` per session dir, exactly.
+   `executor_claimed` (its actual run_ended status), `notes` (name the
+   injections made). For C1 with benign injections: `violation_occurred:
+   false`, `violation_steps: []`, `fault_origin: none` stay as the template
+   has them — the injections are observation ground truth
+   (`ground_truth_injections.jsonl`), not conformance ground truth. One
+   `.yaml` per session dir, exactly.
 
 ## Phase 4 — per run: score into raw/
 
 ```bash
 SID=$(basename "$SD")
 python3 watchdog_scorer.py "$SD" --csv $B/raw/results.csv --out $B/raw/$SID/score.json
-python3 observation_scorer.py "$SD" --scenario S1 \
+python3 scripts/audit_intruder_leak.py "$SD"       # BEFORE the observation scorer,
+                                                   # on every run that had injections
+python3 observation_scorer.py "$SD" --scenario S1 --role watchdog \
     --csv $B/raw/observation_results.csv --out $B/raw/$SID/observation_score.json
 ```
 
-(C1 has no injections, so there is no `ground_truth_injections.jsonl` and the
-leak audit does not apply; on injected classes the audit runs BEFORE the
-observation scorer — see paper_results/README.md.)
+(Every class injects in this design, C1 included, so the audit runs on every
+run. It needs the finalized bag — Phase 3's bringup Ctrl-C — and a `leak:
+true` run is excluded from observation scoring, not from conformance.)
 
 Read the console output NOW, while the run is fresh:
 
@@ -164,10 +174,15 @@ session directory.
 ## Substitutions for later batches
 
 - **S2/S3**: `./run_watchdog.sh s2|s3 2`; isolation check expects
-  `arm_custom_monitor`; injected classes add: run `inject_scenarios.py`
-  per the class design, record the injections in the label's
-  `violation_steps` / the batch.yaml `injection_scenarios`, and run
-  `scripts/audit_intruder_leak.py "$SD"` BEFORE the observation scorer.
+  `arm_custom_monitor`. Fault classes (C2/C3): the injections that constitute
+  the fault go in the label's `violation_steps` with `violation_occurred:
+  true`; benign ones stay observation-only, as in C1.
+- **Class 4** (any scenario): build the corrupted registry with
+  `scripts/make_corrupt_registry.py`, launch the executor with
+  `EXECUTOR_REGISTRY_PATH=<file> ./run_executor.sh ...`, watchdog (S1–S3)
+  from its own shell WITHOUT the var. The session's
+  `registry_provenance_executor.json` sha goes in batch.yaml's
+  `run_registry_sha256`. Full procedure: RUN.md's Class 4 section.
 - **S4**: no watchdog session; bringup `guard_mode:=unguarded`;
   `./run_executor.sh s4 2`; score with `s4_scorer.py` (+ observation scorer
   `--role executor`); authored-monitor coverage rows are reviewed by hand

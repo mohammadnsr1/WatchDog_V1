@@ -7,6 +7,9 @@ the registry file's directory.
 
 from __future__ import annotations
 
+import json
+import os
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +25,82 @@ from .model import (
     Registry,
     Vector3Tuple,
 )
+
+
+# Class 4 (registry corruption): the EXECUTOR-side registry override.
+#
+# A Class 4 run hands the executor a corrupted registry while the physical
+# cell (scene_tf_sync, MoveIt) and, in S1-S3, the WatchDog keep the clean one.
+# The override is an env var rather than a config edit so a batch can flip it
+# per run (`EXECUTOR_REGISTRY_PATH=... ./run_executor.sh ...`): the executor's
+# MCP servers inherit it from the launching shell.
+#
+# It is honored ONLY in an executor-role process — the same env-var role test
+# role_context.detect_role() uses (EXECUTOR_TASK_PATH set, WATCHDOG_TASK_PATH
+# unset). That guard is load-bearing: the watchdog session's servers are also
+# launched from a shell, so a stray export would otherwise corrupt the
+# watchdog's copy too and the independence comparison with it. A non-executor
+# process that sees the var warns and loads the normal registry. The cell-side
+# scene_tf_sync node does not call this at all: physics and planning always
+# run on the real registry.
+REGISTRY_OVERRIDE_ENV = "EXECUTOR_REGISTRY_PATH"
+
+
+def executor_registry_override() -> Path | None:
+    """The overriding registry path for THIS process, or None.
+
+    Raises when the override names a missing file — a Class 4 run silently
+    falling back to the clean registry would score as "no corruption" and
+    poison the batch, so the launch must die instead.
+
+    When the override applies, its provenance (path + sha256) is written to
+    <session>/registry_provenance_executor.json so the scorer can see which
+    registry the executor actually read without trusting the executor's own
+    bookkeeping. Best-effort: a provenance write failure never blocks a load.
+    """
+    raw = os.environ.get(REGISTRY_OVERRIDE_ENV, "").strip()
+    if not raw:
+        return None
+    is_executor = (
+        os.environ.get("EXECUTOR_TASK_PATH", "").strip()
+        and not os.environ.get("WATCHDOG_TASK_PATH", "").strip()
+    )
+    if not is_executor:
+        warnings.warn(
+            f"{REGISTRY_OVERRIDE_ENV} is set but this is not an executor-role "
+            f"process; ignoring it and loading the normal registry. The "
+            f"override corrupts the EXECUTOR's view only, by design.",
+            stacklevel=2,
+        )
+        return None
+    path = Path(os.path.expanduser(raw)).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"{REGISTRY_OVERRIDE_ENV}={raw!r} does not name a file. Refusing "
+            f"to fall back to the clean registry: a Class 4 run that silently "
+            f"loaded the clean copy would score as if no corruption happened."
+        )
+    _record_override_provenance(path)
+    return path
+
+
+def _record_override_provenance(path: Path) -> None:
+    try:
+        from robot_backend.watchdog import session as session_helper
+
+        session_dir = session_helper.active_session_dir()
+        if session_dir is None:
+            return
+        record = {
+            "role": "executor",
+            "registry_path": str(path),
+            "registry_sha256": session_helper.sha256_file(path),
+            "override_env": REGISTRY_OVERRIDE_ENV,
+        }
+        out = session_dir / "registry_provenance_executor.json"
+        out.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    except Exception:  # pragma: no cover - provenance must never block a load
+        pass
 
 
 def load_registry(path: Path | str) -> Registry:

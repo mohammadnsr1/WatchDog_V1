@@ -1,38 +1,70 @@
-# Batch provenance. See paper_results/README.md.
+# Batch provenance. See paper_results/README.md and docs/dev/BATCH_RUNBOOK.md.
 batch_id: S1
-date_utc: TBD                   # UTC date of the batch's first run
+date_utc: TBD                   # UTC date of the batch's FIRST run — set when it happens
 purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
-git_sha: TBD                    # git rev-parse HEAD at run time
-registry_sha256: TBD            # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
-                                # (INSTALL space copy — that is what a live run reads).
-                                # This is the CLEAN registry; Class 4 sessions record
-                                # their corrupted one per session below.
+git_sha: TBD                    # git rev-parse HEAD at run time. The working tree
+                                # currently has UNCOMMITTED scorer/server changes
+                                # (verdict/fault split, S4 host) — COMMIT FIRST,
+                                # then record the new sha here. A sha that does not
+                                # contain the scorer that produced raw/ is not
+                                # provenance.
+registry_sha256: ff4a6f968a9192f25f9651452345d536ec6ed6116a8c9d8fb14e8096db54ec90
+                                # sha256 of ros2_ws/install/robot_backend/share/
+                                # robot_backend/config/model_registry.yaml
+                                # (INSTALL space copy — what a live run loads),
+                                # taken 2026-10-06. Re-verify after any colcon build.
 
-assembly: TBD                   # e.g. fmb_assembly_2
+assembly: [fmb_assembly, fmb_assembly_2]   # both sets; each session names its own
 scenarios: [S1]
 
 per_role:
   executor:
-    model: TBD
-    effort: TBD
+    model: claude-sonnet-5      # from executor.settings.json — FROZEN for the batch
+    effort: low
   watchdog:
-    model: TBD                  # n/a for S4 sessions (unguarded)
-    effort: TBD
+    model: claude-sonnet-5      # from watchdog.settings.json
+    effort: low
 
-sessions:
-  - session_id: TBD
-    scenario: S1
-    class: TBD
-    injection_scenarios: []     # names passed to inject_scenarios.py; [] if none
-    run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
-                                # Class 4: the corrupted registry's sha256, from the
-                                # session's manifest.json (registry_sha256).
-    notes: ""
+# ---- batch design (decided 2026-10-06, before the first run) ----------------
+# 25 runs total, S1 (library monitors only), split across both assemblies.
+# EVERY class injects (script-editor injections are the observation ground
+# truth); what varies is whether the injections constitute a FAULT:
+#   Class 1: 5  conformance-clean    (fault_origin none; BENIGN injections
+#                                     only — nothing a requirement governs is
+#                                     disturbed; violation_occurred false;
+#                                     expected conformant)
+#   Class 2: 10 injected faults      (fault_origin injected; the fault
+#                                     injections go in the label's
+#                                     violation_steps)
+#   Class 3: 5  noise-induced faults (fault_origin noise_induced)
+#   Class 4: 5  registry corruption  (EXECUTOR_REGISTRY_PATH override +
+#                                     scripts/make_corrupt_registry.py —
+#                                     runnable since 2026-10-06; see RUN.md's
+#                                     Class 4 section. run_registry_sha256
+#                                     below = the corrupted file's sha, from
+#                                     the session's
+#                                     registry_provenance_executor.json)
+# Scene observation is scored on every run: run
+# scripts/audit_intruder_leak.py BEFORE observation_scorer.py (leak=true
+# excludes the run from observation scoring, not from conformance scoring).
+# Replacement rule: a run voided by an operator/infra error (wrong config,
+# Isaac hiccup, accidental operator input) is logged under known_invalid and
+# RERUN; a run where the agents merely performed badly is data and stays.
+
+# ---- sessions: append one entry per run (BATCH_RUNBOOK.md Phase 5) ----------
+# - session_id: 20261007T......Z
+#   scenario: S1
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2    # this run's set (batch uses both)
+#   injection_scenarios: []     # names passed to inject_scenarios.py / the
+#                               # inject_intruder calls; [] for Class 1
+#   run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
+#                               # Class 4: the corrupted registry's sha256.
+#   notes: ""
+sessions: []
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
 known_invalid: []
-#  - session_id: TBD
-#    reason: TBD
