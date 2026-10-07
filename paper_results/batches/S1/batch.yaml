@@ -4,10 +4,12 @@ date_utc: 2026-10-07            # UTC date of the batch's FIRST run
 purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
-git_sha: 071ea90347b8b7487210774a0d45083193974f7a
-                                # git rev-parse HEAD, verified == HEAD with a clean
-                                # tree on 2026-10-07 (contains the verdict/fault
-                                # split, S4 host, Class 4 override). Code must not
+git_sha: 1d29e9263f6c37de4f08bcdf201f8c05f7bf007b
+                                # git rev-parse HEAD on 2026-10-07, after the void
+                                # run 20261007T205057Z and BEFORE the first valid
+                                # run: scorer window fixes (next-target gate pause,
+                                # post-run observation episodes) + u_orange
+                                # target_offset removal. Suite 627/7/0. Code must not
                                 # change mid-batch; if it does, that is a new batch.
 registry_sha256: ff4a6f968a9192f25f9651452345d536ec6ed6116a8c9d8fb14e8096db54ec90
                                 # sha256 of ros2_ws/install/robot_backend/share/
@@ -80,15 +82,23 @@ notes: >
   Class 1 (decided 2026-10-07, before run 01): all 5 Class 1 runs on
   fmb_assembly_2. Every Class 1 run makes exactly one injection, identical
   across runs: the place_object preset (inject_scenarios.py), i.e.
-  place_object(position_xyz_world=(0.45, -0.05, None), label="foreign cube
+  place_object(position_xyz_world=(-0.45, -0.05, None), label="foreign cube
   on free bench area", expected_impact="benign", start="at_step=pick_u_orange")
   with all other arguments at their defaults (5 cm red cube, physics=True,
   idle_guard=True). The idle guard still applies after the step trigger, so
   the cube appears at the first idle moment after pick_u_orange begins. Label
   injection_scenarios: [place_object]. Before run 01, check in Isaac that the
   spot is clear of every fmb_assembly_2 part and the arm's paths; if it is
-  not, change the position here before run 01, never after.
+  not, change the position here before run 01, never after. Position
+  changed (0.45 -> -0.45, -0.05) after the spot check, before the first valid
+  run; matches isaac/script_editor/s1_c1_inject.py.
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
-known_invalid: []
+known_invalid:
+  - session_id: 20261007T205057Z
+    reason: >
+      Operator error: a leftover cube (foreign_3124e9 at 0.45,-0.05) from the
+      pre-run spot check sat in the scene all run with no place record; label
+      was the fmb1 template; scored on pre-1d29e92 scorers. Rows in raw/ get
+      exclude=1 in corrected/. Not counted toward the 5 Class 1 runs.
