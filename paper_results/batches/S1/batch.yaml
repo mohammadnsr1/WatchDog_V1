@@ -91,7 +91,13 @@ sessions:
     injection_scenarios: [place_object]
     run_registry_sha256: null
     notes: "fmb2_s1c1_run03; the one stationarity miss (line_green at pick_inverted_u_yellow) is real: disarm 0.015 -> re-arm 0.02 left a 2.8 s gap after the gate release"
-
+  - session_id: 20261007T223412Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    notes: "fmb2_s1c2_run01. Started as a Class 1 run; NATURAL fault (u_brown mis-seated at place_u_brown, base1 knocked during failed recovery), executor aborted, no injection fired (run ended before pick_u_orange). Scorer step-level FN on u_brown and coverage miss on base1 are under review (see notes)."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -127,7 +133,14 @@ notes: >
   prims; operator confirms no other edit, and the saved file has no
   WatchdogIntruders prims. Committed as-is so later runs use a recorded
   stage. From here on: clear intruders by reopening the stage WITHOUT
-  saving, so the file stops drifting. Labels of all four sessions were rewritten
+  saving, so the file stops drifting.
+  Natural faults (operator decision 2026-10-07): a run intended as Class 1
+  that produces a real violation with no injection is labelled class 2,
+  fault_origin: natural, and COUNTS toward the 10 Class 2 runs. Class 1
+  still needs 5 clean runs. First case: 20261007T223412Z.
+  Fixture rule (operator decision 2026-10-07, all batches): base1/base2 have
+  no numeric tolerance (task: "undisturbed"), so ANY real, settled
+  displacement of a fixture is a violation. Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 

@@ -316,6 +316,8 @@ def score_run(session_dir, label):
     fires_ev = [e for e in wd_events(ev, "monitor_fire")
                 if _purpose(_pl(e)) != "observation"]
     finding_steps = {sv.get("step_id") for sv in step_v if sv.get("verdict") in FINDING_VERDICTS}
+    step_active = {b["payload"].get("step_id"): (b["payload"].get("object_ids") or [None])[0]
+                   for b in begins}
     finding_pairs = set()
     for sid in finding_steps:
         t0, t1 = step_window(sid)
@@ -326,11 +328,28 @@ def score_run(session_dir, label):
             if t0 is not None and ft >= t0 and (t1 is None or ft <= t1):
                 o = _obj(_pl(e))
                 if o: objs.add(o)
-        # also the verdict's own clause object, if any
-        for sv in step_v:
-            if sv.get("step_id") == sid and sv.get("verdict") in FINDING_VERDICTS:
-                co = (sv.get("clause") or {}).get("object_id")
-                if co: objs.add(co)
+        # also the verdict's own clause object, if any. A finding verdict with
+        # no clause object and NO fire of its own (none since the step began
+        # or since the previous finding verdict at this step) judged by direct
+        # measurement (e.g. query_snapshot at end_step) — attribute it to the
+        # step's ACTIVE object, so another object's fire in the same step
+        # cannot absorb it.
+        prev_t = t0
+        for sv in sorted((sv for sv in step_v if sv.get("step_id") == sid
+                          and sv.get("verdict") in FINDING_VERDICTS),
+                         key=lambda sv: sv.get("wall_time_iso") or ""):
+            co = (sv.get("clause") or {}).get("object_id")
+            if co:
+                objs.add(co)
+            vt = ts(sv["wall_time_iso"]) if sv.get("wall_time_iso") else None
+            if not co and vt is not None and step_active.get(sid) and not any(
+                    (prev_t is None or ts(e["wall_time_iso"]) > prev_t)
+                    and ts(e["wall_time_iso"]) <= vt
+                    and (t0 is None or ts(e["wall_time_iso"]) >= t0)
+                    for e in fires_ev):
+                objs.add(step_active[sid])
+            if vt is not None:
+                prev_t = vt
         if not objs:
             objs = {None}   # a finding with no resolvable object still counts as a finding at that step
         for o in objs:
@@ -505,9 +524,14 @@ def score_run(session_dir, label):
     for e in wd_events(ev, "monitor_armed"):
         p = _pl(e); events_by_id[p.get("monitor_id")].append((ts(p["wall_time_iso"]), "arm", _obj(p), p.get("monitor_type")))
     for e in wd_events(ev, "monitor_disarmed"):
-        p = _pl(e); events_by_id[p.get("monitor_id")].append((ts(p["wall_time_iso"]), "disarm", None, None))
+        p = _pl(e); events_by_id[p.get("monitor_id")].append(
+            (ts(p["wall_time_iso"]), "disarm", None, p.get("reason")))
     # object -> family_kind -> list of (start,end) live intervals
     live = defaultdict(lambda: defaultdict(list))
+    # (object, family_kind, end) of intervals that ended because the monitor
+    # FIRED (one-shot auto-disarm): the monitor did its job, so is_live counts
+    # it as covering the rest of the step window it fired in.
+    fired_ends = set()
     for mid, evs in events_by_id.items():
         evs.sort(key=lambda x: x[0])
         open_arm = None  # (t0, obj, mtype)
@@ -518,10 +542,13 @@ def score_run(session_dir, label):
                     pt0, po, pm = open_arm; fam = FAMILY.get(pm)
                     if fam and po: live[po][fam["kind"]].append((pt0, t))
                 open_arm = (t, o, mtype)
-            else:  # disarm
+            else:  # disarm (mtype slot carries the disarm reason)
                 if open_arm is not None:
                     pt0, po, pm = open_arm; fam = FAMILY.get(pm)
-                    if fam and po: live[po][fam["kind"]].append((pt0, t))
+                    if fam and po:
+                        live[po][fam["kind"]].append((pt0, t))
+                        if mtype == "fired":
+                            fired_ends.add((po, fam["kind"], t))
                     open_arm = None
         if open_arm is not None:  # never disarmed -> live to run end
             pt0, po, pm = open_arm; fam = FAMILY.get(pm)
@@ -531,6 +558,8 @@ def score_run(session_dir, label):
         need0, need1 = w0 + grace, w1 - grace
         if need1 <= need0: need0, need1 = w0, w1   # step shorter than 2*grace: require any overlap
         for (t0, t1) in live.get(o, {}).get(kind, []):
+            if (o, kind, t1) in fired_ends and w0 <= t1 <= w1:
+                t1 = w1   # fired inside this window: covered to its end
             if t0 <= need0 and t1 >= need1:
                 return True
         return False
