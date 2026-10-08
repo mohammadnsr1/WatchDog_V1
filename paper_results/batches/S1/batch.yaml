@@ -173,6 +173,11 @@ notes: >
                            20261008T004859Z: the executor corrected the
                            contradictory object_id, no fault occurred; that
                            run is data but not one of the 10.
+                           r4 runs also need scripts/r4_allow_finger_contact.py
+                           (operator ACM entry u_orange <-> RG2 links, so
+                           MoveIt lets the wrongly gripped part be lifted);
+                           its first attempt without it, 20261008T010304Z,
+                           could not lift.
     2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
     2x pressed too hard -- REGISTRY EDIT, not a task variant (operator
                            decision 2026-10-07): the install registry's
