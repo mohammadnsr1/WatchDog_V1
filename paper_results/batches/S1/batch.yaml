@@ -115,6 +115,21 @@ sessions:
     injection_scenarios: [place_object]
     run_registry_sha256: null
     notes: "fmb2_s1c1_run04. Conformance valid. OBSERVATION EXCLUDED (exclude=1 on its observation row when corrected/ is built): the injection script was started late, so the cube spawned at 23:27:31 during place_line_green instead of at pick_u_orange (23:24:14) -- not the pinned moment. Phase 1 step 2 was skipped: claude_cli_version.txt reconstructed from agent_config_*.json and the settings files copied afterwards (unchanged since fd7455a)."
+  - session_id: 20261007T234346Z
+    scenario: S1
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    notes: "fmb2_s1c1_run05. Conformant, coverage 116/116; cube on time at pick_u_orange. Registered late (2026-10-08); claude_cli_version.txt reconstructed from agent_config_*.json and settings files copied afterwards (unchanged since fd7455a)."
+  - session_id: 20261008T014544Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 0a865c1d75dd7157a1f62232575e6d5989d941c578d01de024f41047e98629ae
+    notes: "fmb2_s1c2_run03. r4 wrong object + ACM companion: u_orange lifted at pick_u_brown and seated in u_brown_placement; u_brown never held/seated; executor aborted after an unplanned retry. Benign cube never fired (aborted before pick_u_orange). WatchDog never armed stationarity on u_orange/line_green/inverted_u_yellow and never noticed u_orange; it caught u_brown not held but recorded it under place_u_brown, not pick_u_brown."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -169,15 +184,15 @@ notes: >
   all fmb_assembly_2, each keeping the benign cube:
     2x wrong object     -- task variant r4 (geometric: pick_u_brown's
                            grasp_center_offset re-aimed at u_orange). r1
-                           (object_id swap) was retired after its only run,
-                           20261008T004859Z: the executor corrected the
-                           contradictory object_id, no fault occurred; that
-                           run is data but not one of the 10.
+                           (object_id swap) was retired and removed: the
+                           executor corrected the contradictory object_id, no
+                           fault occurred. Its session was deleted by the
+                           operator (not data).
                            r4 runs also need scripts/r4_allow_finger_contact.py
                            (operator ACM entry u_orange <-> RG2 links, so
                            MoveIt lets the wrongly gripped part be lifted);
-                           its first attempt without it, 20261008T010304Z,
-                           could not lift.
+                           the first attempt without it could not lift
+                           (session deleted by the operator, not data).
     2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
     2x pressed too hard -- REGISTRY EDIT, not a task variant (operator
                            decision 2026-10-07): the install registry's
