@@ -170,6 +170,14 @@ sessions:
     run_registry_sha256: d36577bf62b03e7dcb1df3e0e2a9e4b606e3431f25a5f51bae2cedd8a9d6ccb5
     run_task_sha256: null
     notes: "fmb2_s1c2_run08. r3 (u_brown max_clamp_effort 10): effort monitor fired 47.28 vs 10 at pick_u_brown; run completed, all parts seated; executor did not flag it. OBSERVATION NOT SCORED: cube not queued (no ground_truth_injections.jsonl). First scored with the unedited template label (row removed from raw/, rescored with the corrected label); settings files copied after the run."
+  - session_id: 20261008T195453Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s1c2_run09. Nudge u_brown (0.03,0,0) at pick_line_green (seated part). The teleport into base1 ejected u_brown (~0.14 m) and cascaded: re-struck at line_green's lift, base1 shifted three times, unplanned recover_reseat_u_brown over-gripped (110.8) and knocked line_green; aborted. Registry restored (ff4a6f96) before this run. Executor used phase names grasped_<obj>; scorer accepts them from this commit. Launch files added after the run."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -227,6 +235,11 @@ notes: >
   grasp deadline (armed in time, fired inside the step) counts as covering,
   the same rule stationarity already had. All runs in raw/ rescore
   identically; first needed by 20261008T032957Z (effort fired at grasp).
+  Scorer revision (2026-10-08): (a) when every finding verdict at a step
+  names its objects in its failed clause_results (object_id), those names are
+  the attribution, not every fire in the step window; (b) grasp-confirm phases
+  'grasped_<obj>' / 'regrasped[_<obj>]' are accepted alongside 'grasped'. All
+  runs in raw/ rescore identically; first needed by 20261008T195453Z.
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:

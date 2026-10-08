@@ -197,6 +197,13 @@ def _obj(p):
         return o
     cl = p.get("clause") or {}
     return cl.get("object_id")
+def is_grasp_phase(name):
+    """grasp-confirm phase names: 'grasped', or the executor's per-object
+    variants 'grasped_<obj>' / 'regrasped[_<obj>]' (20261008T195453Z)."""
+    n = str(name or "").lower()
+    return n in ("grasped", "regrasped") or n.startswith(("grasped_", "regrasped_"))
+
+
 def step_active_object(payload, known_objects):
     """The step's active object: begin_step object_ids[0]; when the executor
     omitted object_ids, the longest known object id named in the step_id
@@ -365,6 +372,18 @@ def score_run(session_dir, label):
                 objs.add(step_active[sid])
             if vt is not None:
                 prev_t = vt
+        # When EVERY finding verdict at this step names its objects in its
+        # failed clause_results (object_id), those names are the attribution:
+        # the watchdog said what it judged, so a fire in the window that it
+        # did not adjudicate (e.g. a monitor wrongly armed on the active part)
+        # is not a finding.
+        named_per_verdict = [
+            {c.get("object_id") for c in (sv.get("clause_results") or [])
+             if c.get("pass") is False and c.get("object_id")}
+            for sv in step_v
+            if sv.get("step_id") == sid and sv.get("verdict") in FINDING_VERDICTS]
+        if named_per_verdict and all(named_per_verdict):
+            objs = set().union(*named_per_verdict)
         if not objs:
             objs = {None}   # a finding with no resolvable object still counts as a finding at that step
         for o in objs:
@@ -592,7 +611,7 @@ def score_run(session_dir, label):
         p = _pl(e)
         if p.get("scope") == "step" and p.get("step_id"):
             ready_step.setdefault(p["step_id"], ts(p["wall_time_iso"]))
-        if str(p.get("phase", "")).lower() == "grasped" and p.get("step_id"):
+        if is_grasp_phase(p.get("phase")) and p.get("step_id"):
             ready_grasp.setdefault(p["step_id"], ts(p["wall_time_iso"]))
     bs = sorted([( _pl(b)["wall_time_iso"], b["payload"].get("step_id"),
                    step_active_object(b["payload"], known_objects) )
@@ -636,8 +655,11 @@ def score_run(session_dir, label):
     grasped_at = {}
     for e in (ev["scene"] + ev["motion"] + ev["gripper"]):
         p = e.get("payload", {})
-        if e.get("event_type") in ("phase","mark_phase") and str(p.get("phase","")).lower()=="grasped":
-            sid=str(p.get("step_id","")); o=p.get("object_id") or sid.replace("repick_","").replace("pick_","")
+        if e.get("event_type") in ("phase","mark_phase") and is_grasp_phase(p.get("phase")):
+            sid=str(p.get("step_id","")); ph=str(p.get("phase","")).lower()
+            suffix=ph.split("grasped_",1)[1] if "grasped_" in ph else None
+            o=(p.get("object_id") or (suffix if suffix in known_objects else None)
+               or step_active_object({"step_id": sid}, known_objects))
             if o: grasped_at.setdefault(o, ts(e["wall_time_iso"]))
 
     per_step = []
