@@ -689,13 +689,19 @@ def score_run(session_dir, label):
                 eff_dl  = gate if gate is not None else gt
                 slip_dl = gate if gate is not None else gt + GRACE
                 gated_here = gate is not None
+                # A grip monitor that FIRED before the deadline (inside this step)
+                # did its job on a real event -- it covers, as in is_live.
+                def _grip_live(intervals, kind, dl):
+                    return any(t0 <= dl and (t1 >= dl or (
+                        (active, kind, t1) in fired_ends and t1 >= w0))
+                        for (t0, t1) in intervals)
                 # effort
                 expected_here.append({"object": active, "monitor": "effort"})
                 grip_exp += 1
                 eff = live.get(active, {}).get("clamp_effort", [])
                 offsets_here["effort"] = _arm_offset(eff, gt)
                 gates_here["effort"] = _arm_offset(eff, eff_dl) if gated_here else None
-                if any(t0 <= eff_dl and t1 >= eff_dl for (t0, t1) in eff):
+                if _grip_live(eff, "clamp_effort", eff_dl):
                     grip_ok += 1; covered_here.append({"object": active, "monitor": "effort"})
                 elif eff:
                     late_here.append({"object": active, "monitor": "effort",
@@ -709,7 +715,7 @@ def score_run(session_dir, label):
                 slip = live.get(active, {}).get("grip_relative_pose", [])
                 offsets_here["slip"] = _arm_offset(slip, gt)
                 gates_here["slip"] = _arm_offset(slip, slip_dl) if gated_here else None
-                if any(t0 <= slip_dl and t1 >= slip_dl for (t0, t1) in slip):
+                if _grip_live(slip, "grip_relative_pose", slip_dl):
                     grip_ok += 1; covered_here.append({"object": active, "monitor": "slip"})
                 else:
                     missed_here.append({"object": active, "monitor": "slip"})

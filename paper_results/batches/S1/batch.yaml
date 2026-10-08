@@ -215,6 +215,10 @@ notes: >
   active object is taken from the step_id (longest known object id in it),
   the watchdog contract's own fallback. All runs already in raw/ rescore
   identically; first needed by 20261008T025202Z.
+  Scorer revision (2026-10-08): an effort/slip monitor that FIRED before its
+  grasp deadline (armed in time, fired inside the step) counts as covering,
+  the same rule stationarity already had. All runs in raw/ rescore
+  identically; first needed by 20261008T032957Z (effort fired at grasp).
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
