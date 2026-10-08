@@ -604,7 +604,7 @@ objects:
         grasp_width_tolerance_m: 0.02
         grasp_slip_tolerance_m: 0.02
       limits:
-        max_clamp_effort: 100.0
+        max_clamp_effort: 10.0
         grasp_effort_floor: 0.05
 
   u_orange:
