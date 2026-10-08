@@ -213,7 +213,13 @@ notes: >
                            MoveIt lets the wrongly gripped part be lifted);
                            the first attempt without it could not lift
                            (session deleted by the operator, not data).
-    2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
+    2x missed grasp     -- 1x task variant r2 (grasp_center_offset.y
+                           -0.045; done: 20261008T025202Z) + 1x operator drop
+                           (decided 2026-10-08): committed task, and
+                           scripts/c2_drop_open_gripper.py calls
+                           /rg2_controller/open 3 s after the WatchDog releases
+                           place_approach_u_orange, so u_orange falls mid-
+                           transport (record: <session>/operator_faults.jsonl)
     2x pressed too hard -- REGISTRY EDIT, not a task variant (operator
                            decision 2026-10-07): the install registry's
                            max_clamp_effort for the chosen object(s) is
