@@ -130,6 +130,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 0a865c1d75dd7157a1f62232575e6d5989d941c578d01de024f41047e98629ae
     notes: "fmb2_s1c2_run03. r4 wrong object + ACM companion: u_orange lifted at pick_u_brown and seated in u_brown_placement; u_brown never held/seated; executor aborted after an unplanned retry. Benign cube never fired (aborted before pick_u_orange). WatchDog never armed stationarity on u_orange/line_green/inverted_u_yellow and never noticed u_orange; it caught u_brown not held but recorded it under place_u_brown, not pick_u_brown."
+  - session_id: 20261008T021346Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 0a865c1d75dd7157a1f62232575e6d5989d941c578d01de024f41047e98629ae
+    notes: "fmb2_s1c2_run04. r4 wrong object + ACM companion (1 apply). Same physical fault as run03: u_orange lifted at pick_u_brown and seated in u_brown_placement; u_brown never held/seated; unplanned pick_u_brown_retry closed on air; executor aborted. Cube never fired. WatchDog this time armed u_orange: both monitors fired at the lift and it recorded the wrong-object finding under pick_u_brown. Label copied from run03 and corrected (run_id, measurements, notes)."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
