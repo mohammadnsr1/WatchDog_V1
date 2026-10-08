@@ -296,7 +296,18 @@ notes: >
   within limit; the watchdog judges against 10. Label as r3:
   {pick_u_brown, u_brown, over_effort}. Session entry: run_registry_sha256 =
   the executor copy's sha (registry_provenance_executor.json); notes carry the
-  install sha. Restore the install registry to ff4a6f96 afterwards.
+  install sha. Restore the install registry to the Class 3/4 registry
+  (92969cc1, below) afterwards -- not ff4a6f96.
+  SCENE + REGISTRY REVISION for Class 3 and Class 4 (2026-10-08, after Class
+  2 completed, before any Class 3 run): assembly_room.usd gains a
+  u_orange_reorient frame prim (published on /tf) and u_orange's INITIAL POSE
+  changes so r5's reorient span plans; the registry gains the
+  u_orange_reorient frame entry -> registry sha
+  92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd for every
+  Class 3/4 run (Classes 1-2 ran on ff4a6f96 and the previous stage). The
+  start layout therefore differs between C1-C2 and C3-C4 (u_orange only);
+  compare within those groups, or say so where they are compared. r4's offset
+  (computed from u_orange's old start pose) is not valid on the new stage.
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:

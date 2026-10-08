@@ -820,6 +820,22 @@ objects:
       type: box
       dimensions: [0.001, 0.001, 0.001]
 
+  # Added 2026-10-08 for S1 Class 3 (task variant r5: u_orange reorient span).
+  # Authored in assembly_room.usd and published on /tf by Isaac the same day,
+  # unlike the fmb1-set reorient frames described above.
+  u_orange_reorient:
+    enabled: true
+    kind: frame
+    object_id: u_orange_reorient
+    tf_frame: u_orange_reorient
+    lookup_frame: world
+    class_name: placement_frame
+    source: isaac_gt
+    graspable: false
+    collision:
+      type: box
+      dimensions: [0.001, 0.001, 0.001]
+
   inverted_u_yellow_placement:
     enabled: true
     kind: frame
