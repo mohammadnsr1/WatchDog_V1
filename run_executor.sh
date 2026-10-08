@@ -19,6 +19,12 @@
 # at the _s4 task file and executor_agent_s4.yaml and add the executor-side
 # monitor host (executor_monitor_mcp_server). The cell bringup must be running
 # guard_mode:=unguarded, and no run_watchdog.sh is launched.
+#
+# Class 2 task variants: EXECUTOR_VARIANT=rN ./run_executor.sh 2 launches
+# executor_2_rN.mcp.json, which points EXECUTOR_TASK_PATH at
+# agents/tasks/runs/fmb_assembly_2.rN.executor.yaml (one injected fault each;
+# mapping in agents/tasks/runs/README.md). S1-S3 only. The variant name and
+# the task file's sha256 go into agent_config_executor.json.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -35,6 +41,15 @@ case "$assembly" in
   *) echo "assembly must be 1 or 2 (got: $assembly)" >&2; exit 1 ;;
 esac
 
+variant="${EXECUTOR_VARIANT:-}"
+if [ -n "$variant" ]; then
+  if [ -n "$scenario" ] || [ "$assembly" != "2" ]; then
+    echo "EXECUTOR_VARIANT is for S1-S3 fmb_assembly_2 runs only" >&2; exit 1
+  fi
+  config="executor_2_${variant}.mcp.json"
+  [ -f "$config" ] || { echo "no such variant config: $config" >&2; exit 1; }
+fi
+
 # MODEL and EFFORT come from the environment, defaulting to the values in
 # executor.settings.json ("model" / "effortLevel"), passed as explicit
 # --model/--effort flags (see run_watchdog.sh). STUDY DESIGN: the executor is
@@ -47,9 +62,9 @@ EFFORT="${EFFORT:-$(python3 -c "import json; print(json.load(open('executor.sett
 
 session_dir=$(cat ~/.watchdog/current_session 2>/dev/null || true)
 if [ -n "$session_dir" ] && [ -d "$session_dir" ]; then
-  python3 - "$session_dir" "$assembly" "$MODEL" "$EFFORT" "$scenario" <<'PYEOF'
+  python3 - "$session_dir" "$assembly" "$MODEL" "$EFFORT" "$scenario" "$config" "$variant" <<'PYEOF'
 import datetime, hashlib, json, os, subprocess, sys
-session_dir, assembly, model, effort, scenario = sys.argv[1:6]
+session_dir, assembly, model, effort, scenario, config, variant = sys.argv[1:8]
 try:
     cli = subprocess.run(["claude", "--version"], capture_output=True,
                          text=True, timeout=15).stdout.strip()
@@ -65,6 +80,13 @@ if override:
         override_sha = hashlib.sha256(open(override, "rb").read()).hexdigest()
     except OSError as exc:
         override_sha = f"unreadable: {exc}"
+task_path = task_sha = None
+try:
+    cfg = json.load(open(config))
+    task_path = next(iter(cfg["mcpServers"].values()))["env"]["EXECUTOR_TASK_PATH"]
+    task_sha = hashlib.sha256(open(task_path, "rb").read()).hexdigest()
+except Exception as exc:
+    task_sha = f"unreadable: {exc}"
 record = {
     # scenario is null in S1-S3 (those live entirely on the watchdog side,
     # and the executor's surface is identical across them) and "s4" on an S4
@@ -73,6 +95,11 @@ record = {
     "model": model, "effort": effort, "claude_cli_version": cli,
     "executor_registry_override": override,
     "executor_registry_override_sha256": override_sha,
+    # Class 2 task variant (EXECUTOR_VARIANT), null on the committed task.
+    "executor_variant": variant or None,
+    "mcp_config": config,
+    "executor_task_path": task_path,
+    "executor_task_sha256": task_sha,
     "launched_wall_time_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
 }
 path = f"{session_dir}/agent_config_executor.json"
@@ -85,6 +112,9 @@ else
        "agent_config_executor.json not written (bring the cell up first)" >&2
 fi
 
+if [ -n "$variant" ]; then
+  echo "CLASS 2 VARIANT: $variant ($config)" >&2
+fi
 if [ -n "${EXECUTOR_REGISTRY_PATH:-}" ]; then
   echo "CLASS 4: executor registry override = $EXECUTOR_REGISTRY_PATH" >&2
 fi

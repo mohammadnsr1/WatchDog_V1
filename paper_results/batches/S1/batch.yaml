@@ -68,6 +68,9 @@ per_role:
 #                               # valid run (Class 1: [place_object], per notes)
 #   run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
 #                               # Class 4: the corrupted registry's sha256.
+#   run_task_sha256: null       # null = the committed executor task. Class 2
+#                               # task variant: executor_task_sha256 from the
+#                               # session's agent_config_executor.json.
 #   notes: ""
 sessions:
   - session_id: 20261007T213533Z
@@ -160,7 +163,22 @@ notes: >
   numbers, so their f67ff37 rows stand; every later run is scored with it.
   Scorer revision 30d59a3 (2026-10-07): last step's coverage window ends at
   run_ended (was: the watchdog's last event). All six runs so far rescore
-  identically except run04 (232107Z), which was scored with 30d59a3. Labels of all four sessions were rewritten
+  identically except run04 (232107Z), which was scored with 30d59a3.
+  Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
+  10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
+  all fmb_assembly_2, each keeping the benign cube:
+    2x wrong object     -- task variant r1 (object_id swapped in one pick)
+    2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
+    2x pressed too hard -- task variant r3 (narrower grasp_width_m)
+    1x part displaced   -- nudge_object on a seated part (s1_c2_nudge.py)
+    1x bystander moved  -- nudge_object on a bystander (s1_c2_nudge.py)
+  Task variants: agents/tasks/runs/fmb_assembly_2.rN.executor.yaml, launched
+  with EXECUTOR_VARIANT=rN ./run_executor.sh 2 (launcher option added for
+  C2; the default path is unchanged). Neutral names on purpose: the executor
+  sees its task file path. Each variant's edit and violation_steps are fixed
+  in agents/tasks/runs/README.md and committed BEFORE its first run; session
+  entries carry run_task_sha256 from agent_config_executor.json. fault_origin
+  for all eight: injected. Labels of all four sessions were rewritten
   from the fmb1 template (copied by mistake) to gt_fmb2_s1c1.yaml before the
   rescore.
 
