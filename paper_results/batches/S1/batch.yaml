@@ -146,6 +146,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 88f936f138a65232498818558c664f708f402466fb26f2f4e36521a57b58a4a1
     notes: "fmb2_s1c2_run05. r2 (grasp_center_offset.y -0.045): u_orange slipped in hand during place_u_orange (0.020463 vs 0.02) but still seated; run completed, all parts in tolerance -> expected conformant + recovered. OBSERVATION NOT SCORED: the benign cube was not queued (no ground_truth_injections.jsonl). Executor sent begin_step without object_ids -- scored with the step_id fallback added in this commit."
+  - session_id: 20261008T031155Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s1c2_run06. Operator drop (c2_drop_open_gripper.py, place_approach_u_orange +3 s, committed task): u_orange fell mid-transport, executor released an empty gripper at place_u_orange, unplanned repick_u_orange failed, aborted. Nothing else knocked. Cube on time."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
