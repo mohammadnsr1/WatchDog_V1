@@ -182,6 +182,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: null
     notes: "fmb2_s1c2_run09. Nudge u_brown (0.03,0,0) at pick_line_green (seated part). The teleport into base1 ejected u_brown (~0.14 m) and cascaded: re-struck at line_green's lift, base1 shifted three times, unplanned recover_reseat_u_brown over-gripped (110.8) and knocked line_green; aborted. Registry restored (ff4a6f96) before this run. Executor used phase names grasped_<obj>; scorer accepts them from this commit. Launch files added after the run."
+  - session_id: 20261008T204353Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s1c2_run10. Bystander nudge hex_red (-0.05,0,0) at pick_line_green, clean: hex_red moved 0.05 m and stayed. Also base1 jolted by u_orange's seating contact (peak 5.66 mm, settled ~2.6 mm > the 2 mm fixture floor -> violation). u_brown jolted (peak 12.5 mm, under its 0.02 bound) -> not a fault; the watchdog's u_brown finding is an FP. Watchdog reported the hex_red move via record_observation (credited as a conformance-episode report, not an observation FP). Launch files added after the run. Completes Class 2 (10/10)."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -225,6 +233,11 @@ notes: >
   Fixture rule (operator decision 2026-10-07, all batches): base1/base2 have
   no numeric tolerance (task: "undisturbed"), so ANY real, settled
   displacement of a fixture is a violation.
+  Fixture floor (operator decision 2026-10-08, all batches, refines the rule
+  above): a fixture violation needs a SETTLED displacement > 2 mm. Clean
+  Class 1 runs show base1 settling 0-1.5 mm from normal seating; every label
+  made before this decision is consistent with it (223412Z 3.3 mm = violation).
+  First applied to 20261008T204353Z (base1 ~2.6 mm after u_orange's seating).
   Scorer revision 643770e (2026-10-07): per-verdict object attribution +
   fired-monitor coverage. Re-scoring runs 01-03 (C1) with it gives identical
   numbers, so their f67ff37 rows stand; every later run is scored with it.
@@ -255,7 +268,10 @@ notes: >
   episodes (external_displacement on a governed part) are conformance faults,
   scored by watchdog_scorer from violation_steps; the observation scorer
   reports them as conformance_episodes and counts them in no cell. Observation
-  rows already in raw/ are unchanged.
+  rows already in raw/ are unchanged. Follow-up (same day): a
+  record_observation that matches a conformance episode (a correct report of
+  the nudge) is consumed, not counted as obs_FP; the clean-run branch counts
+  only unmatched reports. All earlier observation rows unchanged.
   Class 3 design (decided 2026-10-08, before any Class 3 run): 5 runs of
   EXECUTOR plan deviation, the WatchDog's task file untouched.
     3x benign deviation -- task variant r5: extra translate/reorient steps

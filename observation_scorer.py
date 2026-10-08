@@ -434,6 +434,14 @@ def score_observation(session_dir, role):
 
     # false reports: any observation on a CLEAN run; unmatched ones otherwise
     matched_ids = {a["observation_id"] for a in acks if a}
+    # a report of a conformance episode (a nudge) is a correct report, not a
+    # false one: match leftover reports against those episodes too, so they
+    # leave the unmatched list -- without entering any observation cell.
+    leftover = [o for o in observations if o.get("observation_id") not in matched_ids]
+    conf_acks = match_observations(conformance, leftover) if conformance else []
+    for ce, ca in zip(row["conformance_episodes"], conf_acks):
+        ce["acknowledged_by"] = ca["observation_id"] if ca else None
+    matched_ids |= {a["observation_id"] for a in conf_acks if a}
     unmatched = [o for o in new_obs if o.get("observation_id") not in matched_ids]
 
     # per-episode confusion counts, same denominator as detection_rate:
@@ -443,13 +451,13 @@ def score_observation(session_dir, role):
     # FP = distinct reports (status=new) acknowledging no episode; on a clean
     # run every report is one. A consumed update credits its observation_id.
     row["obs_FP"] = len(unmatched)
-    row["obs_TN"] = 1 if (not detectable and not observations) else 0
+    row["obs_TN"] = 1 if (not detectable and not unmatched) else 0
     if not episodes:
-        row["false_scene_reports"] = len(new_obs)
+        row["false_scene_reports"] = len(unmatched)
         row["false_scene_report_detail"] = [
             {"observation_id": o.get("observation_id"),
              "category": o.get("category"),
-             "summary": (o.get("summary") or "")[:160]} for o in new_obs]
+             "summary": (o.get("summary") or "")[:160]} for o in unmatched]
         row["unmatched_observations"] = None
     else:
         row["false_scene_reports"] = None
@@ -561,7 +569,8 @@ def main():
         extra = f" fire+{er['fire_latency_s']}s" if er.get("fire_latency_s") is not None else ""
         print(f"    {er['name']:<22} {er['kind']:<22} {tag}{extra}")
     for ce in row.get("conformance_episodes") or []:
-        print(f"    {ce['name']:<22} {ce['kind']:<22} conformance fault (not counted here)")
+        ack = f", reported as {ce['acknowledged_by']}" if ce.get('acknowledged_by') else ""
+        print(f"    {ce['name']:<22} {ce['kind']:<22} conformance fault (not counted here{ack})")
     for pr in row.get("post_run_episodes") or []:
         print(f"    {pr['name']:<22} {pr['kind']:<22} post-run (not counted)")
     if row.get("false_scene_reports"):
