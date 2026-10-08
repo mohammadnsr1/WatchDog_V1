@@ -457,16 +457,33 @@ def score_run(session_dir, label):
         ft, obj = ts(f["wall_time_iso"]), f.get("object_id")
         return any(o == obj and t0 <= ft <= t1 for (o, t0, t1) in release_windows)
 
-    if not label.get("violation_occurred"):
-        fa = [f for f in real_fires
-              if not (_origin(f) == "authored" and _in_release_window(f))]
-        row["monitor_false_alarms"] = len(fa)    # a REAL clause fire on a clean run
-        row["monitor_false_alarm_detail"] = [
-            {"object": f.get("object_id"), "type": f.get("monitor_type"),
-             "origin": _origin(f),
-             "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in fa]
-    else:
-        row["monitor_false_alarms"] = None      # fires may be true detections; see detection block
+    # MONITOR FALSE ALARMS, every run: a real clause fire whose (step, object)
+    # is not a labelled violation -- on a clean run that is every fire; on a
+    # fault run it is a fire on something that was not at fault (e.g. a
+    # stationarity monitor left armed on the part being lifted). The fire's
+    # step is taken from its trigger time (trigger_wall_ns), not its drain time.
+    def _fire_time(f):
+        ns = f.get("trigger_wall_ns")
+        if ns:
+            from datetime import datetime as _dt, timezone as _tz
+            return _dt.fromtimestamp(int(ns) / 1e9, tz=_tz.utc)
+        return ts(f["wall_time_iso"])
+
+    def _step_at(t):
+        for i, (bt, s) in enumerate(bs_win):
+            t0 = ts(bt); t1 = ts(bs_win[i+1][0]) if i+1 < len(bs_win) else None
+            if t >= t0 and (t1 is None or t < t1):
+                return s
+        return None
+
+    fa = [f for f in real_fires
+          if not (_origin(f) == "authored" and _in_release_window(f))
+          and (_step_at(_fire_time(f)), _obj(f)) not in real_pairs]
+    row["monitor_false_alarms"] = len(fa)
+    row["monitor_false_alarm_detail"] = [
+        {"step": _step_at(_fire_time(f)), "object": _obj(f), "type": f.get("monitor_type"),
+         "origin": _origin(f),
+         "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in fa]
 
     # ---- AUTHORED monitors: boolean per injected fault (TP/FP/FN/TN) --------
     # Own columns, never merged with the library family scoring. S1 should have
@@ -1057,7 +1074,7 @@ def summarize(csv_paths):
         if scn != "S3":
             print(f"    library coverage       : {_frac(rs,'arming_coverage')}   provenance: {_frac(rs,'arming_provenance')}")
         print(f"    monitor false alarms   : {int(sum(_nums(rs,'monitor_false_alarms')))} "
-              f"(over {sum(1 for r in rs if str(r.get('monitor_false_alarms','')).strip() not in ('','None'))} clean runs)")
+              f"(over {sum(1 for r in rs if str(r.get('monitor_false_alarms','')).strip() not in ('','None'))} runs)")
         med = _nums(rs, 'fire_to_next_verdict_median_s', 'fire_to_verdict_median_s')
         mm = _median(med)
         print(f"    fire->next-verdict     : median-of-medians "
@@ -1145,7 +1162,9 @@ def main():
     print(f"    TN (clean steps)         : {row.get('fault_TN')}")
     print(f"    recall={row.get('detection_recall')}  precision={row.get('detection_precision')}")
     if row.get('monitor_false_alarms'):
-        print(f"    monitor false alarms (fires on a clean run): {row.get('monitor_false_alarms')}")
+        print(f"    monitor false alarms (fires on no labelled violation): {row.get('monitor_false_alarms')}")
+        for d in row.get('monitor_false_alarm_detail') or []:
+            print(f"       {d.get('step')}: {d.get('object')} {d.get('type')} {d.get('value')} vs {d.get('threshold')}")
     if row.get('authored_probe_fires'):
         print(f"    authored probe/debug fires (excluded from false alarms): "
               f"{row.get('authored_probe_fires')}")

@@ -44,7 +44,7 @@
   "detection_precision": 1.0,
   "n_fires": 2,
   "authored_probe_fires": 0,
-  "monitor_false_alarms": null,
+  "monitor_false_alarms": 0,
   "authored_detection": null,
   "authored_TP": null,
   "authored_FP": null,
@@ -280,5 +280,6 @@
       "executor_claimed": "failure"
     }
   ],
-  "_label_used": "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/20261008T021346Z/gt_fmb2_s1c2.yaml"
+  "_label_used": "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/20261008T021346Z/gt_fmb2_s1c2.yaml",
+  "monitor_false_alarm_detail": []
 }

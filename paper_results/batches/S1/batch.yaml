@@ -240,6 +240,13 @@ notes: >
   the attribution, not every fire in the step window; (b) grasp-confirm phases
   'grasped_<obj>' / 'regrasped[_<obj>]' are accepted alongside 'grasped'. All
   runs in raw/ rescore identically; first needed by 20261008T195453Z.
+  Scorer revision (2026-10-08): monitor_false_alarms is computed on EVERY
+  run -- a real clause fire whose (step, object) is not a labelled violation
+  (on clean runs unchanged: every fire). Fault runs' raw rows, previously
+  blank, backfilled to 0 (rescoring them gives 0; nothing else changes).
+  First non-zero on a fault run: 20261008T195453Z (line_green stationarity
+  left armed through its own lift; u_brown fired on the watchdog's own 0.01
+  trigger, under its 0.02 bound).
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
