@@ -138,6 +138,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 0a865c1d75dd7157a1f62232575e6d5989d941c578d01de024f41047e98629ae
     notes: "fmb2_s1c2_run04. r4 wrong object + ACM companion (1 apply). Same physical fault as run03: u_orange lifted at pick_u_brown and seated in u_brown_placement; u_brown never held/seated; unplanned pick_u_brown_retry closed on air; executor aborted. Cube never fired. WatchDog this time armed u_orange: both monitors fired at the lift and it recorded the wrong-object finding under pick_u_brown. Label copied from run03 and corrected (run_id, measurements, notes)."
+  - session_id: 20261008T025202Z
+    scenario: S1
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 88f936f138a65232498818558c664f708f402466fb26f2f4e36521a57b58a4a1
+    notes: "fmb2_s1c2_run05. r2 (grasp_center_offset.y -0.045): u_orange slipped in hand during place_u_orange (0.020463 vs 0.02) but still seated; run completed, all parts in tolerance -> expected conformant + recovered. OBSERVATION NOT SCORED: the benign cube was not queued (no ground_truth_injections.jsonl). Executor sent begin_step without object_ids -- scored with the step_id fallback added in this commit."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -187,6 +195,10 @@ notes: >
   Scorer revision 30d59a3 (2026-10-07): last step's coverage window ends at
   run_ended (was: the watchdog's last event). All six runs so far rescore
   identically except run04 (232107Z), which was scored with 30d59a3.
+  Scorer revision (2026-10-08): when begin_step carries no object_ids, the
+  active object is taken from the step_id (longest known object id in it),
+  the watchdog contract's own fallback. All runs already in raw/ rescore
+  identically; first needed by 20261008T025202Z.
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:

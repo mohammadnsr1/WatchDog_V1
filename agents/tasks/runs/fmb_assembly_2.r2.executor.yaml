@@ -86,7 +86,7 @@ steps:
     grasp_width_m: 0.02
     approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.025, y: -0.032, z: 0.0}
+      position: {x: 0.025, y: -0.045, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
 

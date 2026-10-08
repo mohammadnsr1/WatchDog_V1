@@ -197,6 +197,20 @@ def _obj(p):
         return o
     cl = p.get("clause") or {}
     return cl.get("object_id")
+def step_active_object(payload, known_objects):
+    """The step's active object: begin_step object_ids[0]; when the executor
+    omitted object_ids, the longest known object id named in the step_id
+    (pick_u_orange -> u_orange, pick_u_brown_retry -> u_brown) -- the same
+    fallback the watchdog's contract uses (process order when object_ids is
+    missing). None when neither resolves."""
+    ids = payload.get("object_ids") or []
+    if ids:
+        return ids[0]
+    sid = str(payload.get("step_id") or "")
+    hits = [o for o in known_objects if o and o in sid]
+    return max(hits, key=len) if hits else None
+
+
 def exec_events(ev, etype):
     out = []
     for s in ("scene", "motion", "gripper"): out += [e for e in ev[s] if e.get("event_type") == etype]
@@ -316,7 +330,8 @@ def score_run(session_dir, label):
     fires_ev = [e for e in wd_events(ev, "monitor_fire")
                 if _purpose(_pl(e)) != "observation"]
     finding_steps = {sv.get("step_id") for sv in step_v if sv.get("verdict") in FINDING_VERDICTS}
-    step_active = {b["payload"].get("step_id"): (b["payload"].get("object_ids") or [None])[0]
+    known_objects = {m.get("object") for m in label.get("expected_monitors", []) or []}
+    step_active = {b["payload"].get("step_id"): step_active_object(b["payload"], known_objects)
                    for b in begins}
     finding_pairs = set()
     for sid in finding_steps:
@@ -580,7 +595,7 @@ def score_run(session_dir, label):
         if str(p.get("phase", "")).lower() == "grasped" and p.get("step_id"):
             ready_grasp.setdefault(p["step_id"], ts(p["wall_time_iso"]))
     bs = sorted([( _pl(b)["wall_time_iso"], b["payload"].get("step_id"),
-                   (b["payload"].get("object_ids") or [None])[0] )
+                   step_active_object(b["payload"], known_objects) )
                  for b in begins], key=lambda x: x[0])
     steps_tl = []
     _ends = exec_events(ev, "run_ended")
