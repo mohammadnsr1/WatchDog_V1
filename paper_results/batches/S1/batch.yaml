@@ -167,7 +167,12 @@ notes: >
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
-    2x wrong object     -- task variant r1 (object_id swapped in one pick)
+    2x wrong object     -- task variant r4 (geometric: pick_u_brown's
+                           grasp_center_offset re-aimed at u_orange). r1
+                           (object_id swap) was retired after its only run,
+                           20261008T004859Z: the executor corrected the
+                           contradictory object_id, no fault occurred; that
+                           run is data but not one of the 10.
     2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
     2x pressed too hard -- REGISTRY EDIT, not a task variant (operator
                            decision 2026-10-07): the install registry's
