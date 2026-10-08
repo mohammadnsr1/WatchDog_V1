@@ -169,7 +169,16 @@ notes: >
   all fmb_assembly_2, each keeping the benign cube:
     2x wrong object     -- task variant r1 (object_id swapped in one pick)
     2x missed grasp     -- task variant r2 (grasp_center_offset shifted)
-    2x pressed too hard -- task variant r3 (narrower grasp_width_m)
+    2x pressed too hard -- REGISTRY EDIT, not a task variant (operator
+                           decision 2026-10-07): the install registry's
+                           max_clamp_effort for the chosen object(s) is
+                           lowered below the normal grip (~30-34) for the run,
+                           for EVERY role, then restored. The robot grips
+                           normally; the bound moves. Tests whether the
+                           watchdog catches effort over its limit. Session
+                           entry: run_registry_sha256 = edited file's sha;
+                           restore verified == registry_sha256 before the
+                           next run.
     1x part displaced   -- nudge_object on a seated part (s1_c2_nudge.py)
     1x bystander moved  -- nudge_object on a bystander (s1_c2_nudge.py)
   Task variants: agents/tasks/runs/fmb_assembly_2.rN.executor.yaml, launched

@@ -42,7 +42,7 @@ step_plan: |
 
 steps:
   - step_id: pick_u_brown
-    object_id: u_brown
+    object_id: u_orange
     action_hint: grasp, then lift
     grasp_width_m: 0.02
     approach_distance_m: -0.10
