@@ -78,6 +78,10 @@ resetting the sim after a run moves leftover intruders, and the pose tracker
 records that into the still-current session — the agent was no longer
 watching, so it is not a detection opportunity. A run with no run_ended event
 is not clipped.
+An external_displacement episode (nudge_object on a registered, governed
+part) is a CONFORMANCE fault, scored by watchdog_scorer against the label's
+violation_steps: reported (conformance_episodes), in none of the cells and
+not in n_episodes (operator decision 2026-10-08).
 
 MATCHING: category + time window only. An episode is acknowledged by the
 earliest category-compatible observation at or after t0 (minus
@@ -329,6 +333,8 @@ def score_observation(session_dir, role):
     post_run = [e for e in episodes
                 if run_end is not None and ns_to_dt(e["t0_wall_ns"]) > run_end]
     episodes = [e for e in episodes if e not in post_run]
+    conformance = [e for e in episodes if e["kind"] == "external_displacement"]
+    episodes = [e for e in episodes if e not in conformance]
 
     row = {
         "run_id": session_dir.name,
@@ -338,6 +344,8 @@ def score_observation(session_dir, role):
         "n_episodes": len(episodes),
         "post_run_episodes": [
             {k: e[k] for k in ("name", "kind", "t0_iso")} for e in post_run],
+        "conformance_episodes": [
+            {k: e[k] for k in ("name", "kind", "t0_iso")} for e in conformance],
         "leak_audited": audit is not None,
         "leak": audit.get("leak") if audit else None,
         "excluded": bool(audit and audit.get("leak")),
@@ -552,6 +560,8 @@ def main():
             else "out-of-view" if not er["detectable"] else "uncounted")
         extra = f" fire+{er['fire_latency_s']}s" if er.get("fire_latency_s") is not None else ""
         print(f"    {er['name']:<22} {er['kind']:<22} {tag}{extra}")
+    for ce in row.get("conformance_episodes") or []:
+        print(f"    {ce['name']:<22} {ce['kind']:<22} conformance fault (not counted here)")
     for pr in row.get("post_run_episodes") or []:
         print(f"    {pr['name']:<22} {pr['kind']:<22} post-run (not counted)")
     if row.get("false_scene_reports"):

@@ -247,6 +247,11 @@ notes: >
   First non-zero on a fault run: 20261008T195453Z (line_green stationarity
   left armed through its own lift; u_brown fired on the watchdog's own 0.01
   trigger, under its 0.02 bound).
+  Observation scorer revision (2026-10-08, operator decision): nudge_object
+  episodes (external_displacement on a governed part) are conformance faults,
+  scored by watchdog_scorer from violation_steps; the observation scorer
+  reports them as conformance_episodes and counts them in no cell. Observation
+  rows already in raw/ are unchanged.
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
