@@ -32,7 +32,9 @@ if _age > MAX_SESSION_AGE_S:
         "Start the bringup for this run first."
     )
 
-place_object(position_xyz_world=(-0.45, -0.05, None),
+place_object(position_xyz_world=(0.08, -0.38, None),
              label="foreign cube on free bench area",
              expected_impact="benign",
              start="at_step=pick_u_orange")
+
+

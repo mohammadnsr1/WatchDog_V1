@@ -330,6 +330,16 @@ notes: >
   "autoMemoryEnabled": false in executor.settings.json and
   watchdog.settings.json and verify the first transcript has no AutoMem
   attachment.
+  STAGE LAYOUT + CUBE POSITION, Class 3/4 (2026-10-09): assembly_room.usd was
+  re-laid-out again (saved 13:50 local, one minute before C3 run01, which ran
+  on it): parts rearranged, u_orange start (0.31,-0.151), u_orange_reorient
+  (0.315,-0.197). The camera did not move -- every part's recorded pose
+  projects onto it in run01's look_0001 frame. The old cube spot (-0.45,-0.05)
+  now lies on a brown part, so from Class 3 run02 the benign cube is placed at
+  (0.08, -0.38) (pixel 376,178; >= 0.29 m from every part, fixture and frame,
+  out of the pick/place corridors). C3 run01 had no cube. Observation results
+  from C3/C4 are therefore NOT directly comparable with C1/C2 (new layout +
+  new cube spot).
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
