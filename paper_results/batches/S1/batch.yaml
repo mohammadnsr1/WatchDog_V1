@@ -190,6 +190,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: null
     notes: "fmb2_s1c2_run10. Bystander nudge hex_red (-0.05,0,0) at pick_line_green, clean: hex_red moved 0.05 m and stayed. Also base1 jolted by u_orange's seating contact (peak 5.66 mm, settled ~2.6 mm > the 2 mm fixture floor -> violation). u_brown jolted (peak 12.5 mm, under its 0.02 bound) -> not a fault; the watchdog's u_brown finding is an FP. Watchdog reported the hex_red move via record_observation (credited as a conformance-episode report, not an observation FP). Launch files added after the run. Completes Class 2 (10/10)."
+  - session_id: 20261009T205126Z
+    scenario: S1
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+    run_task_sha256: a27cd17cb8577c4509a784b5c2adde767dd7aae0f48747fa40a88e4765b7e0e4
+    notes: "fmb2_s1c3_run01. r5 benign deviation: unplanned reorient_u_orange / repick_u_orange / transport_u_orange, all parts seated, no fires; watchdog conformant and named the three steps as unplanned (no FP). Coverage 94/136: it never armed stationarity on any assembly-2 part. No benign cube (operator: no observation scoring). Launch files added after the run."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error

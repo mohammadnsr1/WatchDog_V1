@@ -89,8 +89,8 @@ steps:
     grasp_width_m: 0.02
     approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.025, y: -0.02, z: 0.0}
-      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
+      position: {x: 0.025, y: -0.02, z: 0.018}
+      orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
     lift_height_m: 0.2
 
 
@@ -99,11 +99,10 @@ steps:
     action_hint: descend into the reorient frame, then release
     target_frame: u_orange_reorient
     grasp_width_m: 0.02
-    approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.025, y: -0.02, z: 0.0}
+      position: {x: 0.025, y: -0.02, z: 0.018}
       orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
-    lift_height_m: 0.2
+
 
   - step_id: repick_u_orange
     object_id: u_orange
@@ -112,7 +111,7 @@ steps:
     approach_distance_m: -0.1
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
 
   - step_id: transport_u_orange
@@ -120,11 +119,12 @@ steps:
     target_frame: u_orange_placement
     action_hint: approach the placement frame from above, stopping clear of contact
     grasp_width_m: 0.02
-    approach_distance_m: -0.1
+    target_offset:
+      position: {x: 0.0, y: -0.05, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
-    lift_height_m: 0.2
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
     
   - step_id: place_u_orange
