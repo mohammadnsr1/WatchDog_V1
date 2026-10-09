@@ -316,6 +316,20 @@ notes: >
   start layout therefore differs between C1-C2 and C3-C4 (u_orange only);
   compare within those groups, or say so where they are compared. r4's offset
   (computed from u_orange's old start pose) is not valid on the new stage.
+  AGENT CONTEXT -- Claude Code auto-memory (found 2026-10-09, operator
+  decision: keep for S1, remove from S2 on). Both agent sessions run from the
+  repo root, so Claude Code injects this project's auto-memory index
+  (~/.claude/projects/-home-mohammad-watchdog-WatchDog-V1/memory/MEMORY.md, six
+  index lines of dev notes incl. "no solve_ik_first") into the executor AND
+  the watchdog as instructions. They cannot open the memory files (Read is
+  denied), no MCP tool takes a path, and no CLAUDE.md exists. The index was
+  IDENTICAL for every S1 session (file unchanged since 2026-09-30; one content
+  hash across all 83 agent transcripts since 2026-10-07) and names no run's
+  fault -- a constant, uncontrolled input across the whole batch, not a
+  per-run leak. MEMORY.md is frozen until S1 ends. From S2: set
+  "autoMemoryEnabled": false in executor.settings.json and
+  watchdog.settings.json and verify the first transcript has no AutoMem
+  attachment.
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
