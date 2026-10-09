@@ -38,3 +38,5 @@ place_object(position_xyz_world=(0.08, -0.38, None),
              start="at_step=pick_u_orange")
 
 
+
+
