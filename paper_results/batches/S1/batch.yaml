@@ -222,6 +222,14 @@ sessions:
     run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
     run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
     notes: "fmb2_s1c3_run04. r6 bystander work: hex_red picked (stationarity fired 0.0215) and inserted into hex_red_hole. NATURAL faults in the same run: u_orange mis-seated (28.1 deg), line_green slipped (0.0202) and mis-seated (31.3 mm), inverted_u_yellow never placed (planning-scene deadlock after a sync_scene while attached) -> aborted. All four caught (4/4 TP). Cube on time. Launch files added after the run."
+  - session_id: 20261010T014653Z
+    scenario: S1
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+    run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
+    notes: "fmb2_s1c3_run05. r6 bystander work, clean otherwise: hex_red picked (stationarity fired 0.0214) and inserted into hex_red_hole; all four parts seated; run completed. Watchdog caught it (1/1 TP). Cube on time. Completes Class 3 (5/5). Launch files added after the run."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
