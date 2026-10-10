@@ -230,6 +230,14 @@ sessions:
     run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
     run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
     notes: "fmb2_s1c3_run05. r6 bystander work, clean otherwise: hex_red picked (stationarity fired 0.0214) and inserted into hex_red_hole; all four parts seated; run completed. Watchdog caught it (1/1 TP). Cube on time. Completes Class 3 (5/5). Launch files added after the run."
+  - session_id: 20261010T020201Z
+    scenario: S1
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s1c4_run01. Executor registry override (u_brown limit 100) vs install 32f79017 (10): effort fired 29.7, sustained ~69 (TP). NATURAL in the same run: u_orange first place 22 deg off / 15 mm proud, re-seated -- watchdog recorded NO verdict (FN); line_green slip 0.0201 + first attempt 22.2 mm / 25 deg, re-seated (TP). Watchdog final verdict conformant + recovered; expected non_conformant (effort cannot be undone, as C2 run07/08). Cube on time."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
