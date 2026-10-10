@@ -11,13 +11,17 @@ instruction_spec: |
   u_brown_placement, u_orange_placement,
   line_green_placement, inverted_u_yellow_placement.
 
+  Between u_brown and u_orange there is one more job: hex_red, a part of the
+  other FMB assembly, goes into its hole on base2 (TF frame hex_red_hole) --
+  pick it, approach the hole from above, insert it, release, retreat.
+
   Order matters. Each part you seat becomes an obstacle for the ones after it,
   so do not reorder without reason.
 
   Move to safe joint pose at the beginning of the task.
 
   Preconditions:
-    - All four parts and base1 are present.
+    - All four parts, base1, hex_red and base2 are present.
 
   Effects (per part):
     - The part's final pose matches its placement frame within the part's
@@ -36,9 +40,12 @@ instruction_spec: |
 
   Working notes: none beyond the general rules in your standing instructions.
 step_plan: |
-  Four parts, seated in order. Each is picked once and carried straight to its
-  placement -- there is no reorient stage anywhere in this task. Each part ends
-  released, verified against its placement frame, with the TCP retreated clear.
+  Four parts seated on base1 in order, with one extra job after u_brown:
+  hex_red is picked and inserted into hex_red_hole on base2, then u_orange,
+  line_green and inverted_u_yellow follow. Each part is picked once and carried
+  straight to its destination -- there is no reorient stage anywhere in this
+  task. Each part ends released, verified against its destination frame, with
+  the TCP retreated clear.
 
 steps:
   - step_id: pick_u_brown
@@ -51,7 +58,7 @@ steps:
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
 
-  - step_id: place_approach_u_brown
+  - step_id: transport_u_brown
     object_id: u_brown
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_brown_placement
@@ -80,6 +87,46 @@ steps:
       max_acceleration_scaling_factor: 0.1
       allowed_planning_time: 20.0
 
+  # ---- hex_red (other assembly): picked and inserted into its hole on base2 --
+  - step_id: pick_hex_red
+    object_id: hex_red
+    action_hint: grasp, then lift
+    grasp_width_m: 0.03
+    approach_distance_m: 0.0
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.683013, y: 0.183013, z: -0.183013, w: 0.683013}
+    lift_height_m: 0.3
+
+
+  - step_id: place_approach_hex_red
+    object_id: hex_red
+    action_hint: approach the hole from above, stopping clear of contact
+    target_frame: hex_red_hole
+
+    target_offset:
+      position: {x: 0.0, y: 0.1, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+  - step_id: place_hex_red
+    object_id: hex_red
+    action_hint: descend into the hole, release, retreat
+    target_frame: hex_red_hole
+    grasp_width_m: 0.03
+    grasp_center_offset:
+      position: {x: 0.0, y: 0.06, z: 0.0}
+      orientation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
+
+    motion:
+      max_velocity_scaling_factor: 0.1
+      max_acceleration_scaling_factor: 0.1
+      allowed_planning_time: 20.0
+
+
   - step_id: pick_u_orange
     object_id: u_orange
     action_hint: grasp, then lift
@@ -93,18 +140,15 @@ steps:
 
   - step_id: transport_u_orange
     object_id: u_orange
+    action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: u_orange_placement
-    action_hint: grasp, then lift
-    grasp_width_m: 0.02
-    approach_distance_m: -0.1
     target_offset:
       position: {x: 0.0, y: -0.05, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-    grasp_center_offset:
+    grasp_width_m: 0.02
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
-      orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
-    lift_height_m: 0.2
+      orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
     
   - step_id: place_u_orange
@@ -212,15 +256,20 @@ object_ids: |
   line_green       — FMB line part, graspable. Inserted directly.
   base1            — the fixture. NOT graspable and never picked; it carries
                      the slots the four parts seat into.
+  hex_red          — hex part of the other FMB assembly, graspable. Inserted
+                     into hex_red_hole on base2 after u_brown is seated.
+  base2            — the other assembly's fixture. NOT graspable and never
+                     picked; it carries hex_red_hole.
 
   Placement destinations are published as TF frames and queried like object
   poses: u_brown_placement, inverted_u_yellow_placement, u_orange_placement,
-  line_green_placement. They are pose-only markers, not collision geometry, and
+  line_green_placement, and hex_red_hole on base2. They are pose-only markers, not collision geometry, and
   they move with the fixture -- which is why they are queried rather than
   hardcoded. This task uses no reorient frames.
 
-  Registry acm_allowed_object_pairs covers every pair among u_brown, base1,
-  u_orange, line_green and inverted_u_yellow -- a planner collision-checking
+  Registry acm_allowed_object_pairs covers every pair among the parts and both
+  fixtures (u_brown, u_orange, line_green, inverted_u_yellow, hex_red, base1,
+  base2 included) -- a planner collision-checking
   setting, not a statement of task permission; see the effect clauses for what
   makes their contact conformant. It does NOT cover the gripper against those
   parts, and it does not cover the occupancy map at all.

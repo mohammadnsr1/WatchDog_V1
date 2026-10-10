@@ -206,6 +206,14 @@ sessions:
     run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
     run_task_sha256: a27cd17cb8577c4509a784b5c2adde767dd7aae0f48747fa40a88e4765b7e0e4
     notes: "fmb2_s1c3_run02. r5 benign deviation; NATURAL fault inside it: first place_u_orange descent hit repeated CONTROL_FAILED, u_orange slipped (0.020114 vs 0.02) and was left mis-seated ~37 mm / 59 deg; executor re-grasped and re-seated -> conformant + recovered. base1 moved 7.3/5.1/5.9 mm at three seatings (exempt, seating contact). Cube at (0.08,-0.38) on time; watchdog never reported it. Launch files added after the run."
+  - session_id: 20261010T005717Z
+    scenario: S1
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+    run_task_sha256: ae8f30e38142b2f5e965e0c51d772d5c89d563f56b229ae7716a181254393204
+    notes: "fmb2_s1c3_run03. r5 benign deviation on the new layout; NATURAL fault: place_u_brown left u_brown 13.06 mm / 27.8 deg off, watchdog caught it (TP); unplanned reseat_u_brown corrected it -> conformant + recovered. Cube at (0.08,-0.38) on time. Launch files added after the run."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -367,6 +375,23 @@ notes: >
   out of the pick/place corridors). C3 run01 had no cube. Observation results
   from C3/C4 are therefore NOT directly comparable with C1/C2 (new layout +
   new cube spot).
+  STAGE + r5 REVISION before C3 run03 (operator, committed 94372fc / fa23d60):
+  layout moved again -- the assembly-2 placement frames (base1) now sit at
+  x ~ 0.40 (were ~0.79); u_orange starts standing again; line_green is rotated
+  90 deg about Z (its object-relative grasp offset turns the wrist back
+  automatically at the place approach). r5 drops the u_orange reorient and
+  uses operator deviation step names (transport_and_approach_place_u_orange,
+  reorient_and_place_approach_line_green); sha ae8f30e3 after the pick
+  offset fix (z 0.018 -> 0.0, which had pushed the standing u_orange 2 cm per
+  approach). C3 runs 01-02 and 03+ therefore ran on different layouts and r5
+  versions -- compare with care.
+  r6 FINAL (2026-10-10, sha 517a3c57): operator's step names kept; the
+  hex_red job is the three tested fmb_assembly steps (pick_hex_red,
+  place_approach_hex_red, place_hex_red into hex_red_hole) after
+  place_u_brown; transport_u_orange fixed (place-approach shape, no
+  approach_distance/lift, grasp orientation matching pick/place, duplicate
+  key removed); task text describes the hex_red job so it does not contradict
+  the plan (the r1 lesson).
   Class 2 plan (decided 2026-10-07, before the first injected C2 run; 2 of
   10 already done as natural faults: 223412Z, 230224Z). The remaining 8,
   all fmb_assembly_2, each keeping the benign cube:
