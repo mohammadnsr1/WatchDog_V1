@@ -36,11 +36,7 @@ instruction_spec: |
 
   Working notes: none beyond the general rules in your standing instructions.
 step_plan: |
-  Four parts, seated in order. u_orange alone has a reorient stage: it is
-  picked, set down at its reorient frame, released, re-picked in the new
-  orientation, then transported to its placement and seated. The other three
-  are each picked once and carried straight to their placements. Each part
-  ends released, verified against its placement frame, with the TCP retreated
+  Four parts, seated in order. Each part is picked, transported, and placed in sequence, then released, verified against its placement frame, with the TCP retreated
   clear.
 
 steps:
@@ -90,37 +86,17 @@ steps:
     approach_distance_m: -0.1
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.018}
-      orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
-    lift_height_m: 0.2
-
-
-  - step_id: reorient_u_orange
-    object_id: u_orange
-    action_hint: descend into the reorient frame, then release
-    target_frame: u_orange_reorient
-    grasp_width_m: 0.02
-    grasp_center_offset:
-      position: {x: 0.025, y: -0.02, z: 0.018}
-      orientation: {x: 1, y: 0.0, z: 0.0, w: 0.0}
-
-
-  - step_id: repick_u_orange
-    object_id: u_orange
-    action_hint: grasp, then lift
-    grasp_width_m: 0.02
-    approach_distance_m: -0.1
-    grasp_center_offset:
-      position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
 
-  - step_id: transport_u_orange
+
+  - step_id: transport_and_approach_place_u_orange
     object_id: u_orange
     target_frame: u_orange_placement
     action_hint: approach the placement frame from above, stopping clear of contact
     grasp_width_m: 0.02
     target_offset:
-      position: {x: 0.0, y: -0.05, z: 0.0}
+      position: {x: 0.0, y: -0.08, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
@@ -132,9 +108,9 @@ steps:
     action_hint: descend into the placement frame, release, retreat
     target_frame: u_orange_placement
     grasp_width_m: 0.02
-    # target_offset:
-    #   position: {x: 0.001, y: 0.0, z: 0.0}
-    #   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    target_offset:
+      position: {x: 0.001, y: 0.0, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
@@ -157,12 +133,11 @@ steps:
       orientation: {x: 1.0, y: 0.0, z: 0.0, w: 0.0}
     lift_height_m: 0.3
 
-  - step_id: place_approach_line_green
+  - step_id: reorient_and_place_approach_line_green
     object_id: line_green
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: line_green_placement
     axis_note: target_offset is expressed in the destination frame's OWN axes, not world. Unlike the other three placement frames, this one's local +Z DOES point up, so the vertical standoff is carried on local Z -- that is why this step offsets on z where u_brown, u_orange and inverted_u_yellow offset on y. Do not "correct" it to y for consistency.
-
     target_offset:
       position: {x: 0.0, y: 0.0, z: 0.06}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
@@ -237,8 +212,7 @@ object_ids: |
   poses: u_brown_placement, inverted_u_yellow_placement, u_orange_placement,
   line_green_placement. They are pose-only markers, not collision geometry, and
   they move with the fixture -- which is why they are queried rather than
-  hardcoded. One reorient frame is used: the target_frame of the
-  reorient_u_orange step, where u_orange is set down and re-picked.
+  hardcoded. 
 
   Registry acm_allowed_object_pairs covers every pair among u_brown, base1,
   u_orange, line_green and inverted_u_yellow -- a planner collision-checking
