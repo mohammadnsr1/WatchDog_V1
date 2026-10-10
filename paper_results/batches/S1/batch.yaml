@@ -238,6 +238,14 @@ sessions:
     run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
     run_task_sha256: null
     notes: "fmb2_s1c4_run01. Executor registry override (u_brown limit 100) vs install 32f79017 (10): effort fired 29.7, sustained ~69 (TP). NATURAL in the same run: u_orange first place 22 deg off / 15 mm proud, re-seated -- watchdog recorded NO verdict (FN); line_green slip 0.0201 + first attempt 22.2 mm / 25 deg, re-seated (TP). Watchdog final verdict conformant + recovered; expected non_conformant (effort cannot be undone, as C2 run07/08). Cube on time."
+  - session_id: 20261010T022321Z
+    scenario: S1
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s1c4_run02. Same setup as run01: effort fired 19.8 (58.96 re-armed) at pick_u_brown, only fault, caught; all parts seated; watchdog final verdict non_conformant (correct) -- run01's was conformant+recovered under the same condition. Cube on time. Launch files added after the run."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
