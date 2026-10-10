@@ -394,10 +394,30 @@ def score_run(session_dir, label):
     fn = real_pairs - finding_pairs
     # false positives: finding pairs that don't match a real violation. A finding whose object is
     # None but whose step IS a real-violation step is treated as matching (can't disprove it).
-    fp = set()
+    # CONTINUATION: a finding on an object at a LATER step of the same hold as
+    # that object's labelled violation -- up to and including the object's own
+    # place step (step_id 'place_<obj>') -- restates an ongoing fault (e.g. an
+    # over-clamp that persists until release). It is neither TP nor FP.
+    order = [s for (_, s) in bs_win]
+    def _continuation(s, o):
+        if o is None or s not in order: return False
+        i = order.index(s)
+        if step_active.get(s) != o: return False      # later step must act on o
+        for (rs, ro) in real_pairs:
+            if ro != o or rs not in order: continue
+            if step_active.get(rs) != o: continue      # the fault arose while o was held/active
+            j = order.index(rs)
+            if j >= i: continue
+            span = order[j:i+1]
+            ended = [k for k, st in enumerate(span[:-1]) if st == f"place_{o}"]
+            if not ended: return True
+        return False
+    fp = set(); continuation = set()
     for (s,o) in finding_pairs:
         if (s,o) in real_pairs: continue
         if o is None and any(rs == s for (rs,ro) in real_pairs): continue
+        if _continuation(s, o):
+            continuation.add((s,o)); continue
         fp.add((s,o))
     # fault_TN: steps with neither a real violation nor a finding (step-level cell;
     # the (step, object) pairing has no natural negative universe per object).
@@ -407,13 +427,15 @@ def score_run(session_dir, label):
         "true_positives":  pretty(tp),
         "false_negatives": pretty(fn),
         "false_positives": pretty(fp),
+        "continuation_findings": pretty(continuation),
         "clean_steps_no_finding": sorted(tn_steps),
         "n_real_violations": len(real_pairs),
         "n_findings": len(finding_pairs),
     }
     row["fault_TN"] = len(tn_steps)
     row["detection_recall"]    = (len(tp) / len(real_pairs)) if real_pairs else None
-    row["detection_precision"] = (len(tp) / len(finding_pairs)) if finding_pairs else None
+    _scored = finding_pairs - continuation
+    row["detection_precision"] = (len(tp) / len(_scored)) if _scored else None
 
     # fires that never became a finding, on a run with no real violation -> monitor false alarms
     # (specificity at the monitor level, separate from verdict-level detection above)
@@ -478,7 +500,8 @@ def score_run(session_dir, label):
 
     fa = [f for f in real_fires
           if not (_origin(f) == "authored" and _in_release_window(f))
-          and (_step_at(_fire_time(f)), _obj(f)) not in real_pairs]
+          and (_step_at(_fire_time(f)), _obj(f)) not in real_pairs
+          and not _continuation(_step_at(_fire_time(f)), _obj(f))]
     row["monitor_false_alarms"] = len(fa)
     row["monitor_false_alarm_detail"] = [
         {"step": _step_at(_fire_time(f)), "object": _obj(f), "type": f.get("monitor_type"),

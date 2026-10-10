@@ -248,6 +248,14 @@ sessions:
     run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
     run_task_sha256: null
     notes: "fmb2_s1c4_run02. Same setup as run01: effort fired 19.8 (58.96 re-armed) at pick_u_brown, only fault, caught; all parts seated; watchdog final verdict non_conformant (correct) -- run01's was conformant+recovered under the same condition. Cube on time. Launch files added after the run."
+  - session_id: 20261010T023928Z
+    scenario: S1
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s1c4_run03. Same C4 setup: effort fired 24.1 (~58 sustained) at pick_u_brown, the only fault, caught; watchdog final verdict non_conformant (correct). It restated the over-clamp at place_approach_u_brown / place_u_brown (continuation, neither TP nor FP) and gave 'inconclusive' at the u_orange / line_green / inverted_u_yellow milestones although all were seated (3 FP). u_orange stationarity left armed through its own pick fired (false alarm). Cube on time. LAST S1 RUN."
 notes: >
   Batch decisions (2026-10-06, before run 01). N per class: 5xC1, 10xC2,
   5xC3, 5xC4 across both assemblies; a run voided by an operator/infra error
@@ -390,6 +398,18 @@ notes: >
   say little, and 5 was the original plan, so C4 goes back to 5. Runs 03-05
   are run and kept WHATEVER they show -- the count is fixed now, not after
   seeing them (no optional stopping). Same setup for all five.
+  CLASS 4 ENDED AT 3 (operator decision 2026-10-10, made AFTER run03): the
+  operator stopped S1 after run03 instead of running 04-05. This departs from
+  the count fixed before run03 above; report Class 4 as n=3 and state that
+  the stop came after seeing run03 (final verdicts: run01 conformant+recovered
+  = wrong, run02 non_conformant, run03 non_conformant). S1 total: 23 runs
+  (5 C1, 10 C2, 5 C3, 3 C4).
+  Scorer revision (2026-10-10): CONTINUATION -- a finding on a part at a later
+  step of the same hold as that part's labelled fault (the part active at
+  both steps, up to its own place step) restates the ongoing fault: counted in
+  continuation_findings, neither TP nor FP, excluded from precision and from
+  monitor_false_alarms. All 23 runs in raw/ rescore identically; first needed
+  by 20261010T023928Z.
   SCENE + REGISTRY REVISION for Class 3 and Class 4 (2026-10-08, after Class
   2 completed, before any Class 3 run): assembly_room.usd gains a
   u_orange_reorient frame prim (published on /tf) and u_orange's INITIAL POSE
