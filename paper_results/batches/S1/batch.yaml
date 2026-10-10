@@ -189,7 +189,7 @@ sessions:
     injection_scenarios: [place_object, nudge_object]
     run_registry_sha256: null
     run_task_sha256: null
-    notes: "fmb2_s1c2_run10. Bystander nudge hex_red (-0.05,0,0) at pick_line_green, clean: hex_red moved 0.05 m and stayed. Base1 jolted by u_orange's seating contact (peak 5.66 mm, settled ~2.6 mm): first labelled a violation, relabelled 2026-10-09 to exempt (seating contact) -> the watchdog's base1 finding is an FP. u_brown jolted (peak 12.5 mm, under its 0.02 bound) -> not a fault; the watchdog's u_brown finding is an FP. Watchdog reported the hex_red move via record_observation (credited as a conformance-episode report, not an observation FP). Launch files added after the run. Completes Class 2 (10/10)."
+    notes: "fmb2_s1c2_run10. Bystander nudge hex_red (-0.05,0,0) at pick_line_green, clean: hex_red moved 0.05 m and stayed. Base1 jolted by u_orange's seating contact (peak 5.66 mm, settled ~2.6 mm; stationarity fired): a violation, TP (briefly exempted 2026-10-09, then restored). u_brown jolted (peak 12.5 mm, under its 0.02 bound) -> not a fault; the watchdog's u_brown finding is an FP. Watchdog reported the hex_red move via record_observation (credited as a conformance-episode report, not an observation FP). Launch files added after the run. Completes Class 2 (10/10)."
   - session_id: 20261009T205126Z
     scenario: S1
     class: 3
@@ -263,6 +263,16 @@ notes: >
   rescored into raw/. Unchanged: 20261007T223412Z (failed re-grasp knock) and
   20261008T195453Z (ejection, transit, recovery collision). Triggered by
   20261009T231048Z, where seating moved base1 7.3 / 5.1 / 5.9 mm (rosbag /tf).
+  BASE SCORING RESTORED (operator decision 2026-10-09, later the same day,
+  all batches): a stationarity fire on a base fixture that reflects a REAL
+  settled displacement (> 2 mm) is a violation and the fire is a TP --
+  seating contact included. The seating-contact exemption above no longer
+  applies to fired cases; C2 run10's {place_u_orange, base1} is restored (TP)
+  and rescored. C3 run02 (20261009T231048Z) is left as labelled
+  (conformant + recovered): base1 moved at three seatings there but its
+  monitor never fired, and the operator kept that label. Note for analysis:
+  base violations that no monitor fired on are therefore not labelled, so
+  base FNs cannot appear in S1 -- report base detection as precision only.
   Scorer revision 643770e (2026-10-07): per-verdict object attribution +
   fired-monitor coverage. Re-scoring runs 01-03 (C1) with it gives identical
   numbers, so their f67ff37 rows stand; every later run is scored with it.

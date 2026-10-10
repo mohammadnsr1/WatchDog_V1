@@ -26,11 +26,11 @@
   "label_consistency_warning": null,
   "detection": {
     "true_positives": [
-      "pick_line_green:hex_red"
+      "pick_line_green:hex_red",
+      "place_u_orange:base1"
     ],
     "false_negatives": [],
     "false_positives": [
-      "place_u_orange:base1",
       "place_u_orange:u_brown"
     ],
     "clean_steps_no_finding": [
@@ -45,24 +45,16 @@
       "place_line_green",
       "place_u_brown"
     ],
-    "n_real_violations": 1,
+    "n_real_violations": 2,
     "n_findings": 3
   },
   "fault_TN": 10,
   "detection_recall": 1.0,
-  "detection_precision": 0.3333333333333333,
+  "detection_precision": 0.6666666666666666,
   "n_fires": 3,
   "authored_probe_fires": 0,
-  "monitor_false_alarms": 2,
+  "monitor_false_alarms": 1,
   "monitor_false_alarm_detail": [
-    {
-      "step": "place_u_orange",
-      "object": "base1",
-      "type": "stationarity",
-      "origin": "library",
-      "value": 0.005662376454008634,
-      "threshold": 0.005
-    },
     {
       "step": "place_u_orange",
       "object": "u_brown",
