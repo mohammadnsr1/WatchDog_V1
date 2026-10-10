@@ -30,7 +30,8 @@ per_role:
 
 # ---- batch design (decided 2026-10-06, before the first run) ----------------
 # 25 runs total as first designed; 22 after the 2026-10-08 revision
-# (5 C1 + 10 C2 + 5 C3 + 2 C4). S1 (library monitors only).
+# (5 C1 + 10 C2 + 5 C3 + 2 C4); 25 again after the 2026-10-10 revision
+# (C4 back to 5). S1 (library monitors only).
 # EVERY class injects (script-editor injections are the observation ground
 # truth); what varies is whether the injections constitute a FAULT:
 #   Class 1: 5  conformance-clean    (all on fmb_assembly_2 — see notes for
@@ -45,7 +46,8 @@ per_role:
 #   Class 3: 5  PLAN DEVIATIONS -- redefined 2026-10-08 before any Class 3
 #               run (was "noise-induced faults"); fault_origin plan_deviation.
 #               See notes.
-#   Class 4: 2  registry corruption  (cut from 5 on 2026-10-08; see notes.
+#   Class 4: 5  registry corruption  (cut to 2 on 2026-10-08, back to 5 on
+#                                     2026-10-10 before run03; see notes.
 #                                     EXECUTOR_REGISTRY_PATH override +
 #                                     scripts/make_corrupt_registry.py —
 #                                     runnable since 2026-10-06; see RUN.md's
@@ -382,6 +384,12 @@ notes: >
   008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116 -> each
   C4 session's run_registry_sha256. Committed task (no EXECUTOR_VARIANT).
   Label template: gt_fmb2_s1c4.yaml.
+  CLASS 4 COUNT -> 5 (operator decision 2026-10-10, recorded BEFORE run03):
+  runs 01 and 02 had the identical setup and fault but opposite final
+  verdicts (01 conformant+recovered, 02 non_conformant). Two disagreeing runs
+  say little, and 5 was the original plan, so C4 goes back to 5. Runs 03-05
+  are run and kept WHATEVER they show -- the count is fixed now, not after
+  seeing them (no optional stopping). Same setup for all five.
   SCENE + REGISTRY REVISION for Class 3 and Class 4 (2026-10-08, after Class
   2 completed, before any Class 3 run): assembly_room.usd gains a
   u_orange_reorient frame prim (published on /tf) and u_orange's INITIAL POSE
