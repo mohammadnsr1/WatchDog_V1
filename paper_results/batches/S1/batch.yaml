@@ -357,6 +357,15 @@ notes: >
   the executor copy's sha (registry_provenance_executor.json); notes carry the
   install sha. Restore the install registry to the Class 3/4 registry
   (92969cc1, below) afterwards -- not ff4a6f96.
+  CLASS 4 READY (2026-10-10): install registry u_brown max_clamp_effort
+  100 -> 10, rebuilt, sha 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac
+  (the other 99.9% is the C3 registry 92969cc1). Executor copy built from it
+  with make_corrupt_registry.py at ~/.watchdog/registry/model_registry.yaml
+  (neutral path), u_brown max_clamp_effort 100; differs from the install file
+  only in that field and the pinned asset_root; sha
+  008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116 -> each
+  C4 session's run_registry_sha256. Committed task (no EXECUTOR_VARIANT).
+  Label template: gt_fmb2_s1c4.yaml.
   SCENE + REGISTRY REVISION for Class 3 and Class 4 (2026-10-08, after Class
   2 completed, before any Class 3 run): assembly_room.usd gains a
   u_orange_reorient frame prim (published on /tf) and u_orange's INITIAL POSE
