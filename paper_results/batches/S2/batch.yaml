@@ -4,8 +4,9 @@ date_utc: 2026-10-14            # UTC date of the batch's FIRST run (planned; co
 purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
-git_sha: 8f262f1fd6cc952245c32def871564578119da5e
-                                # git rev-parse HEAD on 2026-10-14, clean tree, before
+git_sha: 0a67476ac85accdec5766a5bb222c30124531476
+                                # git rev-parse HEAD on 2026-10-14 (after the authored-coverage
+                                # scorer revision + r4 re-aim), clean tree, before
                                 # the first S2 run: S1 complete, scorer with all S1
                                 # revisions (continuation rule last), registry restored,
                                 # auto-memory off. Code must not change mid-batch; if it
