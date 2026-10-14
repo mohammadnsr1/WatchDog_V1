@@ -49,7 +49,7 @@ nudge_object(OBJECT_ID, DELTA_XYZ, yaw_deg=YAW_DEG,
              start=f"at_step={STEP}")
 
 if PLACE_BENIGN_CUBE:
-    place_object(position_xyz_world=(-0.45, -0.05, None),
+    place_object(position_xyz_world=(0.08, -0.38, None),
                  label="foreign cube on free bench area",
                  expected_impact="benign",
                  start="at_step=pick_u_orange")

@@ -224,6 +224,65 @@ def exec_events(ev, etype):
     return sorted(out, key=lambda e: e["wall_time_iso"])
 
 # ---------------------------------------------------------------------------
+# Coverage credit for AUTHORED monitors (S2/S3): a custom monitor counts
+# toward a duty kind by what it actually READS -- the channels_read its arm-time
+# call recorded (method:arg), else the saved source text (s4_scorer's
+# _KIND_READS rule). Observation-purpose monitors never count.
+_KIND_READS = {
+    "position_static":    ("object_pose",),
+    "clamp_effort":       (".joint(", ".joint_window("),
+    "grip_relative_pose": (".frame_pose", ".transform("),
+}
+
+
+def _authored_sources_by_sha(session_dir):
+    import hashlib
+    out = {}
+    mon_dir = Path(session_dir) / "authored_monitors"
+    if mon_dir.is_dir():
+        for path in sorted(mon_dir.glob("*.py")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            out[hashlib.sha256(text.encode("utf-8")).hexdigest()] = text
+    return out
+
+
+def _coverage_kinds(p, auth_src):
+    """[(object, kind)] this arm covers. Library: its family on its object.
+    Authored (clause purpose): from channels_read / saved source."""
+    fam = FAMILY.get(p.get("monitor_type"))
+    obj = _obj(p)
+    if fam:
+        return [(obj, fam["kind"])] if obj else []
+    if _origin(p) != "authored" or _purpose(p) == "observation":
+        return []
+    chans = [str(c) for c in (p.get("channels_read") or [])]
+    text = auth_src.get(p.get("code_sha256") or "", "")
+    out = set()
+    pose_objs = {c.split(":", 1)[1] for c in chans
+                 if c.startswith(("object_pose:", "object_pose_window:")) and ":" in c}
+    out |= {(o, "position_static") for o in pose_objs}
+    if obj and not pose_objs and any(k in text for k in _KIND_READS["position_static"]):
+        out.add((obj, "position_static"))
+    reads_joint = any(c.startswith(("joint:", "joint_window:")) for c in chans) or \
+        any(k in text for k in _KIND_READS["clamp_effort"])
+    if reads_joint and obj:
+        out.add((obj, "clamp_effort"))
+    tf_pairs = [c.split(":", 1)[1] for c in chans if c.startswith("transform:")]
+    reads_frames = bool(tf_pairs) or any(c.startswith(("frame_pose:", "frame_pose_window:")) for c in chans) \
+        or any(k in text for k in _KIND_READS["grip_relative_pose"])
+    if reads_frames:
+        if obj:
+            out.add((obj, "grip_relative_pose"))
+        for pair in tf_pairs:
+            for end in pair.split("->"):
+                if end in pose_objs or end == obj:
+                    out.add((end, "grip_relative_pose"))
+    return sorted(out)
+
+
 def score_run(session_dir, label):
     ev, calls = load_run(session_dir)
     arms  = [_pl(e) for e in wd_events(ev, "monitor_armed")]
@@ -594,9 +653,12 @@ def score_run(session_dir, label):
     # Build a per-monitor_id time-ordered list of arm and disarm events, then pair each arm with
     # the NEXT disarm of the same id. A monitor_id can be armed->disarmed->armed again (re-arm on
     # re-seat), producing MULTIPLE intervals — do not overwrite.
-    events_by_id = defaultdict(list)   # mid -> [(time, "arm"/"disarm", obj, mtype)]
+    events_by_id = defaultdict(list)   # mid -> [(time, "arm"/"disarm", obj, kinds|reason)]
+    auth_src = _authored_sources_by_sha(session_dir)
     for e in wd_events(ev, "monitor_armed"):
-        p = _pl(e); events_by_id[p.get("monitor_id")].append((ts(p["wall_time_iso"]), "arm", _obj(p), p.get("monitor_type")))
+        p = _pl(e)
+        events_by_id[p.get("monitor_id")].append(
+            (ts(p["wall_time_iso"]), "arm", _obj(p), _coverage_kinds(p, auth_src)))
     for e in wd_events(ev, "monitor_disarmed"):
         p = _pl(e); events_by_id[p.get("monitor_id")].append(
             (ts(p["wall_time_iso"]), "disarm", None, p.get("reason")))
@@ -608,25 +670,25 @@ def score_run(session_dir, label):
     fired_ends = set()
     for mid, evs in events_by_id.items():
         evs.sort(key=lambda x: x[0])
-        open_arm = None  # (t0, obj, mtype)
-        for (t, kind, o, mtype) in evs:
+        open_arm = None  # (t0, obj, kinds)
+        for (t, kind, o, extra) in evs:
             if kind == "arm":
                 if open_arm is not None:
                     # arm without an intervening disarm -> close previous at this arm (defensive)
-                    pt0, po, pm = open_arm; fam = FAMILY.get(pm)
-                    if fam and po: live[po][fam["kind"]].append((pt0, t))
-                open_arm = (t, o, mtype)
-            else:  # disarm (mtype slot carries the disarm reason)
+                    pt0, _po, pk = open_arm
+                    for (ko, kk) in pk: live[ko][kk].append((pt0, t))
+                open_arm = (t, o, extra)
+            else:  # disarm (extra slot carries the disarm reason)
                 if open_arm is not None:
-                    pt0, po, pm = open_arm; fam = FAMILY.get(pm)
-                    if fam and po:
-                        live[po][fam["kind"]].append((pt0, t))
-                        if mtype == "fired":
-                            fired_ends.add((po, fam["kind"], t))
+                    pt0, _po, pk = open_arm
+                    for (ko, kk) in pk:
+                        live[ko][kk].append((pt0, t))
+                        if extra == "fired":
+                            fired_ends.add((ko, kk, t))
                     open_arm = None
         if open_arm is not None:  # never disarmed -> live to run end
-            pt0, po, pm = open_arm; fam = FAMILY.get(pm)
-            if fam and po: live[po][fam["kind"]].append((pt0, end_all))
+            pt0, _po, pk = open_arm
+            for (ko, kk) in pk: live[ko][kk].append((pt0, end_all))
     def is_live(o, kind, w0, w1, grace):
         """monitor of `kind` on `o` live for the BULK of [w0,w1] (grace at each boundary)."""
         need0, need1 = w0 + grace, w1 - grace
