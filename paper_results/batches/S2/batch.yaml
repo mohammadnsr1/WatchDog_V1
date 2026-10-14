@@ -36,3 +36,11 @@ sessions:
 known_invalid: []
 #  - session_id: TBD
 #    reason: TBD
+
+# ---- agent context (2026-10-14, before the first S2 run) ---------------------
+# Claude Code auto-memory is OFF for both roles ("autoMemoryEnabled": false in
+# executor.settings.json and watchdog.settings.json). Verified with a headless
+# session per role run the way the launchers run them (repo root, the role's
+# settings file): 0 AutoMem attachments; control without the key: 1 ("Memory
+# Index"). S1 ran WITH the index (see S1 batch.yaml) -- S1 vs S2 differ in
+# this agent input. Check the first S2 transcript for "Memory Index" = 0.
