@@ -132,6 +132,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c2_run05. Planned as Class 1; NATURAL faults: base1 jolted at place_u_brown (6.5 mm) and reseat_line_green (5.7 mm) (fired, operator-confirmed real); line_green slipped and tipped at place_line_green (22.7 mm / 25.8 deg) and again at the unplanned reseat_line_green (31.8 mm / ~45 deg); u_brown shifted 0.02008 with base1. Aborted. 5/5 TP. A mis-armed effort fire (114.3 vs u_brown's 100 on line_green, limit 170) shares a labelled (step, object) pair so it is not counted as a false alarm -- noted here instead. Monitor mix 23:0. Cube on time."
+  - session_id: 20261015T200907Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 188a3acc7159c97fc1e76b1a24861a8e0b9a20e5faf2ecdc4b7a1dde9afaae98
+    notes: "fmb2_s2c2_run06. r4 wrong object (+ ACM companion): u_orange lifted at pick_u_brown (0.0247), u_brown not held (slip 0.0251) and never seated (0.246 m). Run ended on the operator's abort instruction AFTER the fault and its detection (ground truth unaffected). No cube (ended before pick_u_orange). Monitor mix 13:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
