@@ -84,6 +84,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: null
     notes: "fmb2_s2c2_run01. Planned as Class 1; NATURAL fault: place_u_orange 14.96 deg off (pos 16.7 mm), executor re-seated -> conformant + recovered; watchdog caught it (TP). Monitor mix library:custom = 21:0 (no custom monitors; custom-detection cells n/a). Auto-memory confirmed off (no Memory Index in either transcript). Cube on time. Launch files added after the run."
+  - session_id: 20261015T011118Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c2_run02. Planned as Class 1; NATURAL fault at place_line_green: effort 191.2 vs 170 + slip 0.0213 vs 0.02, part toppled (47 mm, >80 deg); re-picks failed, aborted. Watchdog caught it (TP); the slip fire during pick_line_green_retry2 was a mis-armed monitor (watchdog said so; false alarm). Monitor mix 21:0. Committed task sha 4166cca0 (u_orange place target_offset tuned in 67a2af7). Cube on time. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
