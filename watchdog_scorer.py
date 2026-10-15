@@ -235,6 +235,9 @@ _KIND_READS = {
 }
 
 
+_GRIPPER = "__gripper__"   # pool for effort monitors armed with no object
+
+
 def _authored_sources_by_sha(session_dir):
     import hashlib
     out = {}
@@ -255,7 +258,12 @@ def _coverage_kinds(p, auth_src):
     fam = FAMILY.get(p.get("monitor_type"))
     obj = _obj(p)
     if fam:
-        return [(obj, fam["kind"])] if obj else []
+        if obj:
+            return [(obj, fam["kind"])]
+        # An effort monitor watches the GRIPPER joint, not a part: armed with no
+        # declared object it covers whichever part is held (the engine credits
+        # its fires the same way). Pooled under _GRIPPER, read by the grip check.
+        return [(_GRIPPER, fam["kind"])] if fam["kind"] == "clamp_effort" else []
     if _origin(p) != "authored" or _purpose(p) == "observation":
         return []
     chans = [str(c) for c in (p.get("channels_read") or [])]
@@ -826,12 +834,14 @@ def score_run(session_dir, label):
                 # did its job on a real event -- it covers, as in is_live.
                 def _grip_live(intervals, kind, dl):
                     return any(t0 <= dl and (t1 >= dl or (
-                        (active, kind, t1) in fired_ends and t1 >= w0))
+                        ((active, kind, t1) in fired_ends or (_GRIPPER, kind, t1) in fired_ends)
+                        and t1 >= w0))
                         for (t0, t1) in intervals)
                 # effort
                 expected_here.append({"object": active, "monitor": "effort"})
                 grip_exp += 1
-                eff = live.get(active, {}).get("clamp_effort", [])
+                eff = (live.get(active, {}).get("clamp_effort", [])
+                       + live.get(_GRIPPER, {}).get("clamp_effort", []))
                 offsets_here["effort"] = _arm_offset(eff, gt)
                 gates_here["effort"] = _arm_offset(eff, eff_dl) if gated_here else None
                 if _grip_live(eff, "clamp_effort", eff_dl):
