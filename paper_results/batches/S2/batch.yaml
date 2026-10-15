@@ -100,6 +100,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c1_run01. Clean: 12 planned steps, no fires, all parts seated; watchdog conformant. Monitor mix 20:0. Cube on time. Launch files added after the run."
+  - session_id: 20261015T020350Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, operator_hand_drag]
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c2_run03. Operator dragged base1 by hand after place_line_green (02:11:08; no ground-truth record): base1 0.0294 with u_brown 0.0293 / u_orange 0.0296 carried along, inverted_u_yellow struck 0.0292 and flipped (its pick had no IK -> aborted), line_green knocked 35.9 mm out of its slot. 5/5 TP. NOT one of S2's planned C2 faults -- an extra injected disturbance (collision); counts toward the 10. Monitor mix 21:0. Cube on time. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
