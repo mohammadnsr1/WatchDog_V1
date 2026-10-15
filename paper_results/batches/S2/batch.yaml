@@ -57,6 +57,12 @@ claude_cli_version: 2.1.296 (Claude Code)   # S1 ran 2.1.293; each session also 
 # by what they read (scorer revision 2026-10-14, S1 rescored identically).
 # Pre-run fixes carried in: r4 re-aimed for the current layout (offset
 # 0.1305,-0.0204,-0.0161), nudge-script cube moved to (0.08,-0.38).
+# Scorer revision (2026-10-15, after run 01, scoring only -- the runs are
+# unaffected): custom-monitor detection (authored_TP/FP/FN/TN) is n/a when no
+# custom clause monitor was armed (it used to count every fault as an
+# authored FN); new columns library_to_custom ("L:C" arm counts) and
+# custom_monitor_share report how much the watchdog used custom monitors.
+# All S1 runs rescore identically on every other column.
 # S2 launch: ./run_watchdog.sh s2 2 (isolation check expects arm_custom_monitor).
 
 # ---- sessions: append one entry per run ------------------------------------
@@ -69,7 +75,15 @@ claude_cli_version: 2.1.296 (Claude Code)   # S1 ran 2.1.293; each session also 
 #                               # executor copy's sha (registry_provenance_executor.json)
 #   run_task_sha256: null       # null = committed task; variants: executor_task_sha256
 #   notes: ""
-sessions: []
+sessions:
+  - session_id: 20261015T003820Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s2c2_run01. Planned as Class 1; NATURAL fault: place_u_orange 14.96 deg off (pos 16.7 mm), executor re-seated -> conformant + recovered; watchdog caught it (TP). Monitor mix library:custom = 21:0 (no custom monitors; custom-detection cells n/a). Auto-memory confirmed off (no Memory Index in either transcript). Cube on time. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.

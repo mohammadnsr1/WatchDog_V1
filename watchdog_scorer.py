@@ -311,6 +311,12 @@ def score_run(session_dir, label):
     clause_fires     = [f for f in fires if _purpose(f) != "observation"]
     row["n_library_arms"]  = len(lib_arms)
     row["n_authored_arms"] = len(auth_arms)
+    # MONITOR MIX: library vs custom (authored, clause-purpose) monitor use --
+    # the S2 question "does the watchdog choose custom monitors at all".
+    row["n_authored_clause_arms"] = len(auth_clause_arms)
+    row["library_to_custom"] = f"{len(lib_arms)}:{len(auth_clause_arms)}"
+    _mix = len(lib_arms) + len(auth_clause_arms)
+    row["custom_monitor_share"] = round(len(auth_clause_arms) / _mix, 3) if _mix else None
     row["n_authored_obs_monitors"] = len({a.get("monitor_id") for a in obs_arms})
     row["n_observation_fires"] = len(obs_fires)
 
@@ -568,9 +574,12 @@ def score_run(session_dir, label):
          "value": f.get("triggering_value"), "threshold": f.get("threshold")} for f in fa]
 
     # ---- AUTHORED monitors: boolean per injected fault (TP/FP/FN/TN) --------
-    # Own columns, never merged with the library family scoring. S1 should have
-    # no authored monitors at all — columns stay n/a there.
-    if scn in ("S2", "S3") or auth_arms:
+    # Own columns, never merged with the library family scoring. Scored ONLY
+    # when custom clause monitors were armed: with none armed there is nothing
+    # to evaluate, so the cells are n/a (not FN) and monitor use is reported
+    # by library_to_custom / custom_monitor_share instead (operator decision
+    # 2026-10-15). S1 has none, so it stays n/a there too.
+    if auth_clause_arms:
         authored_clause_fires = [f for f in real_fires if _origin(f) == "authored"]
         auth = score_authored_faults(
             real_pairs, authored_clause_fires, step_window, release_windows,
@@ -955,7 +964,8 @@ CSV_COLUMNS = [
     "scorer_raw_fault_TP_list", "scorer_raw_fault_FP_list", "scorer_raw_fault_FN_list",
     # authored monitors — boolean per injected fault, own columns (never merged
     # with the library family columns)
-    "n_authored_arms", "authored_TP", "authored_FP", "authored_FN", "authored_TN",
+    "n_authored_arms", "n_authored_clause_arms", "library_to_custom", "custom_monitor_share",
+    "authored_TP", "authored_FP", "authored_FN", "authored_TN",
     "authored_release_false_fires", "authored_param_accuracy",
     # observation-purpose monitors (agent-chosen thresholds; excluded elsewhere)
     "n_authored_obs_monitors", "agent_chosen_obs_thresholds", "n_observation_fires",
@@ -1007,6 +1017,9 @@ def flatten_row(row):
         "scorer_raw_fault_TP_list": _joinpairs(tp), "scorer_raw_fault_FP_list": _joinpairs(fp),
         "scorer_raw_fault_FN_list": _joinpairs(fn),
         "n_authored_arms": row.get("n_authored_arms"),
+        "n_authored_clause_arms": row.get("n_authored_clause_arms"),
+        "library_to_custom": row.get("library_to_custom"),
+        "custom_monitor_share": row.get("custom_monitor_share"),
         "authored_TP": row.get("authored_TP"), "authored_FP": row.get("authored_FP"),
         "authored_FN": row.get("authored_FN"), "authored_TN": row.get("authored_TN"),
         "authored_release_false_fires": row.get("authored_release_false_fires"),
@@ -1254,7 +1267,12 @@ def main():
         print(f"    authored probe/debug fires (excluded from false alarms): "
               f"{row.get('authored_probe_fires')}")
 
-    # authored lane (S2/S3): boolean per injected fault, own columns
+    # monitor mix + authored lane (S2/S3): boolean per injected fault, own columns
+    print(f"\n  MONITOR MIX  library:custom = {row.get('library_to_custom')}  "
+          f"(custom share {row.get('custom_monitor_share')}; "
+          f"{row.get('n_authored_obs_monitors')} observation-purpose custom)")
+    if row.get("authored_detection") is None and str(label.get("scenario", "")).upper() in ("S2", "S3"):
+        print("    custom-monitor detection: n/a -- no custom clause monitors armed")
     if row.get("authored_detection") is not None:
         ad = row["authored_detection"]
         print(f"\n  AUTHORED MONITORS  (boolean per injected fault; "
