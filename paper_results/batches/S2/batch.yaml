@@ -116,6 +116,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c1_run02. Clean; one monitor false alarm: effort_u_brown (limit 100, object_id None) never disarmed after u_brown's release, fired 105.6 on inverted_u_yellow's normal grip; watchdog recognised the mis-arm, final conformant. Monitor mix 14:0. Cube on time. Launch files added after the run."
+  - session_id: 20261015T025623Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c2_run04. Planned as Class 1; NATURAL fault: executor's reset_object_state detached u_brown while lifted, the recovery re-grasp dropped it (slip 0.0415) at place_approach_u_brown; aborted. Watchdog caught it (TP). No cube (aborted before pick_u_orange); observation not scored. Monitor mix 8:0. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
