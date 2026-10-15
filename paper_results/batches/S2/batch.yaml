@@ -188,6 +188,14 @@ known_invalid: []
 # Class 4 x3 (registry at 10 for all five), restore, then Class 3 x5 and the
 # remaining Class 1 runs.
 
+# REGISTRY for r3 x2 + Class 4 x3 (set 2026-10-15): source registry u_brown
+# max_clamp_effort 100 -> 10, sha 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac
+# (identical to S1's r3/C4 registry). Executor copy for C4 unchanged since S1:
+# ~/.watchdog/registry/model_registry.yaml, sha 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+# (differs only in that field = 100, and the pinned asset_root). Session
+# entries: r3 runs run_registry_sha256 = 32f79017..., C4 runs = 008411d8...
+# Restore to 92969cc1 after the last C4 run.
+
 # Scorer revision (2026-10-15, scoring only): an effort_event monitor armed
 # with no object (watchdog put the part only in the monitor_id) covers
 # whichever part is held -- the engine credits its fires the same way. Only
