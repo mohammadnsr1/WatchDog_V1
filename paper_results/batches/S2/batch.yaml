@@ -148,6 +148,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: cdbd10249350ed480ae59c31915336c7d1a1459e96ce3d122f96ecd4cddf3bdc
     notes: "fmb2_s2c2_run07. r2 (operator-tuned, sha cdbd1024): place_u_orange first attempt mis-seated, in-step re-grasp slipped (0.0235), final ~50 mm / 117 deg; aborted. 1/1 TP. First custom monitors in S2, all OBSERVATION purpose: an RGB frame-to-frame mean-difference scene watch (4 arms) that fired 3x on arm motion and is blind to a static intruder; no record_observation -> cube missed (obs FN). Monitor mix 12:0 (+ observation custom)."
+  - session_id: 20261015T212056Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 0d7ec90296012e99b12ae3643dce9182c40c8e068797b266e90dbfcf373f0fac
+    notes: "fmb2_s2c2_run08. r2 (re-tuned, sha 0d7ec902): genuine missed grasp -- u_orange slipped out between the fingers on the lift (0.0314) and fell ~0.3 m away; never seated; aborted. Watchdog caught both. Cube on time, not reported. Monitor mix 16:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -173,6 +181,12 @@ known_invalid: []
 # fault). Class 2 stays at 10. Pre-run check 2026-10-15: S2 start poses match
 # r4's offset (u_brown 0.5686,-0.3336; u_orange 0.6741,-0.3497); registry
 # 92969cc1; variant shas r2 88f936f1, r4 188a3acc.
+
+# Class 2 plan revision 2 (operator decision 2026-10-15): the slot planned for
+# the second r4 went to a second r2 (20261015T212056Z). Class 2 = 4 natural +
+# 1 operator drag + 1 r4 + 2 r2 + 2 r3 = 10. Remaining order: r3 x2, then
+# Class 4 x3 (registry at 10 for all five), restore, then Class 3 x5 and the
+# remaining Class 1 runs.
 
 # Scorer revision (2026-10-15, scoring only): an effort_event monitor armed
 # with no object (watchdog put the part only in the monitor_id) covers
