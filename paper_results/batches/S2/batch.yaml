@@ -164,6 +164,14 @@ sessions:
     run_registry_sha256: 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c2_run09. r3: effort 25.3 (~75) vs 10 at pick_u_brown (caught; restated at the two u_brown place steps = continuation). NATURAL in the same run: line_green slip 0.0201 + mis-seat 21.8 mm at place_line_green, slip 0.02025 at reseat_line_green; re-seat fixed it, completed. Watchdog final verdict conformant+recovered -- wrong (effort not undoable). NO CUBE (script not run) -> no observation scoring. Monitor mix 19:0."
+  - session_id: 20261015T223633Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c2_run10. r3, clean otherwise: effort 28.07 vs 10 at pick_u_brown, caught; watchdog final non_conformant (correct). Cube on time, not reported. Monitor mix 21:0. Completes S2 Class 2 (10/10)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
