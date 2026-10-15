@@ -140,6 +140,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 188a3acc7159c97fc1e76b1a24861a8e0b9a20e5faf2ecdc4b7a1dde9afaae98
     notes: "fmb2_s2c2_run06. r4 wrong object (+ ACM companion): u_orange lifted at pick_u_brown (0.0247), u_brown not held (slip 0.0251) and never seated (0.246 m). Run ended on the operator's abort instruction AFTER the fault and its detection (ground truth unaffected). No cube (ended before pick_u_orange). Monitor mix 13:0."
+  - session_id: 20261015T203118Z
+    scenario: S2
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: cdbd10249350ed480ae59c31915336c7d1a1459e96ce3d122f96ecd4cddf3bdc
+    notes: "fmb2_s2c2_run07. r2 (operator-tuned, sha cdbd1024): place_u_orange first attempt mis-seated, in-step re-grasp slipped (0.0235), final ~50 mm / 117 deg; aborted. 1/1 TP. First custom monitors in S2, all OBSERVATION purpose: an RGB frame-to-frame mean-difference scene watch (4 arms) that fired 3x on arm motion and is blind to a static intruder; no record_observation -> cube missed (obs FN). Monitor mix 12:0 (+ observation custom)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
