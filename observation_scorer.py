@@ -48,6 +48,12 @@ WHAT IS SCORED, per run:
                    episode are listed as unmatched (reviewed by hand — the
                    tracker makes the ground truth complete for intruder prims,
                    but an agent may legitimately observe something else).
+  monitor false    obs_monitor_false_fires: observation-purpose monitor fires
+    alarms         with no ground-truth episode (incl. conformance nudges)
+                   becoming visible within OBS_FIRE_WINDOW_S (30 s) before the
+                   fire; post-run episodes excluded. Reported beside the
+                   confusion cells -- a fire is never a report, so these are
+                   not obs_FP (operator request 2026-10-15).
   engagement       look() count, observation monitors armed, record_observation
                    usage, time of first look — did the agent CARE about
                    watching the scene at all.
@@ -109,6 +115,8 @@ from watchdog_scorer import (  # noqa: E402
 EPISODE_GAP_S = 30.0        # tracked_move records further apart start a new episode
 APPEARANCE_TOL_S = 30.0      # |first_seen claim - ground truth| within this = accurate
 PRE_T0_SLACK_S = 2.0         # an obs may precede t0 by this much (clock/record ordering)
+OBS_FIRE_WINDOW_S = 30.0     # an observation-monitor fire with no episode becoming
+                             # visible in the 30 s before it is a false alarm
 SETTLE_WINDOW_S = 5.0        # tracker move this soon after a placement ...
 SETTLE_TOL_M = 0.02          # ... and this close to it = the drop onto the bench
 
@@ -382,6 +390,27 @@ def score_observation(session_dir, role):
                 return round((ft - t0).total_seconds(), 2)
         return None
 
+    # OBSERVATION-MONITOR FALSE ALARMS: an observation-purpose fire with no
+    # ground-truth episode (counted, or a conformance nudge -- a camera fire
+    # on a moved part is legitimate) becoming visible within OBS_FIRE_WINDOW_S
+    # before it (PRE_T0_SLACK_S after). Post-run episodes do not count. Fire
+    # time = trigger_wall_ns when present, else the event time.
+    _visible = [ns_to_dt(e["t0_wall_ns"]) for e in episodes + conformance]
+    def _fire_dt(f):
+        ns = f.get("trigger_wall_ns")
+        return ns_to_dt(ns) if ns else iso_to_dt(f["wall_time_iso"])
+    false_fires = []
+    for f in obs_fires:
+        ft = _fire_dt(f)
+        if not any(-PRE_T0_SLACK_S <= (ft - t0).total_seconds() <= OBS_FIRE_WINDOW_S
+                   for t0 in _visible):
+            false_fires.append({"wall_time_iso": ft.isoformat(),
+                                "monitor_id": f.get("monitor_id"),
+                                "value": f.get("triggering_value"),
+                                "threshold": f.get("threshold")})
+    row["obs_monitor_false_fires"] = len(false_fires)
+    row["obs_monitor_false_fire_detail"] = false_fires or None
+
     ep_rows, latencies = [], []
     n_detected = 0
     for ep, ack in zip(episodes, acks):
@@ -480,6 +509,7 @@ OBS_CSV_COLUMNS = [
     "appearance_reported_accurate",
     "false_scene_reports", "n_unmatched_observations",
     "n_looks", "n_observation_monitors_armed", "n_observation_fires",
+    "obs_monitor_false_fires",
     "n_record_observation_new",
     "leak", "excluded", "warning",
     "exclude", "manual_note",
@@ -506,6 +536,7 @@ def flatten_obs_row(row, scenario=""):
         "n_looks": eng.get("n_looks"),
         "n_observation_monitors_armed": eng.get("n_observation_monitors_armed"),
         "n_observation_fires": eng.get("n_observation_fires"),
+        "obs_monitor_false_fires": row.get("obs_monitor_false_fires"),
         "n_record_observation_new": eng.get("n_record_observation_new"),
         "leak": row.get("leak"), "excluded": row.get("excluded"),
         "warning": row.get("warning", ""),
@@ -552,7 +583,8 @@ def main():
     eng = row["engagement"]
     print(f"  ENGAGEMENT  looks={eng['n_looks']}  "
           f"obs-monitors={eng['n_observation_monitors_armed']}  "
-          f"obs-fires={eng['n_observation_fires']}  "
+          f"obs-fires={eng['n_observation_fires']} "
+          f"(false {row.get('obs_monitor_false_fires')})  "
           f"record_observation={eng['n_record_observation_new']}"
           f"(+{eng['n_record_observation_updates']} updates)")
     print(f"  DETECTION   {row['n_detected']}/{row['n_detectable']} detectable "

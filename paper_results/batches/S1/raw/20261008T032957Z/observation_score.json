@@ -51,5 +51,7 @@
   "obs_FP": 0,
   "obs_TN": 0,
   "false_scene_reports": null,
-  "unmatched_observations": null
+  "unmatched_observations": null,
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null
 }
