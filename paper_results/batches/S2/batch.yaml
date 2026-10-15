@@ -172,6 +172,14 @@ sessions:
     run_registry_sha256: 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c2_run10. r3, clean otherwise: effort 28.07 vs 10 at pick_u_brown, caught; watchdog final non_conformant (correct). Cube on time, not reported. Monitor mix 21:0. Completes S2 Class 2 (10/10)."
+  - session_id: 20261015T225103Z
+    scenario: S2
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c4_run01. Executor override (u_brown limit 100) vs install 32f79017 (10): effort 28.2 (~63) at pick_u_brown, caught. NATURAL in the same run: line_green slip + mis-seat at place_line_green and again at the unplanned reseat_line_green_place; reseat2 seated it; completed. Watchdog final conformant+recovered -- wrong (effort not undoable). Cube on time, not reported. Monitor mix 25:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
