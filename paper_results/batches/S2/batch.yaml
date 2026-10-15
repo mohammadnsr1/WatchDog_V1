@@ -147,6 +147,17 @@ known_invalid: []
 # Index"). S1 ran WITH the index (see S1 batch.yaml) -- S1 vs S2 differ in
 # this agent input. Check the first S2 transcript for "Memory Index" = 0.
 
+# ---- Class 2 plan revision (operator decision 2026-10-15, BEFORE any planned
+# injected C2 run) -------------------------------------------------------------
+# Five C2 slots were already filled (4 natural faults + the operator base1 drag)
+# before any planned injection. The remaining 5 slots go to: 1x r2 (grasp
+# offset), 2x r3 (shared registry u_brown max_clamp_effort 10), 2x r4 (wrong
+# object, + r4_allow_finger_contact.py). DROPPED from S2's C2 plan: the operator
+# drop and both nudges (the base1 drag already covers a disturbance/collision
+# fault). Class 2 stays at 10. Pre-run check 2026-10-15: S2 start poses match
+# r4's offset (u_brown 0.5686,-0.3336; u_orange 0.6741,-0.3497); registry
+# 92969cc1; variant shas r2 88f936f1, r4 188a3acc.
+
 # ---- known design limitation (noted 2026-10-15, NOT changed mid-study) -----
 # The library effort_event monitor watches a gripper joint (finger_joint
 # effort vs a threshold), not a part: object_id is optional and only labels
