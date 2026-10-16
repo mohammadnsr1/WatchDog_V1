@@ -188,6 +188,14 @@ sessions:
     run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c4_run02. Executor override (limit 100) vs install 32f79017 (10): effort 23.2 (~59) at pick_u_brown; at place_u_brown the first descent MIS-SEATED u_brown (~26 deg / 14 mm), recovered by a set-down + re-grasp that was a SECOND over-clamp (22.2, ~57.6); all caught. Completed, all seated. Watchdog final conformant+recovered: recovered right (expected_recovered true, operator 2026-10-16), verdict wrong (effort not undoable). Raw row: only expected_recovered_ok edited after scoring. Cube on time, not reported. Monitor mix 22:0."
+  - session_id: 20261016T002341Z
+    scenario: S2
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c4_run03. Effort 29.8 (~48-49) at pick_u_brown, the only fault, caught (restated at place_approach/place_u_brown = continuation). NO recovery steps. Watchdog final conformant+recovered -- wrong on both. Cube on time, not reported. Monitor mix 25:0. Completes S2 Class 4 (3/3)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -258,7 +266,13 @@ known_invalid: []
 # AND later recovery steps that complete the assembly, the watchdog's final
 # run verdict tends to call the run conformant + recovered -- it treats the
 # completed assembly as recovery and does not hold that an over-clamp cannot
-# be undone. Seen in S1 C4 run01, S2 C2 run09, S2 C4 run01 and S2 C4 run02;
-# effort-only runs without recovery steps were judged non_conformant
-# correctly (e.g. S2 C2 run10). Step-level detection of the effort fault was
-# correct in every case.
+# be undone. Seen in S1 C4 run01, S2 C2 run09, S2 C4 run01 and S2 C4 run02.
+# UPDATE 2026-10-16: S2 C4 run03 had NO recovery steps and the watchdog still
+# called it conformant + recovered -- so the error is not only about recovery
+# steps: in S2 Class 4 the final verdict was wrong 3/3 (the over-clamp is
+# caught and recorded as a finding, then not carried into the final verdict).
+# S2 C2 run10 (r3, effort only) was judged non_conformant correctly.
+# Step-level detection of the effort fault was correct in every case.
+
+# REGISTRY RESTORED (source, 2026-10-16) after the last C4 run: u_brown
+# max_clamp_effort back to 100 -> sha 92969cc1. Rebuild before Class 3 / Class 1.
