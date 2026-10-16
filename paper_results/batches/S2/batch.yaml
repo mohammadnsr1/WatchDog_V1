@@ -228,6 +228,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
     notes: "fmb2_s2c3_run04. r6 bystander work (sha 517a3c57): hex_red picked (stationarity fired 0.0239) and inserted twice into hex_red_hole, left ~39 deg off; executor aborted. NATURAL in the same run: seated u_orange knocked at place_inverted_u_yellow (0.0219, ~20 mm rise, settled back within 1.7 mm). 2/2 TP. Two mis-armed fires (u_orange at pick_u_orange, line_green at pick_line_green: 'inactive until its own pick' monitors never disarmed) = monitor false alarms; watchdog recorded no verdict on them. All four board parts seated. Cube on time, not reported. Monitor mix 22:0."
+  - session_id: 20261016T021651Z
+    scenario: S2
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
+    notes: "fmb2_s2c3_run05. r6 bystander work (sha 517a3c57): hex_red picked (stationarity fired 0.0215); first insertion ~56 deg off, re-insert flung it ~140 mm onto the floor, recovery grasp failed; executor aborted inside place_hex_red (u_orange/line_green/inverted_u_yellow never picked). Watchdog caught it (1/1 TP), final non_conformant (operator: correct). NO CUBE (aborted before pick_u_orange) -> no observation scoring. Monitor mix 17:0. Completes S2 Class 3 (5/5)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
