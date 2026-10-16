@@ -244,6 +244,22 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c1_run03. Clean: no fires, all seated; watchdog conformant. Cube on time, not reported. Monitor mix 23:0. Launch files added after the run."
+  - session_id: 20261016T024638Z
+    scenario: S2
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c1_run04. Clean: no fires, all seated; watchdog conformant. Cube on time, not reported. Monitor mix 20:0. Launch files added after the run."
+  - session_id: 20261016T030548Z
+    scenario: S2
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c1_run05. Clean: no fires, all seated; watchdog conformant. NO CUBE (script not run) -> no observation scoring. Monitor mix 18:0. Completes S2 Class 1 (5/5) and S2. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
