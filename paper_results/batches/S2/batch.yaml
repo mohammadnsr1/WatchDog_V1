@@ -180,6 +180,14 @@ sessions:
     run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
     notes: "fmb2_s2c4_run01. Executor override (u_brown limit 100) vs install 32f79017 (10): effort 28.2 (~63) at pick_u_brown, caught. NATURAL in the same run: line_green slip + mis-seat at place_line_green and again at the unplanned reseat_line_green_place; reseat2 seated it; completed. Watchdog final conformant+recovered -- wrong (effort not undoable). Cube on time, not reported. Monitor mix 25:0."
+  - session_id: 20261016T000109Z
+    scenario: S2
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c4_run02. Executor override (limit 100) vs install 32f79017 (10): effort 23.2 (~59) at pick_u_brown, and a SECOND over-clamp after a set-down + re-grasp in place_u_brown (22.2, ~57.6); both caught. Completed, all seated. Watchdog final conformant+recovered -- wrong on both (effort not recoverable). Cube on time, not reported. Monitor mix 22:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -245,3 +253,12 @@ known_invalid: []
 # (the line faults were recovered; effort fault keeps it non_conformant). Raw
 # row changed in ONE cell only (expected_recovered_ok False -> True) and
 # score.json recovered_correct False -> True; nothing else was rescored.
+
+# FINDING (operator, 2026-10-16): when a run has an effort (over-clamp) fault
+# AND later recovery steps that complete the assembly, the watchdog's final
+# run verdict tends to call the run conformant + recovered -- it treats the
+# completed assembly as recovery and does not hold that an over-clamp cannot
+# be undone. Seen in S1 C4 run01, S2 C2 run09, S2 C4 run01 and S2 C4 run02;
+# effort-only runs without recovery steps were judged non_conformant
+# correctly (e.g. S2 C2 run10). Step-level detection of the effort fault was
+# correct in every case.
