@@ -187,7 +187,7 @@ sessions:
     injection_scenarios: [place_object]
     run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
     run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
-    notes: "fmb2_s2c4_run02. Executor override (limit 100) vs install 32f79017 (10): effort 23.2 (~59) at pick_u_brown, and a SECOND over-clamp after a set-down + re-grasp in place_u_brown (22.2, ~57.6); both caught. Completed, all seated. Watchdog final conformant+recovered -- wrong on both (effort not recoverable). Cube on time, not reported. Monitor mix 22:0."
+    notes: "fmb2_s2c4_run02. Executor override (limit 100) vs install 32f79017 (10): effort 23.2 (~59) at pick_u_brown; at place_u_brown the first descent MIS-SEATED u_brown (~26 deg / 14 mm), recovered by a set-down + re-grasp that was a SECOND over-clamp (22.2, ~57.6); all caught. Completed, all seated. Watchdog final conformant+recovered: recovered right (expected_recovered true, operator 2026-10-16), verdict wrong (effort not undoable). Raw row: only expected_recovered_ok edited after scoring. Cube on time, not reported. Monitor mix 22:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
