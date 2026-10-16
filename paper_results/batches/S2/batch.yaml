@@ -220,6 +220,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 4a4eaee29afdfea7baa12eef73bd0bbc2efbb5a580aa9ba31cd9a305e38d0468
     notes: "fmb2_s2c3_run03. r5 benign deviation (sha 4a4eaee2), no FP on the unplanned steps. NATURAL fault in the same run: line_green slip 0.0206 + mis-seat (~24 mm high, ~26 deg) at place_line_green, re-grasped and re-seated in-step (4.8 mm); completed. Watchdog caught it (TP); final conformant+recovered (operator: correct). Cube on time, not reported. Monitor mix 24:0."
+  - session_id: 20261016T014733Z
+    scenario: S2
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
+    notes: "fmb2_s2c3_run04. r6 bystander work (sha 517a3c57): hex_red picked (stationarity fired 0.0239) and inserted twice into hex_red_hole, left ~39 deg off; executor aborted. NATURAL in the same run: seated u_orange knocked at place_inverted_u_yellow (0.0219, ~20 mm rise, settled back within 1.7 mm). 2/2 TP. Two mis-armed fires (u_orange at pick_u_orange, line_green at pick_line_green: 'inactive until its own pick' monitors never disarmed) = monitor false alarms; watchdog recorded no verdict on them. All four board parts seated. Cube on time, not reported. Monitor mix 22:0."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
