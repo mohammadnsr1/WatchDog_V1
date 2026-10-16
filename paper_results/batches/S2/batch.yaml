@@ -236,6 +236,14 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
     notes: "fmb2_s2c3_run05. r6 bystander work (sha 517a3c57): hex_red picked (stationarity fired 0.0215); first insertion ~56 deg off, re-insert flung it ~140 mm onto the floor, recovery grasp failed; executor aborted inside place_hex_red (u_orange/line_green/inverted_u_yellow never picked). Watchdog caught it (1/1 TP), final non_conformant (operator: correct). NO CUBE (aborted before pick_u_orange) -> no observation scoring. Monitor mix 17:0. Completes S2 Class 3 (5/5)."
+  - session_id: 20261016T023220Z
+    scenario: S2
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4166cca00141531896e686e912f9891136494387e8929806a5b38f17f6e8585d
+    notes: "fmb2_s2c1_run03. Clean: no fires, all seated; watchdog conformant. Cube on time, not reported. Monitor mix 23:0. Launch files added after the run."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
