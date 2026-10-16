@@ -240,3 +240,8 @@ known_invalid: []
 # arming errors and score as monitor false alarms. Candidate change for a
 # future version: tie effort monitors to their declared part (auto-disarm on
 # that part's release, or evaluate only while it is held).
+
+# Hand edit 2026-10-15 (operator): 20261015T221102Z label expected_recovered false -> true
+# (the line faults were recovered; effort fault keeps it non_conformant). Raw
+# row changed in ONE cell only (expected_recovered_ok False -> True) and
+# score.json recovered_correct False -> True; nothing else was rescored.

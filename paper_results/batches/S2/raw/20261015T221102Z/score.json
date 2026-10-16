@@ -27,7 +27,7 @@
   "verdict_FN": 1,
   "verdict_FP": 0,
   "verdict_TN": 0,
-  "recovered_correct": false,
+  "recovered_correct": true,
   "cadence_compliant": true,
   "label_consistency_warning": null,
   "detection": {

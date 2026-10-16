@@ -514,3 +514,8 @@ known_invalid:
       was the fmb1 template; scored on pre-1d29e92 scorers. Its raw/ rows were
       removed in the 2026-10-07 cleanup (see notes). Not counted toward the
       5 Class 1 runs.
+
+# Hand edit 2026-10-15 (operator): 20261010T020201Z label expected_recovered false -> true
+# (the line faults were recovered; effort fault keeps it non_conformant). Raw
+# row changed in ONE cell only (expected_recovered_ok False -> True) and
+# score.json recovered_correct False -> True; nothing else was rescored.
