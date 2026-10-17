@@ -180,6 +180,14 @@ arm_custom_monitor(code, description, params, clause, object_id,
     rate_hz and purpose="observation"), which lets you watch the workspace
     between events.
 
+    purpose says what a monitor is for. A monitor that watches a
+    requirement whose outcome can change your verdict -- an object that
+    must not be disturbed, a grasp that must be retained, a clamp effort
+    that must stay within its limit, and the like -- is a required monitor
+    and is armed with purpose="clause", with its threshold from the
+    specification. A monitor you use to observe the scene and catch other
+    events is armed with purpose="observation".
+
 disarm_monitor(monitor_id) / disarm_all_monitors()
     disarm_all_monitors means all. Nothing is exempt, including a monitor
     holding a requirement that spans the whole run.

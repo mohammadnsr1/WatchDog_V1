@@ -109,7 +109,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from watchdog_scorer import (  # noqa: E402
-    _median, _origin, _p95, _purpose, append_csv, load_jsonl,
+    _CLAUSE_CHANNELS, _median, _origin, _p95, _purpose, append_csv, load_jsonl,
 )
 
 EPISODE_GAP_S = 30.0        # tracked_move records further apart start a new episode
@@ -318,8 +318,17 @@ def classify_strategy(looks, obs_arms, observations):
         channels = set()
         for a in obs_arms:
             channels |= set(a.get("channels_read") or [])
-        flavor = "depth" if any("depth" in c for c in channels) else \
-                 ("rgb" if any("rgb" in c for c in channels) else "array")
+        heads = {c.split(":", 1)[0] for c in channels}
+        if any("depth" in c for c in channels):
+            flavor = "depth"
+        elif any("rgb" in c for c in channels):
+            flavor = "rgb"
+        elif channels and heads <= _CLAUSE_CHANNELS:
+            # registered-object signals only (poses / joint / frames): such a
+            # monitor cannot see anything that is not in the registry
+            flavor = "pose"
+        else:
+            flavor = "array"
         return f"continuous_{flavor}_monitor"
     if len(looks) >= 3:
         return "polling_by_look"

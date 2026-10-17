@@ -237,6 +237,29 @@ _KIND_READS = {
 
 _GRIPPER = "__gripper__"   # pool for effort monitors armed with no object
 
+# channels_read heads that are a requirement's own signals: a registered
+# object's pose, the gripper joint, a frame or a transform. A monitor that
+# reads any of these is a clause monitor whatever its purpose flag says;
+# rgb/depth-only monitors are the observation (look-trigger) lane.
+_CLAUSE_CHANNELS = {"object_pose", "object_pose_window", "joint", "joint_window",
+                    "frame_pose", "frame_pose_window", "transform"}
+
+
+def _reads_clause_signal(p, auth_src=None):
+    chans = [str(c) for c in (p.get("channels_read") or [])]
+    if chans:
+        return any(c.split(":", 1)[0] in _CLAUSE_CHANNELS for c in chans)
+    text = (auth_src or {}).get(p.get("code_sha256") or "", "")
+    return any(k in text for keys in _KIND_READS.values() for k in keys)
+
+
+def _is_observation(p, auth_src=None):
+    """The purpose="observation" exemption, decided by what the monitor READS
+    (revision 2026-10-16): flagged observation AND no clause signal read. A
+    pose/joint/frame monitor flagged observation scores as a clause monitor;
+    its threshold must trace to the registry like any other."""
+    return _purpose(p) == "observation" and not _reads_clause_signal(p, auth_src)
+
 
 def _authored_sources_by_sha(session_dir):
     import hashlib
@@ -264,7 +287,7 @@ def _coverage_kinds(p, auth_src):
         # declared object it covers whichever part is held (the engine credits
         # its fires the same way). Pooled under _GRIPPER, read by the grip check.
         return [(_GRIPPER, fam["kind"])] if fam["kind"] == "clamp_effort" else []
-    if _origin(p) != "authored" or _purpose(p) == "observation":
+    if _origin(p) != "authored" or _is_observation(p, auth_src):
         return []
     chans = [str(c) for c in (p.get("channels_read") or [])]
     text = auth_src.get(p.get("code_sha256") or "", "")
@@ -295,6 +318,7 @@ def score_run(session_dir, label):
     ev, calls = load_run(session_dir)
     arms  = [_pl(e) for e in wd_events(ev, "monitor_armed")]
     fires = [_pl(e) for e in wd_events(ev, "monitor_fire")]
+    auth_src = _authored_sources_by_sha(session_dir)   # saved authored sources, by sha
     step_v= [_pl(e) for e in wd_events(ev, "verdict")]
     run_v = [_pl(e) for e in wd_events(ev, "run_verdict")]
     begins= exec_events(ev, "begin_step")
@@ -307,16 +331,21 @@ def score_run(session_dir, label):
 
     # ---- monitor ORIGIN / PURPOSE partition --------------------------------
     # Library and authored monitors are scored in SEPARATE columns, never one
-    # merged accuracy number. purpose=="observation" monitors (agent-chosen
-    # look-trigger thresholds) are excluded from detection/false-alarm/parameter
-    # metrics entirely — they are a legitimate observation strategy, scored by
-    # observation_scorer.py.
+    # merged accuracy number. Observation monitors (agent-chosen look-trigger
+    # thresholds over the camera) are excluded from detection/false-alarm/
+    # parameter metrics entirely — they are a legitimate observation strategy,
+    # scored by observation_scorer.py. Which monitors those are is decided by
+    # what they READ (_is_observation), not by the purpose flag alone: a
+    # pose/joint/frame monitor flagged "observation" watches a requirement and
+    # is scored as a clause monitor; obs_flag_on_clause_reads counts them.
     lib_arms         = [a for a in arms if _origin(a) == "library"]
     auth_arms        = [a for a in arms if _origin(a) == "authored"]
-    obs_arms         = [a for a in auth_arms if _purpose(a) == "observation"]
-    auth_clause_arms = [a for a in auth_arms if _purpose(a) != "observation"]
-    obs_fires        = [f for f in fires if _purpose(f) == "observation"]
-    clause_fires     = [f for f in fires if _purpose(f) != "observation"]
+    obs_arms         = [a for a in auth_arms if _is_observation(a, auth_src)]
+    auth_clause_arms = [a for a in auth_arms if not _is_observation(a, auth_src)]
+    obs_fires        = [f for f in fires if _is_observation(f, auth_src)]
+    clause_fires     = [f for f in fires if not _is_observation(f, auth_src)]
+    row["obs_flag_on_clause_reads"] = len({a.get("monitor_id") for a in auth_clause_arms
+                                           if _purpose(a) == "observation"})
     row["n_library_arms"]  = len(lib_arms)
     row["n_authored_arms"] = len(auth_arms)
     # MONITOR MIX: library vs custom (authored, clause-purpose) monitor use --
@@ -405,10 +434,10 @@ def score_run(session_dir, label):
                 t0 = ts(t); t1 = ts(bs_win[i+1][0]) if i+1 < len(bs_win) else None
                 return t0, t1
         return None, None
-    # observation-purpose fires never attribute a conformance finding — they are
-    # look triggers, not clause judgements.
+    # observation fires (camera look triggers, see _is_observation) never
+    # attribute a conformance finding — they are not clause judgements.
     fires_ev = [e for e in wd_events(ev, "monitor_fire")
-                if _purpose(_pl(e)) != "observation"]
+                if not _is_observation(_pl(e), auth_src)]
     finding_steps = {sv.get("step_id") for sv in step_v if sv.get("verdict") in FINDING_VERDICTS}
     known_objects = {m.get("object") for m in label.get("expected_monitors", []) or []}
     step_active = {b["payload"].get("step_id"): step_active_object(b["payload"], known_objects)
@@ -671,7 +700,6 @@ def score_run(session_dir, label):
     # the NEXT disarm of the same id. A monitor_id can be armed->disarmed->armed again (re-arm on
     # re-seat), producing MULTIPLE intervals — do not overwrite.
     events_by_id = defaultdict(list)   # mid -> [(time, "arm"/"disarm", obj, kinds|reason)]
-    auth_src = _authored_sources_by_sha(session_dir)
     for e in wd_events(ev, "monitor_armed"):
         p = _pl(e)
         events_by_id[p.get("monitor_id")].append(
@@ -925,15 +953,9 @@ def score_run(session_dir, label):
     row["authored_param_fail"] = ap_fail
     row["agent_chosen_obs_thresholds"] = len(obs_arms)
 
-    # S3 is authored-only: the library family coverage grid does not apply, and
-    # leaving it populated would read as wall-to-wall misses. Blanked AFTER
-    # computation so S1/S2 behavior is untouched.
-    if scn == "S3":
-        row["per_step_coverage"] = []
-        row["stationarity_coverage"] = "n/a"
-        row["grip_coverage"] = "n/a"
-        row["arming_coverage"] = "n/a"
-        row["effort_late"] = []
+    # S3 (authored-only) keeps the coverage grid: authored monitors are credited
+    # by what they read (2026-10-14), so the duty grid asks the same question in
+    # every scenario. (The earlier S3 blanking hid every S3 coverage miss.)
 
     # ---- INDEPENDENCE ------------------------------------------------------
     exec_status = ended.get("status") if ended else "no_terminal_event"
@@ -977,8 +999,10 @@ CSV_COLUMNS = [
     "n_authored_arms", "n_authored_clause_arms", "library_to_custom", "custom_monitor_share",
     "authored_TP", "authored_FP", "authored_FN", "authored_TN",
     "authored_release_false_fires", "authored_param_accuracy",
-    # observation-purpose monitors (agent-chosen thresholds; excluded elsewhere)
+    # observation monitors (camera look triggers; excluded elsewhere), plus the
+    # purpose="observation" arms that read clause signals and scored as clause
     "n_authored_obs_monitors", "agent_chosen_obs_thresholds", "n_observation_fires",
+    "obs_flag_on_clause_reads",
     # arming (LIBRARY lane)
     "arming_coverage", "stationarity_coverage", "grip_coverage",
     "arming_provenance", "provenance_fail_objs",
@@ -1037,6 +1061,7 @@ def flatten_row(row):
         "n_authored_obs_monitors": row.get("n_authored_obs_monitors"),
         "agent_chosen_obs_thresholds": row.get("agent_chosen_obs_thresholds"),
         "n_observation_fires": row.get("n_observation_fires"),
+        "obs_flag_on_clause_reads": row.get("obs_flag_on_clause_reads"),
         "arming_coverage": row.get("arming_coverage"),
         "stationarity_coverage": row.get("stationarity_coverage"),
         "grip_coverage": row.get("grip_coverage"),
@@ -1281,6 +1306,10 @@ def main():
     print(f"\n  MONITOR MIX  library:custom = {row.get('library_to_custom')}  "
           f"(custom share {row.get('custom_monitor_share')}; "
           f"{row.get('n_authored_obs_monitors')} observation-purpose custom)")
+    if row.get("obs_flag_on_clause_reads"):
+        print(f"    {BAD}{row.get('obs_flag_on_clause_reads')} custom monitors flagged "
+              f"purpose=\"observation\" read object/joint/frame signals -> scored as "
+              f"clause monitors (threshold must trace to the registry){X}")
     if row.get("authored_detection") is None and str(label.get("scenario", "")).upper() in ("S2", "S3"):
         print("    custom-monitor detection: n/a -- no custom clause monitors armed")
     if row.get("authored_detection") is not None:

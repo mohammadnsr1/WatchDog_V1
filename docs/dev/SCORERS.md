@@ -30,10 +30,20 @@ verdict-detection logic; verified on live data). Added, per run:
   authored monitors are boolean per injected fault — `authored_TP/FP/FN/TN`
   columns via `score_authored_faults()` (shared with s4_scorer). No family is
   inferred for authored monitors.
-- **purpose="observation" exemption**: observation-purpose monitors (agent-
-  chosen look triggers) are excluded from detection, false-alarm and parameter
-  metrics; counted in `n_authored_obs_monitors` / `agent_chosen_obs_thresholds`
-  / `n_observation_fires`.
+- **purpose="observation" exemption — by what the monitor READS** (revision
+  2026-10-16): a monitor flagged observation is exempt from detection,
+  false-alarm and parameter metrics only when it reads the camera alone
+  (rgb/depth). One that reads a registered object's pose, the gripper joint
+  or a frame/transform watches a requirement and is scored as a clause
+  monitor whatever its flag: it counts for coverage and the monitor mix, and
+  its agent-chosen threshold is a parameter failure (fixtures excepted, as
+  for every monitor -- base1/base2 carry no registry bound). Exempt monitors
+  are counted in `n_authored_obs_monitors` / `agent_chosen_obs_thresholds` /
+  `n_observation_fires`; reclassified ones in `obs_flag_on_clause_reads`.
+  S1/S2 rows are unchanged by the revision (the only S2 observation
+  monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
+  gone with it: authored monitors are credited by what they read since
+  2026-10-14, so the duty grid applies in every scenario.
 - **Release-time fires**: authored fires on the just-released object inside
   release_skill start−1 s … end+5 s go to `authored_release_false_fires`
   (authored monitors have no release auto-disarm by design) — never FP.
@@ -89,6 +99,11 @@ observations / observation-purpose monitors from every `events_*.jsonl`.
 - **False scene reports** on clean runs; unmatched observations listed for
   hand review on injected runs. **Engagement**: look count, observation
   monitors armed, record_observation usage, first-look time.
+- **Strategy label**: `continuous_depth_monitor` / `continuous_rgb_monitor`
+  for camera monitors; `continuous_pose_monitor` (2026-10-16) when the
+  observation-flagged monitors read only registered-object signals, a
+  strategy that cannot see an unregistered object; `polling_by_look` for
+  three or more looks; else `other` / `none`.
 - A removal of an object the agent never acknowledged is reported, not counted
   as a miss.
 

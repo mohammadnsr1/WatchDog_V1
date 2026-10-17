@@ -70,6 +70,14 @@ BLOCK_I = """    An authored monitor can also read the camera (see arm_custom_mo
     rate_hz and purpose="observation"), which lets you watch the workspace
     between events.
 
+    purpose says what a monitor is for. A monitor that watches a
+    requirement whose outcome can change your verdict -- an object that
+    must not be disturbed, a grasp that must be retained, a clamp effort
+    that must stay within its limit, and the like -- is a required monitor
+    and is armed with purpose="clause", with its threshold from the
+    specification. A monitor you use to observe the scene and catch other
+    events is armed with purpose="observation".
+
 """
 
 BLOCK_E = """     - For a monitor you wrote, comparison is "authored", threshold is the
