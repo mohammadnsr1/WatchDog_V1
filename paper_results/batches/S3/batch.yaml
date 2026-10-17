@@ -38,7 +38,15 @@ claude_cli_version: 2.1.301 (Claude Code)   # S2 ran 2.1.296; each session also 
 #                               # executor copy's sha (registry_provenance_executor.json)
 #   run_task_sha256: null       # null = committed task; variants: executor_task_sha256
 #   notes: ""
-sessions: []
+sessions:
+  - session_id: 20261017T003327Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3c2_run01. Planned as Class 1; NATURAL fault at place_u_orange: in-hand slip 0.0202 vs 0.02 as the part caught an edge on insertion, first placement 28.3 deg off; executor re-grasped and reseated in-step (2.08 mm / ~0.3 deg). Watchdog caught it (slip_u_orange, TP), final conformant + recovered (correct). Monitor mix 0:22, all clause, param accuracy 20/20, 0 mis-flagged. Coverage 96/116: slip armed late on u_brown (+32 s) and u_orange (+6 s); not-yet-picked parts watched only from their own pick (18 stationarity misses). Cube in view, not reported (the final look missed it) -> obs FN."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
