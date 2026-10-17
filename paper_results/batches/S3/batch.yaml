@@ -1,35 +1,44 @@
 # Batch provenance. See paper_results/README.md.
 batch_id: S3
-date_utc: TBD                   # UTC date of the batch's first run
+date_utc: 2026-10-16            # UTC date of the batch's FIRST run (planned; correct it if run 01 lands later)
 purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
-git_sha: TBD                    # git rev-parse HEAD at run time
-registry_sha256: TBD            # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
+git_sha: e1b8529fc2d9bfb312d051af562d93973a934061
+                                # git rev-parse HEAD on 2026-10-16 (scoring + prompt revision commit), before the
+                                # first S3 run: S1 and S2 complete, scorer + prompt revised (see notes),
+                                # S1+S2 rows unaffected. Code must not change mid-batch; if it does, record
+                                # why here before the next run.
+registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+                                # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
                                 # (INSTALL space copy — that is what a live run reads).
                                 # This is the CLEAN registry; Class 4 sessions record
                                 # their corrupted one per session below.
+                                # Verified 2026-10-16: same as S2 (u_brown max_clamp_effort 100).
 
-assembly: TBD                   # e.g. fmb_assembly_2
+assembly: fmb_assembly_2        # every S1 and S2 run used this set
 scenarios: [S3]
 
 per_role:
   executor:
-    model: TBD
-    effort: TBD
+    model: claude-sonnet-5      # executor.settings.json -- FROZEN for the batch
+    effort: low
   watchdog:
-    model: TBD                  # n/a for S4 sessions (unguarded)
-    effort: TBD
+    model: claude-sonnet-5      # watchdog.settings.json
+    effort: low
+claude_cli_version: 2.1.301 (Claude Code)   # S2 ran 2.1.296; each session also records its own
 
-sessions:
-  - session_id: TBD
-    scenario: S1
-    class: TBD
-    injection_scenarios: []     # names passed to inject_scenarios.py; [] if none
-    run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
-                                # Class 4: the corrupted registry's sha256, from the
-                                # session's manifest.json (registry_sha256).
-    notes: ""
+# ---- sessions: append one entry per run ------------------------------------
+# - session_id: 2026....T......Z
+#   scenario: S3
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2
+#   injection_scenarios: [place_object]
+#   run_registry_sha256: null   # null = batch registry_sha256. Class 4: the
+#                               # executor copy's sha (registry_provenance_executor.json)
+#   run_task_sha256: null       # null = committed task; variants: executor_task_sha256
+#   notes: ""
+sessions: []
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -63,4 +72,18 @@ known_invalid: []
 # by what they read (scorer revision 2026-10-14, S1 rescored identically).
 # Pre-run fixes carried in: r4 re-aimed for the current layout (offset
 # 0.1305,-0.0204,-0.0161), nudge-script cube moved to (0.08,-0.38).
-# S3 launch: ./run_watchdog.sh s3 2 (authored monitors only).
+# Revision 2026-10-16, BEFORE run 01 (a voided trial run, deleted, showed the
+# agent arming every stationarity monitor as purpose="observation" with
+# invented thresholds): (1) prompt BLOCK_I (S2/S3/S4 only) now says monitors
+# over requirements that can change the verdict are purpose="clause" with spec
+# thresholds, observation is for watching the scene; S2 ran WITHOUT this
+# passage. (2) scorer: the observation exemption is decided by what a monitor
+# reads (camera-only exempt; pose/joint/frame reads score as clause), the S3
+# coverage grid is no longer blanked, new column obs_flag_on_clause_reads;
+# S1+S2 rows verified cell-identical under the new scorer. (3) observation
+# strategy label continuous_pose_monitor.
+# S3 launch: ./run_watchdog.sh s3 2 (authored monitors only: isolation check expects
+# arm_custom_monitor + dry_run_custom_monitor and NO arm_monitor). Labels: copy the
+# S1 gt_ templates and set scenario: S3. Observation scorer: --scenario S3.
+# Library coverage/family grid is blank by design; detection cells are authored_*.
+# Fire adjudication: any measured value strictly greater than its bound is a fault.
