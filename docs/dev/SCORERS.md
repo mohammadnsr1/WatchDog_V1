@@ -44,6 +44,13 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **How a fault was caught** (additive, 2026-10-19): `fault_TP_by_fire` /
+  `fault_TP_by_check` split `fault_TP`. "fire" = a clause monitor fired on the
+  fault's object inside its step window (probe and observation fires
+  excluded); "check" = the watchdog found it by its own measurement (e.g. a
+  place-step query_snapshot) with nothing fired. Pairing is unchanged
+  (step, object): a slip that caused a mis-seat caught only at end_step is
+  a TP by check. No other column changes (verified over all S1/S2/S3 rows).
 - **Release-time fires**: authored fires on the just-released object inside
   release_skill start−1 s … end+5 s go to `authored_release_false_fires`
   (authored monitors have no release auto-disarm by design) — never FP.

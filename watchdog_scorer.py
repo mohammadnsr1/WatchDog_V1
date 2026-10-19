@@ -535,6 +535,31 @@ def score_run(session_dir, label):
         "n_findings": len(finding_pairs),
     }
     row["fault_TN"] = len(tn_steps)
+
+    # HOW each caught fault was caught (2026-10-19, additive -- changes no other
+    # column): "fire" when a clause monitor fired on the fault's object inside
+    # its step window (probe fires and observation fires excluded), else
+    # "check" -- the finding came from the watchdog's own measurement (e.g. a
+    # place-step query_snapshot) with nothing having fired. Pairing stays
+    # (step, object): a slip that caused a mis-seat caught only at end_step
+    # is a TP by "check".
+    def _caught_by_fire(sid, o):
+        t0, t1 = step_window(sid)
+        if t0 is None:
+            return False
+        for e in fires_ev:
+            pe = _pl(e)
+            if pe.get("origin", "library") == "authored" \
+                    and float(pe.get("triggering_value") or 0.0) == 0.0:
+                continue                                   # probe fire
+            ft = ts(e["wall_time_iso"])
+            if ft >= t0 and (t1 is None or ft <= t1) and (o is None or _obj(pe) == o):
+                return True
+        return False
+    tp_mode = {pair: ("fire" if _caught_by_fire(*pair) else "check") for pair in tp}
+    row["fault_TP_by_fire"] = sum(1 for m in tp_mode.values() if m == "fire")
+    row["fault_TP_by_check"] = sum(1 for m in tp_mode.values() if m == "check")
+    row["detection"]["tp_mode"] = {f"{s_}:{o_}": m for (s_, o_), m in tp_mode.items()}
     row["detection_recall"]    = (len(tp) / len(real_pairs)) if real_pairs else None
     _scored = finding_pairs - continuation
     row["detection_precision"] = (len(tp) / len(_scored)) if _scored else None
@@ -992,6 +1017,9 @@ CSV_COLUMNS = [
     "n_real_violations", "fault_TP", "fault_FP", "fault_TN", "fault_FN",
     "fault_recall", "fault_precision",
     "fault_TP_list", "fault_FP_list", "fault_FN_list",
+    # how each TP was caught: a monitor fire in its step vs the watchdog's own
+    # step-end check with nothing fired (additive, 2026-10-19)
+    "fault_TP_by_fire", "fault_TP_by_check",
     "scorer_raw_fault_TP", "scorer_raw_fault_FP", "scorer_raw_fault_FN",
     "scorer_raw_fault_TP_list", "scorer_raw_fault_FP_list", "scorer_raw_fault_FN_list",
     # authored monitors — boolean per injected fault, own columns (never merged
@@ -1046,6 +1074,8 @@ def flatten_row(row):
         "fault_precision": row.get("detection_precision"),
         "fault_TP_list": _joinpairs(tp), "fault_FP_list": _joinpairs(fp),
         "fault_FN_list": _joinpairs(fn),
+        "fault_TP_by_fire": row.get("fault_TP_by_fire"),
+        "fault_TP_by_check": row.get("fault_TP_by_check"),
         "scorer_raw_fault_TP": len(tp), "scorer_raw_fault_FP": len(fp),
         "scorer_raw_fault_FN": len(fn),
         "scorer_raw_fault_TP_list": _joinpairs(tp), "scorer_raw_fault_FP_list": _joinpairs(fp),
@@ -1289,6 +1319,9 @@ def main():
     print(f"\n  FAULT DETECTION  (step-level pairing, per step:object)")
     print(f"    expected real violations : {real if real else '(none — clean run)'}")
     print(f"    TP (caught)              : {det.get('true_positives') or '-'}")
+    if det.get("tp_mode"):
+        print(f"      caught by              : fire={row.get('fault_TP_by_fire')}  "
+              f"check={row.get('fault_TP_by_check')}  {det.get('tp_mode')}")
     fn = det.get('false_negatives'); fp = det.get('false_positives')
     print(f"    FN (MISSED)              : {BAD+str(fn)+X if fn else '-'}")
     print(f"    FP (false alarm)         : {BAD+str(fp)+X if fp else '-'}")

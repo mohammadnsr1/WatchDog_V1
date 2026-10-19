@@ -77,3 +77,11 @@ def test_strategy_label_by_channel():
         == "continuous_array_monitor"
     assert obs.classify_strategy([{}, {}, {}], [], []) == "polling_by_look"
     assert obs.classify_strategy([], [], []) == "none"
+
+
+def test_tp_mode_columns_reach_the_csv_next_to_the_fault_cells():
+    cols = wd.CSV_COLUMNS
+    assert cols.index("fault_TP_by_fire") == cols.index("fault_FN_list") + 1
+    assert cols.index("fault_TP_by_check") == cols.index("fault_TP_by_fire") + 1
+    flat = wd.flatten_row({"fault_TP_by_fire": 2, "fault_TP_by_check": 1})
+    assert (flat["fault_TP_by_fire"], flat["fault_TP_by_check"]) == (2, 1)
