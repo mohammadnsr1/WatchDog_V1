@@ -104,6 +104,13 @@ known_invalid: []
 # check). No other column changes (all S1/S2/S3 rows verified). Raw rows
 # scored before it lack the two columns; scripts/backfill_tp_mode.py fills
 # them in corrected/ at Phase 6 (done for S1 and S2 the same day).
+# Scorer revision 2026-10-19 #2 (after 20261019T221524Z, scoring only):
+# stationarity coverage merges an object's OVERLAPPING live intervals, so an
+# arm-new-then-disarm-old hand-off between monitors is continuous coverage.
+# Changed only fmb2_s3c1_run03 (stationarity 78/108 -> 90/108, arming
+# 86/116 -> 98/116); all other S1/S2/S3 cells identical. That run's raw rows
+# were removed and the run rescored on the fixed scorer (operator decision,
+# same day; nothing had been committed), so raw/ carries the new values.
 # S3 launch: ./run_watchdog.sh s3 2 (authored monitors only: isolation check expects
 # arm_custom_monitor + dry_run_custom_monitor and NO arm_monitor). Labels: copy the
 # S1 gt_ templates and set scenario: S3. Observation scorer: --scenario S3.

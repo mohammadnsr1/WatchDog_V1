@@ -44,6 +44,13 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Stationarity coverage across monitor hand-offs** (2026-10-19): an
+  object's live intervals are merged when they OVERLAP before the per-step
+  liveness check, so a replacement monitor armed before the old one is
+  disarmed (e.g. a multi-object stationarity monitor rebuilt with one more
+  object) counts as continuous coverage. A disarm-then-arm hand-off leaves a
+  gap and still misses. Changed only fmb2_s3c1_run03's stationarity /
+  arming coverage (78/108 -> 90/108); every other S1/S2/S3 cell identical.
 - **How a fault was caught** (additive, 2026-10-19): `fault_TP_by_fire` /
   `fault_TP_by_check` split `fault_TP`. "fire" = a clause monitor fired on the
   fault's object inside its step window (probe and observation fires

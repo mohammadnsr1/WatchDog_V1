@@ -763,9 +763,23 @@ def score_run(session_dir, label):
         """monitor of `kind` on `o` live for the BULK of [w0,w1] (grace at each boundary)."""
         need0, need1 = w0 + grace, w1 - grace
         if need1 <= need0: need0, need1 = w0, w1   # step shorter than 2*grace: require any overlap
+        ivs = []
         for (t0, t1) in live.get(o, {}).get(kind, []):
             if (o, kind, t1) in fired_ends and w0 <= t1 <= w1:
                 t1 = w1   # fired inside this window: covered to its end
+            ivs.append((t0, t1))
+        # Merge OVERLAPPING intervals (2026-10-19): a hand-off that arms the
+        # replacement monitor before disarming the old one (e.g. a multi-object
+        # stationarity monitor rebuilt with one more object) watches the object
+        # continuously. A disarm-then-arm hand-off leaves a real gap and stays
+        # split.
+        merged = []
+        for (t0, t1) in sorted(ivs):
+            if merged and t0 <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], t1))
+            else:
+                merged.append((t0, t1))
+        for (t0, t1) in merged:
             if t0 <= need0 and t1 >= need1:
                 return True
         return False
