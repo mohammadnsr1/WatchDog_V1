@@ -106,3 +106,19 @@ def test_multi_object_fire_subject_comes_from_its_detail():
            "detail": "u_orange moved"}
     wd._resolve_multi_object_fire(lib)
     assert lib["object_id"] == "base1"                   # library: untouched
+
+
+def test_unresolved_multi_object_threshold_is_checked_against_the_registry():
+    reg = {"u_brown": {"spec": {"tolerances": {"disturbance_tolerance_m": 0.02}}},
+           "u_orange": {"spec": {"tolerances": {"disturbance_tolerance_m": 0.02}}},
+           "base1": {"spec": {"tolerances": {}}}}                 # fixture: no field, skipped
+    a = {"threshold": 0.02, "threshold_source": "object_unresolved",
+         "threshold_registry_field": "raw_spec.tolerances.disturbance_tolerance_m",
+         "channels_read": ["held_object", "object_pose:u_brown", "object_pose:u_orange",
+                           "object_pose:base1"]}
+    assert wd._verify_unresolved_multi(a, reg)
+    assert not wd._verify_unresolved_multi(dict(a, threshold=0.01), reg)     # off the registry
+    only_fixture = dict(a, channels_read=["object_pose:base1"])
+    assert not wd._verify_unresolved_multi(only_fixture, reg)                # nothing to check
+    resolved = dict(a, threshold_source="raw_spec.tolerances.disturbance_tolerance_m")
+    assert not wd._verify_unresolved_multi(resolved, reg)                    # server already judged

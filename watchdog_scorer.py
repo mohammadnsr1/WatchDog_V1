@@ -340,6 +340,49 @@ def _resolve_multi_object_fire(p):
         p["object_id"] = min(hits)[1]
 
 
+REGISTRY_PATH = (Path(__file__).resolve().parent / "ros2_ws" / "install" / "robot_backend"
+                 / "share" / "robot_backend" / "config" / "model_registry.yaml")
+_REGISTRY_CACHE = {}
+
+
+def _registry_objects(path=None):
+    p = Path(path or REGISTRY_PATH)
+    if p not in _REGISTRY_CACHE:
+        import yaml
+        try:
+            _REGISTRY_CACHE[p] = (yaml.safe_load(p.read_text()) or {}).get("objects") or {}
+        except OSError:
+            _REGISTRY_CACHE[p] = {}
+    return _REGISTRY_CACHE[p]
+
+
+def _verify_unresolved_multi(a, registry_objects=None):
+    """Registry check the server could not make (2026-10-20): an authored
+    monitor armed with NO object_id (threshold_source "object_unresolved")
+    that reads several objects, with a declared registry field
+    (raw_spec.<path>). Verified iff every read object that HAS that field in
+    the registry carries exactly the armed threshold (at least one such
+    object). Objects without the field (base1/base2) are skipped. Reference:
+    the install-space registry -- what the cell ran on. Operator rule: a
+    threshold equal to the registry value counts as correct."""
+    if a.get("threshold_source") != "object_unresolved" or a.get("threshold") is None:
+        return False
+    field = str(a.get("threshold_registry_field") or "")
+    if not field.startswith("raw_spec."):
+        return False
+    objs = {c.split(":", 1)[1] for c in (a.get("channels_read") or [])
+            if str(c).startswith(("object_pose:", "object_pose_window:")) and ":" in str(c)}
+    reg = registry_objects if registry_objects is not None else _registry_objects()
+    vals = []
+    for o in objs:
+        node = (reg.get(o) or {}).get("spec") or {}
+        for k in field[len("raw_spec."):].split("."):
+            node = node.get(k) if isinstance(node, dict) else None
+        if isinstance(node, (int, float)):
+            vals.append(float(node))
+    return bool(vals) and all(abs(v - float(a["threshold"])) < 1e-9 for v in vals)
+
+
 def score_run(session_dir, label):
     ev, calls = load_run(session_dir)
     for e in ev.get("watchdog", []):
@@ -1010,7 +1053,7 @@ def score_run(session_dir, label):
         if obj in FIXTURES:
             continue
         ap_total += 1
-        if a.get("threshold_verified") is True:
+        if a.get("threshold_verified") is True or _verify_unresolved_multi(a):
             ap_ok += 1
         else:
             ap_fail.append({"object": obj, "monitor_id": a.get("monitor_id"),

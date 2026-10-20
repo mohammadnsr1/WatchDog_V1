@@ -44,6 +44,14 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Unresolved multi-object thresholds** (2026-10-20, operator rule "equal to
+  the registry counts as correct"): an authored clause monitor armed with no
+  object_id (threshold_source object_unresolved) cannot be verified by the
+  server. The scorer checks it against the install-space registry at the
+  declared field for every object the monitor reads that has that field
+  (fixtures skipped): verified iff all equal the threshold. Counts toward
+  authored_param_accuracy. Changed only fmb2_s3c3_run01 (0/1 -> 1/1) over 62
+  S1/S2/S3 rows.
 - **Multi-object authored fires** (2026-10-20): an authored monitor that
   reads several objects is armed with ONE object_id but watches them all, so
   its fire's subject is taken from the fire's detail -- the read object named
