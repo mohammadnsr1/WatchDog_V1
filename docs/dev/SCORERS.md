@@ -44,6 +44,14 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Multi-object authored fires** (2026-10-20): an authored monitor that
+  reads several objects is armed with ONE object_id but watches them all, so
+  its fire's subject is taken from the fire's detail -- the read object named
+  earliest, whole-word (u_brown never matches inside inverted_u_brown); the
+  armed id is kept as object_id_armed. Single-object and library monitors are
+  untouched. Changed no S1/S2/S3 cell (58 rows verified); first needed by
+  fmb2_s3c2_run08, whose all-object stationarity fire on u_orange was
+  otherwise attributed to base1 (FP) and its catch scored FN.
 - **Stationarity coverage across monitor hand-offs** (2026-10-19): an
   object's live intervals are merged when they OVERLAP before the per-step
   liveness check, so a replacement monitor armed before the old one is

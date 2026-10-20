@@ -175,6 +175,10 @@ known_invalid: []
 # 86/116 -> 98/116); all other S1/S2/S3 cells identical. That run's raw rows
 # were removed and the run rescored on the fixed scorer (operator decision,
 # same day; nothing had been committed), so raw/ carries the new values.
+# Scorer revision 2026-10-20 (after 20261020T211657Z, scoring only): fires of
+# an authored monitor that reads several objects are attributed to the read
+# object named earliest in the fire detail (the armed object_id is one of
+# many). Changed no S1/S2/S3 cell (58 rows verified).
 # EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
 # run_task_sha256): runs through 20261019T202216Z used the committed task
 # 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit

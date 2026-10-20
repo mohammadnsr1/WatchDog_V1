@@ -18,8 +18,8 @@
 # the nudge. Never save the stage after a nudge.
 
 OBJECT_ID = "hex_red"
-DELTA_XYZ = (-0.05, 0.0, 0.0)    # any direction with open bench around hex_red
-STEP = "pick_line_green"        # fixed before the run
+DELTA_XYZ = (-0.05,0,0)
+STEP = "pick_line_green" 
 
 YAW_DEG = 0.0
 PLACE_BENIGN_CUBE = True            # the pinned Class 1 cube (batch.yaml notes)
@@ -53,4 +53,6 @@ if PLACE_BENIGN_CUBE:
                  label="foreign cube on free bench area",
                  expected_impact="benign",
                  start="at_step=pick_u_orange")
+
+
 

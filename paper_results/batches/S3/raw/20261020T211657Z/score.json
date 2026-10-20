@@ -1,0 +1,246 @@
+{
+  "run_id": "fmb2_s3c2_run08",
+  "task": "fmb_assembly_2",
+  "scenario": "S3",
+  "class": 2,
+  "obs_flag_on_clause_reads": 0,
+  "n_library_arms": 0,
+  "n_authored_arms": 10,
+  "n_authored_clause_arms": 4,
+  "library_to_custom": "0:4",
+  "custom_monitor_share": 1.0,
+  "n_authored_obs_monitors": 5,
+  "n_observation_fires": 5,
+  "scenario_consistency_warning": null,
+  "watchdog_final_verdict": "non_conformant",
+  "watchdog_recovered": false,
+  "findings_during_run": [
+    "pick_u_brown",
+    "place_u_brown"
+  ],
+  "n_run_verdicts": 1,
+  "expected_final_verdict": "non_conformant",
+  "verdict_correct": true,
+  "verdict_TP": 1,
+  "verdict_FN": 0,
+  "verdict_FP": 0,
+  "verdict_TN": 0,
+  "recovered_correct": true,
+  "cadence_compliant": true,
+  "label_consistency_warning": null,
+  "detection": {
+    "true_positives": [
+      "pick_u_brown:u_orange",
+      "place_u_brown:u_brown"
+    ],
+    "false_negatives": [
+      "pick_u_brown:u_brown"
+    ],
+    "false_positives": [],
+    "continuation_findings": [],
+    "clean_steps_no_finding": [
+      "place_approach_u_brown"
+    ],
+    "n_real_violations": 3,
+    "n_findings": 2,
+    "tp_mode": {
+      "place_u_brown:u_brown": "check",
+      "pick_u_brown:u_orange": "fire"
+    }
+  },
+  "fault_TN": 1,
+  "fault_TP_by_fire": 1,
+  "fault_TP_by_check": 1,
+  "detection_recall": 0.6666666666666666,
+  "detection_precision": 1.0,
+  "n_fires": 7,
+  "authored_probe_fires": 0,
+  "monitor_false_alarms": 1,
+  "monitor_false_alarm_detail": [
+    {
+      "step": "place_approach_u_brown",
+      "object": "u_orange",
+      "type": "authored",
+      "origin": "authored",
+      "value": 0.02224655305013608,
+      "threshold": 0.02
+    }
+  ],
+  "authored_detection": {
+    "tp": [
+      "pick_u_brown:u_orange"
+    ],
+    "fp": [
+      {
+        "object": "u_orange",
+        "monitor_id": "stationarity_all_2",
+        "value": 0.02224655305013608,
+        "threshold": 0.02,
+        "time": "2026-10-20T21:20:43.479708+00:00"
+      }
+    ],
+    "fn": [
+      "pick_u_brown:u_brown",
+      "place_u_brown:u_brown"
+    ],
+    "release_fires": [],
+    "tn": null
+  },
+  "authored_TP": 1,
+  "authored_FP": 1,
+  "authored_FN": 2,
+  "authored_TN": null,
+  "authored_release_false_fires": 0,
+  "authored_release_fire_detail": null,
+  "time_to_verdict_s": 24.91,
+  "fire_to_next_verdict_s": [
+    72.9
+  ],
+  "fire_to_next_verdict_median_s": 72.9,
+  "fire_to_next_verdict_p95_s": 72.9,
+  "n_fires_adjudicated": 1,
+  "n_fires_never_adjudicated": 1,
+  "n_fires_missing_trigger_stamp": 0,
+  "per_step_coverage": [
+    {
+      "step": "pick_u_brown",
+      "active": "u_brown",
+      "expected": 11,
+      "covered": 9,
+      "missed": [
+        {
+          "object": "u_brown",
+          "monitor": "effort"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    }
+  ],
+  "stationarity_coverage": "27/27",
+  "grip_coverage": "0/2",
+  "effort_late": [],
+  "arming_coverage": "27/29",
+  "arming_provenance": "n/a",
+  "arming_provenance_fail": [],
+  "authored_param_accuracy": "n/a",
+  "authored_param_fail": [],
+  "agent_chosen_obs_thresholds": 6,
+  "executor_terminal_status": "aborted",
+  "watchdog_recorded_exec_status": "aborted",
+  "independence_gap": false,
+  "step_claims": [
+    {
+      "step": "pick_u_brown",
+      "watchdog": "non_conformant",
+      "executor_claimed": "success"
+    },
+    {
+      "step": "place_u_brown",
+      "watchdog": "non_conformant",
+      "executor_claimed": "failure"
+    }
+  ],
+  "_label_used": "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/20261020T211657Z/gt_fmb2_s3c2.yaml"
+}

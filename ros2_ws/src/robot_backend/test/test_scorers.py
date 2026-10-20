@@ -85,3 +85,24 @@ def test_tp_mode_columns_reach_the_csv_next_to_the_fault_cells():
     assert cols.index("fault_TP_by_check") == cols.index("fault_TP_by_fire") + 1
     flat = wd.flatten_row({"fault_TP_by_fire": 2, "fault_TP_by_check": 1})
     assert (flat["fault_TP_by_fire"], flat["fault_TP_by_check"]) == (2, 1)
+
+
+def test_multi_object_fire_subject_comes_from_its_detail():
+    chans = ["object_pose:base1", "object_pose:u_brown", "object_pose:u_orange",
+             "object_pose:inverted_u_brown"]
+    p = {"origin": "authored", "object_id": "base1", "channels_read": chans,
+         "detail": "u_orange moved from last-known-rest baseline while not held (held=u_brown)"}
+    wd._resolve_multi_object_fire(p)
+    assert p["object_id"] == "u_orange" and p["object_id_armed"] == "base1"
+    q = {"origin": "authored", "object_id": "base1", "channels_read": chans,
+         "detail": "inverted_u_brown displaced"}
+    wd._resolve_multi_object_fire(q)
+    assert q["object_id"] == "inverted_u_brown"          # whole-word: not u_brown
+    single = {"origin": "authored", "object_id": "u_brown",
+              "channels_read": ["object_pose:u_brown"], "detail": "u_orange moved"}
+    wd._resolve_multi_object_fire(single)
+    assert single["object_id"] == "u_brown"              # single-object: untouched
+    lib = {"origin": "library", "object_id": "base1", "channels_read": chans,
+           "detail": "u_orange moved"}
+    wd._resolve_multi_object_fire(lib)
+    assert lib["object_id"] == "base1"                   # library: untouched

@@ -314,8 +314,37 @@ def _coverage_kinds(p, auth_src):
     return sorted(out)
 
 
+def _resolve_multi_object_fire(p):
+    """Subject of a fire from an authored monitor that reads SEVERAL objects
+    (2026-10-20). Such a monitor is armed with one object_id (e.g. base1) but
+    watches every object it reads, so its fire's object_id says nothing about
+    what moved. The subject is the read object named EARLIEST in the fire's
+    detail, matched as a whole word (so u_brown never matches inside
+    inverted_u_brown). No read object named -> object_id left unchanged.
+    Single-object and library monitors are never touched."""
+    import re
+    if _origin(p) != "authored":
+        return
+    objs = {c.split(":", 1)[1] for c in (p.get("channels_read") or [])
+            if str(c).startswith(("object_pose:", "object_pose_window:")) and ":" in str(c)}
+    if len(objs) < 2:
+        return
+    detail = str(p.get("detail") or "")
+    hits = []
+    for o in objs:
+        m = re.search(r"(?<![A-Za-z0-9_])" + re.escape(o) + r"(?![A-Za-z0-9_])", detail)
+        if m:
+            hits.append((m.start(), o))
+    if hits:
+        p.setdefault("object_id_armed", p.get("object_id"))
+        p["object_id"] = min(hits)[1]
+
+
 def score_run(session_dir, label):
     ev, calls = load_run(session_dir)
+    for e in ev.get("watchdog", []):
+        if e.get("event_type") == "monitor_fire" and isinstance(e.get("payload"), dict):
+            _resolve_multi_object_fire(e["payload"])   # in place: every reader sees it
     arms  = [_pl(e) for e in wd_events(ev, "monitor_armed")]
     fires = [_pl(e) for e in wd_events(ev, "monitor_fire")]
     auth_src = _authored_sources_by_sha(session_dir)   # saved authored sources, by sha
