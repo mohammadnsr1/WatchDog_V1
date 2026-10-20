@@ -55,6 +55,70 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: null
     notes: "fmb2_s3c2_run02. Planned as Class 1; NATURAL fault at place_line_green: in-hand slip 0.0221 vs 0.02 during insertion (bag, time-consistent TF) and part left 22.1 mm proud vs 15 mm; reseated via unplanned reseat_* steps (10.9 mm). Reseat hold peaked 0.0156 (under bound). Watchdog caught the mis-seat by its end_step check (TP by check, nothing fired), final conformant + recovered (correct). NO slip and NO effort monitors on any part (grip 0/8); 6 bystander/fixture monitors flagged observation at 0.01 (scored as clause, param accuracy 4/9); placed parts never re-watched (stationarity 111/135). Mix 0:11. Cube in view, not reported -> obs FN."
+  - session_id: 20261019T202216Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3c1_run01. Clean (bag: line_green peak 16.1 mm / u_orange 12.0 mm when inverted_u_yellow was placed, under 0.02, settled back). ONE MONITOR FALSE ALARM: post-place stationarity armed with raw_spec.tolerances.position_m (0.015, the seating tolerance) instead of disturbance_tolerance_m; fired 0.01526 on line_green at place_inverted_u_yellow; watchdog recorded non_conformant (fault FP), then a valid_variation correction naming the wrong field, re-armed at 0.02; final conformant (right), recovered true (wrong for C1). Mix 0:23, coverage 97/116. Cube in view, not reported."
+  - session_id: 20261019T204942Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 103ee800e9b892860b6d3c8f9bbf68cf6065e0f9dc55df946e37c9bc05144002
+    notes: "fmb2_s3c1_run02. Clean (bag: every object <= 2.8 mm; one lift retry in pick_inverted_u_yellow, part never moved). First run on the working-tree task 103ee800 (place_u_brown target_offset x -0.0005, uncommitted). Best conformance monitoring so far: 22 clause, coverage 116/116. Depth scene watch, threshold raised 3% -> 20% after fires on arm motion; cube placed after it reached 15%, missed."
+  - session_id: 20261019T211626Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 103ee800e9b892860b6d3c8f9bbf68cf6065e0f9dc55df946e37c9bc05144002
+    notes: "fmb2_s3c2_run03. Planned as Class 1; NATURAL slip at place_line_green: tcp->line_green 0.0221 vs 0.02 on the first insertion; the resulting mis-seat (22 mm / 25.5 deg) was corrected inside the step (6.4 mm at close) -> mis-seat not a violation (judged at place-step close; watchdog applied this correctly). No slip/effort monitors -> slip missed (FN); final conformant (right), recovered false (wrong). RGB scene watch, 19 fires on motion, 10 looks. Bag was not finalized at labelling (streaming parser); metadata.yaml present by scoring."
+  - session_id: 20261019T221524Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 103ee800e9b892860b6d3c8f9bbf68cf6065e0f9dc55df946e37c9bc05144002
+    notes: "fmb2_s3c1_run03. Clean (bag: slip <= 9.5 mm, objects <= 5.3 mm, effort under every limit). ONE MONITOR FALSE ALARM (mis-arm): un-gated clamp_effort_u_brown never disarmed, fired 104.84 vs 100 0.4 s after inverted_u_yellow's grasp (limit 250); watchdog adjudicated, no finding. Stationarity via a growing multi-object monitor (arm-new-then-disarm-old); scored under the 2026-10-19 #2 overlap-merge revision (rescored into raw, coverage 98/116); waiting parts never watched before their picks."
+  - session_id: 20261019T224027Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 103ee800e9b892860b6d3c8f9bbf68cf6065e0f9dc55df946e37c9bc05144002
+    notes: "fmb2_s3c1_run04. Clean (bag: slip <= 12.4 mm, objects <= 11.6 mm, effort under every limit). Slip + effort monitors for all four parts armed BEFORE the first grasp, gated on the held part (channels_read shows only held_object; coverage credits them from the saved source, grip 8/8). Coverage 115/116 (u_brown unwatched ~50 s after its placement)."
+  - session_id: 20261019T230955Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 103ee800e9b892860b6d3c8f9bbf68cf6065e0f9dc55df946e37c9bc05144002
+    notes: "fmb2_s3c2_run04. Planned as Class 1; NATURAL slip at place_u_brown: 0.0255 vs 0.02 on the 2nd of three placement holds inside the step (5 min); part closed the step seated. NO monitor on any part (no slip, effort or part stationarity) -> FN; final conformant (right), recovered false (wrong). base1 drifted 9.0 mm settled during the retries, unfired -> not labelled (fixture rule); the watchdog's two record_observation calls on base1 describe that real drift (obs FP 1 -- hand-review at Phase 6). Mix 0:6, coverage 72/116."
+  - session_id: 20261020T001013Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c2_run05. Planned as Class 1; NATURAL: line_green slip 0.0221 at place_line_green (caught by fire, TP); inverted_u_yellow's descent knocked seated u_brown (peak 0.0241, caught by fire, TP) and line_green (peak 0.0203 from its pre-step rest, no monitor -> FN). OPERATOR INTERVENTION: line_green moved by hand in its slot during pick_inverted_u_yellow (13.0 mm settled, under bound, not a violation); the watchdog's record_observation reports it (real event, obs FP 1 -> correct to 0 at Phase 6). ONE MONITOR FALSE ALARM: un-gated u_brown effort monitor fired 106.86 during inverted_u_yellow's hold (limit 250). Final conformant + recovered (correct). First run on the committed task f37da9da (9ee44be)."
+  - session_id: 20261020T195950Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c1_run05. Clean (bag: slip <= 19.0 mm -- line_green 0.0190 just before release -- objects <= 10.7 mm, effort under every limit). No conformance fires; coverage 116/116. Depth scene watch, 2 fires on motion, 2 looks; cube missed. Completes S3 Class 1 (5/5)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -111,6 +175,23 @@ known_invalid: []
 # 86/116 -> 98/116); all other S1/S2/S3 cells identical. That run's raw rows
 # were removed and the run rescored on the fixed scorer (operator decision,
 # same day; nothing had been committed), so raw/ carries the new values.
+# EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
+# run_task_sha256): runs through 20261019T202216Z used the committed task
+# 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit
+# 103ee800 (place_u_brown target_offset x -0.0005). From 20261020T001013Z the
+# task is f37da9da, committed in 9ee44be: that edit plus
+# place_approach_inverted_u_yellow standoff y -0.12 -> -0.08 and
+# place_inverted_u_yellow motion scaling 0.1 -> 0.05 with goal tolerances
+# 0.0001 m / 0.001 rad. The WatchDog's task file never changed.
+# REMAINING CLASS 2 PLAN (operator, 2026-10-20, after C2 run05; 5 naturals
+# already count): 2x r2 missed grasp, 1x r4 wrong object (+
+# r4_allow_finger_contact.py), 2x nudge (s1_c2_nudge.py: u_brown (0.03,0,0)
+# at pick_line_green, hex_red (-0.05,0,0) at pick_line_green, as S1). This
+# replaces the design's 2x r4 / 1x r2 / 1x drop / 2x r3 for S3. The r2/r4
+# variants run UNCHANGED from S2 (r2 0d7ec902, r4 188a3acc) for a 1:1 fault
+# comparison with S2 -- so they do NOT carry the 9ee44be base-task edits
+# (u_brown target_offset, inverted_u_yellow approach/motion); nudge runs use
+# the committed task f37da9da.
 # S3 launch: ./run_watchdog.sh s3 2 (authored monitors only: isolation check expects
 # arm_custom_monitor + dry_run_custom_monitor and NO arm_monitor). Labels: copy the
 # S1 gt_ templates and set scenario: S3. Observation scorer: --scenario S3.
