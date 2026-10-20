@@ -119,6 +119,46 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
     notes: "fmb2_s3c1_run05. Clean (bag: slip <= 19.0 mm -- line_green 0.0190 just before release -- objects <= 10.7 mm, effort under every limit). No conformance fires; coverage 116/116. Depth scene watch, 2 fires on motion, 2 looks; cube missed. Completes S3 Class 1 (5/5)."
+  - session_id: 20261020T202146Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 0d7ec90296012e99b12ae3643dce9182c40c8e068797b266e90dbfcf373f0fac
+    notes: "fmb2_s3c2_run06. r2 missed grasp: u_orange dropped out of the fingers during the lift (bag tcp drift 0 -> 260 mm; slip fire 0.0451, TP by fire) and lay toppled ~0.15 m from its placement (place_u_orange TP by check); recovery grasp found no plan; aborted. Nothing else disturbed. Final non_conformant (correct). Mix 0:24, coverage 125/125. 0 looks; cube missed."
+  - session_id: 20261020T203914Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 0d7ec90296012e99b12ae3643dce9182c40c8e068797b266e90dbfcf373f0fac
+    notes: "fmb2_s3c2_run07. r2 missed grasp: u_orange dropped during the lift at 20:44:14.9 (bag) -- no slip monitor on u_orange -> FN; place_u_orange not seated 0.258 m -> TP by check; aborted. slip_u_brown fired 0.0268 5.3 s after u_brown's release as the gripper retreated (bag: no slip while held) -> release-window bucket. Final non_conformant (correct). Coverage 66/67."
+  - session_id: 20261020T211657Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: 188a3acc7159c97fc1e76b1a24861a8e0b9a20e5faf2ecdc4b7a1dde9afaae98
+    notes: "fmb2_s3c2_run08. r4 wrong object (+ r4_allow_finger_contact.py): u_orange lifted and seated into u_brown's slot, u_brown never moved; aborted. One authored stationarity monitor over all ten objects (armed object_id base1), re-armed with a corrected held-part mapping after the diagnosis; its u_orange fire is attributed by the 2026-10-20 multi-object rule -> pick_u_brown:u_orange TP by fire, place_u_brown:u_brown TP by check, pick_u_brown:u_brown FN (verdict text only). Second u_orange fire during place_approach_u_brown = monitor false alarm. NO CUBE (not placed) -> no observation scoring."
+  - session_id: 20261020T213417Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c2_run09. Nudge u_brown (0.03,0,0) at pick_line_green: u_brown ejected ~5.1 m (physics blow-up, as S1 C2 run09), base1 knocked 12.7 mm settled (fired), u_orange 20.4 mm peak (unmonitored, FN). NATURAL u_orange slip at place_approach_u_orange (fired, TP); first-placement mis-seat reseated in-step. TP 3 by fire, FN 1; aborted; final non_conformant (correct). Coverage 87/87. Bag read while the bringup was still running."
+  - session_id: 20261020T220042Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c2_run10. Nudge hex_red (-0.05,0,0) at pick_line_green: hex_red moved 50 mm and stayed (fired, TP). NATURAL: line_green slipped on both insertions (21.7 / 21.8 mm) and was not seated at place_line_green close -- no slip monitor, no step finding -> FN; then knocked over ~91 deg by inverted_u_yellow's placement (fired 0.0206, TP). Aborted; final non_conformant (correct). Stationarity only, coverage 108/116 (grip 0/8). Completes S3 Class 2 (10/10)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
