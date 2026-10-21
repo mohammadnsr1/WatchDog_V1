@@ -122,3 +122,15 @@ def test_unresolved_multi_object_threshold_is_checked_against_the_registry():
     assert not wd._verify_unresolved_multi(only_fixture, reg)                # nothing to check
     resolved = dict(a, threshold_source="raw_spec.tolerances.disturbance_tolerance_m")
     assert not wd._verify_unresolved_multi(resolved, reg)                    # server already judged
+
+
+def test_structural_threshold_uses_the_field_named_in_its_declared_source():
+    reg = {"u_green": {"spec": {"tolerances": {"disturbance_tolerance_m": 0.02}}}}
+    a = {"threshold": 0.02, "threshold_source": "structural", "object_id": "u_green",
+         "threshold_registry_field": None, "channels_read": ["object_pose:u_green"],
+         "params": {"disturbance_tolerance_m": {"value": 0.02, "source":
+             "u_brown.raw_spec.tolerances.disturbance_tolerance_m (applied to bystander u_green)"}}}
+    assert wd._verify_unresolved_multi(a, reg)
+    assert not wd._verify_unresolved_multi(dict(a, threshold=0.005), reg)
+    no_field = dict(a, params={"tol": {"value": 0.02, "source": "agent guess"}})
+    assert not wd._verify_unresolved_multi(no_field, reg)

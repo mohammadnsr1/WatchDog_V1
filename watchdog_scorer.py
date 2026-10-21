@@ -365,13 +365,25 @@ def _verify_unresolved_multi(a, registry_objects=None):
     object). Objects without the field (base1/base2) are skipped. Reference:
     the install-space registry -- what the cell ran on. Operator rule: a
     threshold equal to the registry value counts as correct."""
-    if a.get("threshold_source") != "object_unresolved" or a.get("threshold") is None:
+    src = a.get("threshold_source")
+    if src not in ("object_unresolved", "structural") or a.get("threshold") is None:
         return False
     field = str(a.get("threshold_registry_field") or "")
+    if not field.startswith("raw_spec."):
+        # "structural" (2026-10-20): armed with no threshold_param, so the
+        # server recorded no field. Take the raw_spec field the agent named in
+        # its params' declared source.
+        import re
+        for rec in (a.get("params") or {}).values():
+            m = re.search(r"raw_spec\.[A-Za-z0-9_.]*[A-Za-z0-9_]", str((rec or {}).get("source") or ""))
+            if m:
+                field = m.group(0); break
     if not field.startswith("raw_spec."):
         return False
     objs = {c.split(":", 1)[1] for c in (a.get("channels_read") or [])
             if str(c).startswith(("object_pose:", "object_pose_window:")) and ":" in str(c)}
+    if a.get("object_id") and a.get("object_id") not in (None, "None"):
+        objs = {a["object_id"]}
     reg = registry_objects if registry_objects is not None else _registry_objects()
     vals = []
     for o in objs:

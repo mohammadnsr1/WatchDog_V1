@@ -224,7 +224,10 @@ known_invalid: []
 # several objects has its threshold checked against the install registry at
 # its declared field for every read object that has it; equal -> verified
 # (operator rule). Changed only fmb2_s3c3_run01's authored_param_accuracy
-# (0/1 -> 1/1) over 62 S1/S2/S3 rows.
+# (0/1 -> 1/1) over 62 S1/S2/S3 rows. Extended (#3, after 20261020T234442Z) to
+# threshold_source "structural" (no threshold_param): field taken from the
+# params' declared raw_spec source; changed only fmb2_s3c3_run02 (10/14 ->
+# 14/14) over 64 rows.
 # EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
 # run_task_sha256): runs through 20261019T202216Z used the committed task
 # 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit

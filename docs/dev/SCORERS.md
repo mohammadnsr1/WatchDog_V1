@@ -51,7 +51,11 @@ verdict-detection logic; verified on live data). Added, per run:
   declared field for every object the monitor reads that has that field
   (fixtures skipped): verified iff all equal the threshold. Counts toward
   authored_param_accuracy. Changed only fmb2_s3c3_run01 (0/1 -> 1/1) over 62
-  S1/S2/S3 rows.
+  S1/S2/S3 rows. Extended the same day to threshold_source "structural" (armed
+  without threshold_param, so the server recorded no field): the field is the
+  raw_spec path named in the params' declared source, checked against the
+  monitor's own object (or the objects it reads). Changed only
+  fmb2_s3c3_run02 (10/14 -> 14/14) over 64 rows.
 - **Multi-object authored fires** (2026-10-20): an authored monitor that
   reads several objects is armed with ONE object_id but watches them all, so
   its fire's subject is taken from the fire's detail -- the read object named
