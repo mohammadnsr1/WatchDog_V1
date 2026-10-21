@@ -1,35 +1,43 @@
 # Batch provenance. See paper_results/README.md.
 batch_id: S4
-date_utc: TBD                   # UTC date of the batch's first run
+date_utc: 2026-10-21            # UTC date of the batch's FIRST run (planned; correct it if run 01 lands later)
 purpose: scored                 # smoke | scored — smoke batches never feed paper numbers
 
 # Provenance
-git_sha: TBD                    # git rev-parse HEAD at run time
-registry_sha256: TBD            # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
+git_sha: d2777bf9b2a4b1519401b882da0bf022d0b60231
+                                # git rev-parse HEAD on 2026-10-21 (S4 setup commit), clean tree,
+                                # before the first S4 run: S1-S3 complete. Code must not change
+                                # mid-batch; if it does, record why here before the next run.
+registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+                                # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
                                 # (INSTALL space copy — that is what a live run reads).
                                 # This is the CLEAN registry; Class 4 sessions record
                                 # their corrupted one per session below.
+                                # Verified 2026-10-21 (restored after S3 C4; src == install).
 
-assembly: TBD                   # e.g. fmb_assembly_2
+assembly: fmb_assembly_2        # every S1-S3 run used this set
 scenarios: [S4]
 
 per_role:
   executor:
-    model: TBD
-    effort: TBD
+    model: claude-sonnet-5      # executor.settings.json -- FROZEN for the batch
+    effort: low
   watchdog:
-    model: TBD                  # n/a for S4 sessions (unguarded)
-    effort: TBD
+    model: n/a                  # S4: no watchdog session (unguarded)
+    effort: n/a
+claude_cli_version: 2.1.306 (Claude Code)   # S3 ran 2.1.301-2.1.303; each session records its own
 
-sessions:
-  - session_id: TBD
-    scenario: S1
-    class: TBD
-    injection_scenarios: []     # names passed to inject_scenarios.py; [] if none
-    run_registry_sha256: null   # null = ran on the batch registry_sha256 above.
-                                # Class 4: the corrupted registry's sha256, from the
-                                # session's manifest.json (registry_sha256).
-    notes: ""
+# ---- sessions: append one entry per run ------------------------------------
+# - session_id: 2026....T......Z
+#   scenario: S4
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2
+#   injection_scenarios: [place_object]
+#   run_registry_sha256: null   # null = batch registry_sha256. Class 4: the
+#                               # executor copy's sha (registry_provenance_executor.json)
+#   run_task_sha256: null       # null = the S4 task fmb_assembly_2_s4 (see notes)
+#   notes: ""
+sessions: []
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -65,3 +73,18 @@ known_invalid: []
 # 0.1305,-0.0204,-0.0161), nudge-script cube moved to (0.08,-0.38).
 # S4: no watchdog session; bringup guard_mode:=unguarded; ./run_executor.sh s4 2;
 # score with s4_scorer.py + observation_scorer.py --role executor.
+#
+# ---- S4 setup (2026-10-21, before run 01) ------------------------------------
+# Executor task: agents/tasks/fmb_assembly_2_s4.executor.yaml, re-derived on
+# 2026-10-21 (its steps were stale; now = the committed base task f37da9da's
+# steps + the S4 blocks). Variants: S4 versions derived from the S1-S3 variant
+# files (unchanged from S2/S3, as decided for S3): runs/fmb_assembly_2_s4.rN
+# launched with EXECUTOR_VARIANT=rN ./run_executor.sh s4 2. r3 and Class 4 are
+# registry edits on the plain S4 task (C4: executor copy 008411d8 via
+# EXECUTOR_REGISTRY_PATH). Class 2 composition follows S3's: 2x r2, 1x r4,
+# 2x nudge, the rest natural.
+# SCORING PARITY (open, must be settled BEFORE any S4 run is scored):
+# s4_scorer predates the S3 scoring revisions (reads-based observation
+# exemption, multi-object coverage + overlap merge, multi-object fire
+# attribution, fixture/unresolved/structural param checks, continuation,
+# false alarms on every run, fault_TP_by_fire/check).
