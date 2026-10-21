@@ -51,8 +51,8 @@
     "n_real_violations": 4,
     "n_findings": 3,
     "tp_mode": {
-      "pick_line_green:u_brown": "fire",
       "pick_line_green:base1": "fire",
+      "pick_line_green:u_brown": "fire",
       "place_approach_u_orange:u_orange": "fire"
     }
   },
@@ -313,14 +313,21 @@
       "step": "pick_line_green",
       "active": "line_green",
       "expected": 11,
-      "covered": 11,
-      "missed": [],
+      "covered": 10,
+      "missed": [
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
       "late": [],
       "by_monitor": {
         "stationarity": {
           "expected": 9,
-          "covered": 9,
-          "missed": [],
+          "covered": 8,
+          "missed": [
+            "u_orange"
+          ],
           "late": [],
           "arm_offset_s": null,
           "gate_margin_s": null
@@ -347,14 +354,21 @@
       "step": "place_approach_line_green",
       "active": "line_green",
       "expected": 9,
-      "covered": 9,
-      "missed": [],
+      "covered": 8,
+      "missed": [
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
       "late": [],
       "by_monitor": {
         "stationarity": {
           "expected": 9,
-          "covered": 9,
-          "missed": [],
+          "covered": 8,
+          "missed": [
+            "u_orange"
+          ],
           "late": [],
           "arm_offset_s": null,
           "gate_margin_s": null
@@ -381,14 +395,21 @@
       "step": "place_line_green",
       "active": "line_green",
       "expected": 9,
-      "covered": 9,
-      "missed": [],
+      "covered": 8,
+      "missed": [
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
       "late": [],
       "by_monitor": {
         "stationarity": {
           "expected": 9,
-          "covered": 9,
-          "missed": [],
+          "covered": 8,
+          "missed": [
+            "u_orange"
+          ],
           "late": [],
           "arm_offset_s": null,
           "gate_margin_s": null
@@ -412,10 +433,10 @@
       }
     }
   ],
-  "stationarity_coverage": "81/81",
+  "stationarity_coverage": "78/81",
   "grip_coverage": "6/6",
   "effort_late": [],
-  "arming_coverage": "87/87",
+  "arming_coverage": "84/87",
   "arming_provenance": "n/a",
   "arming_provenance_fail": [],
   "authored_param_accuracy": "20/20",

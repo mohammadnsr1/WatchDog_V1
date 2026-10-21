@@ -1,0 +1,75 @@
+{
+  "run_id": "20261021T222426Z",
+  "role": "executor",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-21T22:34:59.221624+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_74bfb6",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-21T22:35:08.952645+00:00"
+    },
+    {
+      "name": "foreign_74bfb6",
+      "kind": "removal",
+      "t0_iso": "2026-10-21T22:35:14.995256+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 1,
+    "n_observation_monitors_armed": 2,
+    "n_observation_fires": 1,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 1,
+    "first_look_iso": "2026-10-21T22:32:57.360997+00:00",
+    "look_reasons": [
+      "Diagnose apparent fixture/part disturbance detected by monitors during final pla"
+    ]
+  },
+  "strategy": "continuous_pose_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-21T22:32:34.801645+00:00",
+      "monitor_id": "observe_base1",
+      "value": 0.02773052270079857,
+      "threshold": 0.02
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_74bfb6",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-21T22:27:50.724228+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 284.08,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-961390b9",
+      "category": "object_moved",
+      "summary": "A large-scale disturbance occurred during the place_inverted_u_yellow step: u_brown, u_orange, line_green (previously seated) and base1 (fixture) all shifted/ro"
+    }
+  ]
+}

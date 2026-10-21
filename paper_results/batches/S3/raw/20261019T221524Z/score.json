@@ -254,7 +254,7 @@
       "step": "pick_u_orange",
       "active": "u_orange",
       "expected": 11,
-      "covered": 9,
+      "covered": 8,
       "missed": [
         {
           "object": "inverted_u_yellow",
@@ -263,16 +263,21 @@
         {
           "object": "line_green",
           "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
         }
       ],
       "late": [],
       "by_monitor": {
         "stationarity": {
           "expected": 9,
-          "covered": 7,
+          "covered": 6,
           "missed": [
             "inverted_u_yellow",
-            "line_green"
+            "line_green",
+            "u_brown"
           ],
           "late": [],
           "arm_offset_s": null,
@@ -300,7 +305,7 @@
       "step": "place_approach_u_orange",
       "active": "u_orange",
       "expected": 9,
-      "covered": 7,
+      "covered": 6,
       "missed": [
         {
           "object": "inverted_u_yellow",
@@ -309,16 +314,21 @@
         {
           "object": "line_green",
           "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
         }
       ],
       "late": [],
       "by_monitor": {
         "stationarity": {
           "expected": 9,
-          "covered": 7,
+          "covered": 6,
           "missed": [
             "inverted_u_yellow",
-            "line_green"
+            "line_green",
+            "u_brown"
           ],
           "late": [],
           "arm_offset_s": null,
@@ -614,10 +624,10 @@
       }
     }
   ],
-  "stationarity_coverage": "90/108",
+  "stationarity_coverage": "88/108",
   "grip_coverage": "8/8",
   "effort_late": [],
-  "arming_coverage": "98/116",
+  "arming_coverage": "96/116",
   "arming_provenance": "n/a",
   "arming_provenance_fail": [],
   "authored_param_accuracy": "12/12",
