@@ -1134,6 +1134,8 @@ def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
     for a in auth_clause_arms:
         if a.get("threshold") is None:    # no scalar threshold: nothing to verify
             continue
+        if not a.get("params"):            # no parameters at all (e.g. a placeholder arm):
+            continue                       # its reported 0.0 threshold is not a bound
         obj = _obj(a)
         if obj in FIXTURES:
             continue

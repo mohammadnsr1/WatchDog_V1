@@ -44,6 +44,11 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Parameter-less arms are not threshold-scored** (2026-10-21): an authored
+  arm with no params at all (e.g. a "placeholder" arm) reports threshold 0.0
+  because it has no threshold_param; it is skipped in authored_param_accuracy
+  like an arm with no threshold. No S1-S3 or earlier S4 row changes (no such
+  arm existed); first seen in S4 20261021T233649Z.
 - **Held-gated monitors earn no stationarity credit** (2026-10-21): an
   authored monitor whose check returns None unless its part is held (a slip /
   grasp-retention check, detected from the first lines of its saved source by

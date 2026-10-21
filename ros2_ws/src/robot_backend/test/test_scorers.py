@@ -190,3 +190,9 @@ def test_held_gated_monitors_get_no_stationarity_credit():
     kinds = wd._coverage_kinds(p, src)
     assert ("u_brown", "position_static") not in kinds
     assert ("u_brown", "grip_relative_pose") in kinds
+
+
+def test_parameterless_arms_are_skipped_in_param_accuracy():
+    import inspect
+    src = inspect.getsource(wd.score_run)
+    assert 'if not a.get("params"):' in src
