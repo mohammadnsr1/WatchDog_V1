@@ -914,6 +914,10 @@ def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
     # for phase=grasped, so the held-phase monitors (slip/effort) may legitimately be armed during
     # that pause. The arming deadline for those is the GATE RELEASE, not the grasp-confirm event.
     ready_grasp = {}
+    # motion starts (any skill but the grasp itself), for the ungated grip deadline below
+    motion_starts = sorted(ts(e["wall_time_iso"]) for s_ in ("gripper", "motion") for e in ev[s_]
+                           if e.get("event_type") == "skill_start"
+                           and (e.get("payload") or {}).get("skill_name") not in ("grasp_skill",))
     for e in wd_events(ev, "watchdog_ready"):
         p = _pl(e)
         if p.get("scope") == "step" and p.get("step_id"):
@@ -1009,14 +1013,21 @@ def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
 
         # EFFORT + SLIP on the active object, only on its grasp step, grasp-anchored.
         # Deadline = the grasped-phase gate release if the run uses that gate (the executor is
-        # blocked until then, so arming inside the pause misses no exposure); otherwise the
-        # grasp-confirm event itself, since the executor was free to move straight after it.
+        # blocked until then, so arming inside the pause misses no exposure). Ungated runs (S4,
+        # 2026-10-21): the executor's FIRST MOTION after the grasp confirm (e.g. the lift) --
+        # the same moment the gate stood for in S1-S3, "before the executor moved the part".
+        # No motion found: the grasp-confirm event itself (effort) / +GRACE (slip), as before.
         if active and (str(sid).startswith("pick") or str(sid).startswith("repick")):
             gt = grasped_at.get(active)
             if gt is not None:
                 gate = ready_grasp.get(sid)
-                eff_dl  = gate if gate is not None else gt
-                slip_dl = gate if gate is not None else gt + GRACE
+                first_move = next((t for t in motion_starts if t > gt), None)
+                if gate is not None:
+                    eff_dl = slip_dl = gate
+                elif first_move is not None:
+                    eff_dl = slip_dl = first_move
+                else:
+                    eff_dl, slip_dl = gt, gt + GRACE
                 gated_here = gate is not None
                 # A grip monitor that FIRED before the deadline (inside this step)
                 # did its job on a real event -- it covers, as in is_live.

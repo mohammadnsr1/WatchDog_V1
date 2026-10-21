@@ -44,6 +44,13 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Ungated grip deadline** (2026-10-21): effort/slip coverage on a pick is
+  judged at the grasped-gate release when the run has that gate (all S1-S3
+  runs). Without a gate (S4, unguarded) the deadline is now the executor's
+  first motion after the grasp confirm (the lift) -- what the gate stood for:
+  live before the part moved. Was: grasp confirm (effort) / +3 s (slip), which
+  scored S4 monitors armed between grasp and lift as misses. S1-S3 rows
+  unchanged (69); S4 grip 6/8 -> 8/8 and 0/8 -> 8/8 on the first runs.
 - **S4 scored on the S1-S3 path** (2026-10-21): `s4_scorer.py` is now a thin
   wrapper. Its core row is `watchdog_scorer.score_run(session,
   monitor_file="events_executor_monitor.jsonl",

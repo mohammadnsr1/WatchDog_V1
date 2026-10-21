@@ -74,6 +74,11 @@ known_invalid: []
 # S4: no watchdog session; bringup guard_mode:=unguarded; ./run_executor.sh s4 2;
 # score with s4_scorer.py + observation_scorer.py --role executor.
 #
+# Scorer revision 2026-10-21 (after the first S4 runs, scoring only): with no
+# grasped gate (S4 is unguarded), effort/slip coverage on a pick is judged at
+# the executor's first motion after the grasp (the lift) instead of the grasp
+# itself -- the moment the gate stood for in S1-S3. S1-S3 rows unchanged;
+# 20261021T212024Z's raw rows removed and rescored on the fixed scorer.
 # ---- S4 setup (2026-10-21, before run 01) ------------------------------------
 # Executor task: agents/tasks/fmb_assembly_2_s4.executor.yaml, re-derived on
 # 2026-10-21 (its steps were stale; now = the committed base task f37da9da's

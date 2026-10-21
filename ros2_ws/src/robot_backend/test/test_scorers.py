@@ -160,3 +160,12 @@ def test_s4_csv_is_results_csv_plus_s4_columns():
     assert s4.S4_CSV_COLUMNS[:len(shared)] == shared
     assert s4.S4_CSV_COLUMNS[-2:] == ["exclude", "manual_note"]
     assert "executor_self_reported" in s4.S4_CSV_COLUMNS
+
+
+def test_ungated_grip_deadline_is_the_first_motion_after_the_grasp():
+    import inspect
+    src = inspect.getsource(wd.score_run)
+    # gate first, then the first motion after the grasp, then the old fallback
+    assert "first_move = next((t for t in motion_starts if t > gt), None)" in src
+    assert src.index("eff_dl = slip_dl = gate") < src.index("eff_dl = slip_dl = first_move") \
+        < src.index("eff_dl, slip_dl = gt, gt + GRACE")
