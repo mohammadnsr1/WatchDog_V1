@@ -45,3 +45,16 @@ Rules:
   carries it as `run_task_sha256`.
 - Changing a variant after a run makes it a different fault: copy it to a new
   rN instead.
+
+**S4 versions (2026-10-21).** S4 runs need the S4 task text (the WatchDog
+task's requirements and BYSTANDERS blocks appended, since the executor
+monitors itself). `agents/prompts/regenerate_variants.py` derives
+`fmb_assembly_2_s4.<rN>.executor.yaml` for r2, r4, r5, r6 from the S1-S3 variant
+file (steps, step_plan and its own text unchanged) exactly as it derives
+`fmb_assembly_2_s4.executor.yaml` from the base task; `test_prompt_variants`
+pins them. Launch with `EXECUTOR_VARIANT=<rN> ./run_executor.sh s4 2`
+(`executor_2_s4_<rN>.mcp.json`). r3 and Class 4 are registry edits on the plain
+S4 task. Never hand-edit an S4 variant: edit the S1-S3 variant and regenerate.
+Note for r6 in S4: the executor's own task now carries both the hex_red job and
+the requirement that bystanders (hex_red included) never move -- the
+contradiction the WatchDog judged in S1-S3 is, in S4, the executor's to notice.

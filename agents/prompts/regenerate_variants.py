@@ -41,6 +41,16 @@ S4_TASK_SOURCES = {
     "fmb_assembly_2_s4.executor.yaml": (
         "fmb_assembly_2.executor.yaml", "fmb_assembly_2.watchdog.yaml"
     ),
+    # S4 versions of the Class 2/3 task variants (2026-10-21): the S1-S3
+    # variant file (steps, step_plan and its own task text, unchanged) plus the
+    # same two S4 blocks. The WatchDog task file is never varied. r3 is not a
+    # task variant (registry edit), so it has no S4 file.
+    **{
+        f"runs/fmb_assembly_2_s4.{r}.executor.yaml": (
+            f"runs/fmb_assembly_2.{r}.executor.yaml", "fmb_assembly_2.watchdog.yaml"
+        )
+        for r in ("r2", "r4", "r5", "r6")
+    },
 }
 
 
@@ -118,7 +128,9 @@ def main() -> None:
         wd_data = yaml.safe_load((TASKS / wd_name).read_text(encoding="utf-8"))
         expected = pv.s4_task_expected(exec_data, wd_data)
         s4_path = TASKS / s4_name
-        text = s4_path.read_text(encoding="utf-8")
+        # a new S4 file starts from its source executor file, so every key and
+        # comment the derivation does not touch is the source's, byte for byte
+        text = (s4_path if s4_path.exists() else TASKS / exec_name).read_text(encoding="utf-8")
         text = _replace_block_scalar(
             text, "instruction_spec", expected["instruction_spec"]
         )

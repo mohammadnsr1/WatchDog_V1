@@ -160,6 +160,12 @@ S4_TASK_SOURCES = {
     "fmb_assembly_2_s4.executor.yaml": (
         "fmb_assembly_2.executor.yaml", "fmb_assembly_2.watchdog.yaml"
     ),
+    **{
+        f"runs/fmb_assembly_2_s4.{r}.executor.yaml": (
+            f"runs/fmb_assembly_2.{r}.executor.yaml", "fmb_assembly_2.watchdog.yaml"
+        )
+        for r in ("r2", "r4", "r5", "r6")
+    },
 }
 
 
@@ -195,7 +201,14 @@ def test_s4_object_ids_carry_only_the_accurate_acm_statement(s4_name):
     assert "covers every pair among u_" not in s4_objects
     # And the source executor YAML still carries its own paragraph untouched:
     # the removal is an S4-only derivation, never an edit to the S1-S3 files.
-    assert "covers every pair among u_" in source_objects
+    # (Matched by the derivation's own anchor: r6 words the paragraph
+    # differently, since its task also covers hex_red and base2.)
+    source_acm = [line for line in source_objects.splitlines()
+                  if line.startswith(pv.STALE_ACM_PREFIX)]
+    assert len(source_acm) == 1
+    # the source's own opening line is gone (the WatchDog paragraph that
+    # replaces it starts with the same prefix but continues "ALL TEN FMB")
+    assert source_acm[0] not in s4_objects.splitlines()
 
 
 # --- agent configs differ only in system_prompt ---------------------------------

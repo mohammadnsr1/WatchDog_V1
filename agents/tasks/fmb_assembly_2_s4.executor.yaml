@@ -107,9 +107,9 @@ steps:
     action_hint: descend into the placement frame, release, retreat
     target_frame: u_brown_placement
     grasp_width_m: 0.02
-    # target_offset:
-    #   position: {x: 0.02, y: 0.0, z: 0.0}
-    #   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+    target_offset:
+      position: {x: -0.0005, y: 0.0, z: 0.0}
+      orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
       position: {x: 0.025, y: -0.02, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
@@ -219,7 +219,7 @@ steps:
     action_hint: approach the placement frame from above, stopping clear of contact
     target_frame: inverted_u_yellow_placement
     target_offset:
-      position: {x: 0.00, y: -0.1200, z: 0.0}
+      position: {x: 0.00, y: -0.080, z: 0.0}
       orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.04
     grasp_center_offset:
@@ -236,9 +236,12 @@ steps:
       orientation: {x: 0.7071, y: 0.0, z: 0.0, w: -0.7071}
 
     motion:
-      max_velocity_scaling_factor: 0.1
-      max_acceleration_scaling_factor: 0.1
+      max_velocity_scaling_factor: 0.05
+      max_acceleration_scaling_factor: 0.05
       allowed_planning_time: 20.0
+      position_tolerance_m: 0.0001
+      orientation_tolerance_rad: 0.001
+      
 object_ids: |
   u_brown          — FMB U part, graspable. Seated first. Inserted directly.
   inverted_u_yellow — FMB inverted-U part, graspable. Inserted directly.

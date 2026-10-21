@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "EXECUTOR session MCP config for S4: the three command servers PLUS the",
+    "S4 task VARIANT r6 of executor_2_s4.mcp.json -- identical except EXECUTOR_TASK_PATH points at agents/tasks/runs/fmb_assembly_2_s4.r6.executor.yaml (derived by regenerate_variants.py from the S1-S3 variant + the S4 blocks). Launch with EXECUTOR_VARIANT=r6 ./run_executor.sh s4 2. Mapping of variant -> fault: agents/tasks/runs/README.md.",
+    "executor-side monitor host (executor_monitor_mcp_server). No watchdog",
+    "server and no watchdog session: in S4 the executor monitors itself, and",
+    "s4_scorer requires events_watchdog.jsonl to be empty.",
+    "",
+    "EXECUTOR_TASK_PATH names the _s4 task file; EXECUTOR_AGENT_CONFIG points",
+    "get_rendered_task at executor_agent_s4.yaml so the session renders the",
+    "S4 system prompt (executor_system_s4.txt). Both are set on every server",
+    "so whichever one answers get_rendered_task resolves the same rendering.",
+    "",
+    "MUST be launched with --strict-mcp-config, and the cell bringup must run",
+    "guard_mode:=unguarded (s4_scorer refuses anything else). Everything else",
+    "matches executor.mcp.json -- see its _comment and RUN.md."
+  ],
+  "mcpServers": {
+    "robot-backend-motion": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend motion_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/runs/fmb_assembly_2_s4.r6.executor.yaml",
+        "EXECUTOR_AGENT_CONFIG": "/home/mohammad/watchdog/WatchDog_V1/agents/config/executor_agent_s4.yaml"
+      }
+    },
+    "robot-backend-gripper": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend gripper_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/runs/fmb_assembly_2_s4.r6.executor.yaml",
+        "EXECUTOR_AGENT_CONFIG": "/home/mohammad/watchdog/WatchDog_V1/agents/config/executor_agent_s4.yaml"
+      }
+    },
+    "robot-backend-scene": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend scene_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/runs/fmb_assembly_2_s4.r6.executor.yaml",
+        "_gate_comment": "CELL_GATE_TIMEOUT_SEC is the REAL gate budget on the Claude Code path: robot_backend.cell.gate reads it at import and sends it as request_go's per-call timeout_sec, which the orchestrator honours (its own gate_timeout_sec param is only a fallback for timeout_sec <= 0). Raised from the implicit 90 after the 2026-10-02 S2 run measured an 81.6 s gate wait on pick_line_green -- 8.4 s from an aborted run. Claude Code's MCP client tolerates calls well past this (wait_for_event blocks 180 s routinely), so the ordering rule mcp-client-timeout > gate budget holds.",
+        "CELL_GATE_TIMEOUT_SEC": "120.0",
+        "EXECUTOR_AGENT_CONFIG": "/home/mohammad/watchdog/WatchDog_V1/agents/config/executor_agent_s4.yaml"
+      }
+    },
+    "robot-backend-executor-monitor": {
+      "type": "stdio",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash && source ~/watchdog/WatchDog_V1/ros2_ws/install/setup.bash && ros2 run robot_backend executor_monitor_mcp_server"
+      ],
+      "env": {
+        "EXECUTOR_TASK_PATH": "/home/mohammad/watchdog/WatchDog_V1/agents/tasks/runs/fmb_assembly_2_s4.r6.executor.yaml",
+        "EXECUTOR_AGENT_CONFIG": "/home/mohammad/watchdog/WatchDog_V1/agents/config/executor_agent_s4.yaml"
+      }
+    }
+  }
+}

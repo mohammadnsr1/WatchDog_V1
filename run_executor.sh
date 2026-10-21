@@ -23,7 +23,7 @@
 # Class 2 task variants: EXECUTOR_VARIANT=rN ./run_executor.sh 2 launches
 # executor_2_rN.mcp.json, which points EXECUTOR_TASK_PATH at
 # agents/tasks/runs/fmb_assembly_2.rN.executor.yaml (one injected fault each;
-# mapping in agents/tasks/runs/README.md). S1-S3 only. The variant name and
+# mapping in agents/tasks/runs/README.md). S4: EXECUTOR_VARIANT=rN ./run_executor.sh s4 2. The variant name and
 # the task file's sha256 go into agent_config_executor.json.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -43,10 +43,12 @@ esac
 
 variant="${EXECUTOR_VARIANT:-}"
 if [ -n "$variant" ]; then
-  if [ -n "$scenario" ] || [ "$assembly" != "2" ]; then
-    echo "EXECUTOR_VARIANT is for S1-S3 fmb_assembly_2 runs only" >&2; exit 1
+  if [ "$assembly" != "2" ]; then
+    echo "EXECUTOR_VARIANT is for fmb_assembly_2 runs only" >&2; exit 1
   fi
-  config="executor_2_${variant}.mcp.json"
+  # S1-S3: executor_2_<rN>.mcp.json; S4: executor_2_s4_<rN>.mcp.json (the S4
+  # variant task files are derived by agents/prompts/regenerate_variants.py)
+  config="executor_2${scenario:+_s4}_${variant}.mcp.json"
   [ -f "$config" ] || { echo "no such variant config: $config" >&2; exit 1; }
 fi
 
