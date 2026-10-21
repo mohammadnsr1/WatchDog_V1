@@ -1,0 +1,173 @@
+{
+  "run_id": "20261021T003558Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-21T00:57:56.069674+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_12fe75",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-21T03:13:30.820462+00:00"
+    },
+    {
+      "name": "foreign_12fe75",
+      "kind": "removal",
+      "t0_iso": "2026-10-21T03:13:36.501061+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 3,
+    "n_observation_monitors_armed": 21,
+    "n_observation_fires": 19,
+    "n_record_observation_new": 0,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-21T00:38:45.434624+00:00",
+    "look_reasons": [
+      "scene_watch2 observation trigger fired (mean depth change 0.045m) during pick_u_",
+      "scene_watch3 fired (depth change 0.048m) during lift of u_brown; confirming only",
+      "confirming hex_red (bystander) is being lifted by the robot after mon_5d69110ee7"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 18,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-21T00:38:40.634334+00:00",
+      "monitor_id": "scene_watch2",
+      "value": 0.0446208193898201,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:39:04.472830+00:00",
+      "monitor_id": "scene_watch3",
+      "value": 0.048487938940525055,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:39:37.308226+00:00",
+      "monitor_id": "scene_watch4",
+      "value": 0.03629004955291748,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:41:44.576523+00:00",
+      "monitor_id": "scene_watch5",
+      "value": 0.044264957308769226,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:42:43.211821+00:00",
+      "monitor_id": "scene_watch6",
+      "value": 0.04079987853765488,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:45:50.289623+00:00",
+      "monitor_id": "scene_watch7",
+      "value": 0.032626040279865265,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:47:01.526439+00:00",
+      "monitor_id": "scene_watch8",
+      "value": 0.0374445840716362,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:49:15.389849+00:00",
+      "monitor_id": "scene_watch9",
+      "value": 0.030992479994893074,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:49:48.421913+00:00",
+      "monitor_id": "scene_watch10",
+      "value": 0.040738970041275024,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:49:54.837723+00:00",
+      "monitor_id": "scene_watch11",
+      "value": 0.07565096765756607,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:51:42.902761+00:00",
+      "monitor_id": "scene_watch12",
+      "value": 0.10816129297018051,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:52:54.567289+00:00",
+      "monitor_id": "scene_watch14",
+      "value": 0.09115982800722122,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:53:34.785028+00:00",
+      "monitor_id": "scene_watch15",
+      "value": 0.11171138286590576,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:54:13.631842+00:00",
+      "monitor_id": "scene_watch16",
+      "value": 0.11226678639650345,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:55:29.883566+00:00",
+      "monitor_id": "scene_watch17",
+      "value": 0.09044509381055832,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:55:40.513285+00:00",
+      "monitor_id": "scene_watch18",
+      "value": 0.11263252049684525,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:56:15.945398+00:00",
+      "monitor_id": "scene_watch19",
+      "value": 0.1252526193857193,
+      "threshold": 0.09
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:57:43.801966+00:00",
+      "monitor_id": "scene_watch20",
+      "value": 0.09154703468084335,
+      "threshold": 0.09
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_12fe75",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-21T00:51:46.880542+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 24.05,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

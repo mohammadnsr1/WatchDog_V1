@@ -1,0 +1,74 @@
+{
+  "run_id": "20261020T234442Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 5,
+  "run_ended_iso": "2026-10-20T23:56:17.292946+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_88532d",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-20T23:57:13.005374+00:00"
+    },
+    {
+      "name": "foreign_88532d",
+      "kind": "removal",
+      "t0_iso": "2026-10-20T23:57:16.469809+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 1,
+    "n_observation_monitors_armed": 2,
+    "n_observation_fires": 1,
+    "n_record_observation_new": 0,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-20T23:50:14.691565+00:00",
+    "look_reasons": [
+      "scene_watch observation monitor fired (mean pixel diff 18.0 vs 18.0 threshold) r"
+    ]
+  },
+  "strategy": "continuous_rgb_monitor",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_0c4d9b",
+      "kind": "removal",
+      "t0_iso": "2026-10-20T23:45:01.293497+00:00",
+      "detectable": true,
+      "label": null,
+      "expected_impact": null,
+      "fire_latency_s": 290.36,
+      "detected": false,
+      "counted": false,
+      "note": "removal of an object the agent never acknowledged \u2014 reported, not counted as a miss"
+    },
+    {
+      "name": "foreign_88532d",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-20T23:49:43.126466+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 8.53,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

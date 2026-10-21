@@ -1,0 +1,161 @@
+{
+  "run_id": "20261020T235723Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-21T00:06:59.507324+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_4a0c34",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-21T00:08:42.939153+00:00"
+    },
+    {
+      "name": "foreign_4a0c34",
+      "kind": "removal",
+      "t0_iso": "2026-10-21T00:08:46.129368+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 3,
+    "n_observation_monitors_armed": 1,
+    "n_observation_fires": 16,
+    "n_record_observation_new": 0,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-20T23:59:16.340911+00:00",
+    "look_reasons": [
+      "scene_watch observation fire during pick_u_brown approach; confirming arm motion",
+      "transport_and_approach_place_u_orange named u_brown in object_ids; confirming u_",
+      "final seating approach for inverted_u_yellow; confirming no disturbance to previ"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 16,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-20T23:59:14.288280+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.0603846050798893,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-20T23:59:40.720014+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.056464266031980515,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:00:17.543422+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.08414708822965622,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:01:43.182528+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.042706333100795746,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:02:06.011398+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.04485892131924629,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:02:26.432638+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.09414420276880264,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:02:50.661883+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.03412850201129913,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:02:59.877968+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.04078638181090355,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:03:38.708898+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.04156995937228203,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:04:01.730541+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.06678920239210129,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:04:23.149522+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.03954283148050308,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:05:26.789022+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.07607686519622803,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:05:50.224492+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.04931068420410156,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:06:10.639061+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.06497376412153244,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:06:30.860754+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.03770244121551514,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-21T00:06:52.086016+00:00",
+      "monitor_id": "scene_watch",
+      "value": 0.07640882581472397,
+      "threshold": 0.03
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_4a0c34",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-21T00:00:55.937703+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 47.24,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

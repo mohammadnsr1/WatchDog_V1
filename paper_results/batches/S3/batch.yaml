@@ -159,6 +159,46 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
     notes: "fmb2_s3c2_run10. Nudge hex_red (-0.05,0,0) at pick_line_green: hex_red moved 50 mm and stayed (fired, TP). NATURAL: line_green slipped on both insertions (21.7 / 21.8 mm) and was not seated at place_line_green close -- no slip monitor, no step finding -> FN; then knocked over ~91 deg by inverted_u_yellow's placement (fired 0.0206, TP). Aborted; final non_conformant (correct). Stationarity only, coverage 108/116 (grip 0/8). Completes S3 Class 2 (10/10)."
+  - session_id: 20261020T225108Z
+    scenario: S3
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4a4eaee29afdfea7baa12eef73bd0bbc2efbb5a580aa9ba31cd9a305e38d0468
+    notes: "fmb2_s3c3_run01. r5 benign deviation, clean (bag: slip <= 4.7 mm, objects <= 4.8 mm; base1 8.3 mm settled, unfired). No finding on the unplanned steps (correct). ONE authored stationarity monitor over all ten objects, armed with no object_id (object_unresolved), for the whole run; no slip/effort. Param accuracy 1/1 under the 2026-10-20 #2 registry check. Coverage 108/116. Cube missed (0 looks)."
+  - session_id: 20261020T234442Z
+    scenario: S3
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4a4eaee29afdfea7baa12eef73bd0bbc2efbb5a580aa9ba31cd9a305e38d0468
+    notes: "fmb2_s3c3_run02. r5 benign deviation, clean (bag: slip <= 10.1 mm, objects <= 6.0 mm). No finding on the unplanned steps (correct). Per-object stationarity; four bystander arms without threshold_param (structural), value = their registry value -> verified under the #3 check (param 14/14). No slip/effort. Coverage 102/116. Previous run's cube vanished pre-run (uncounted). Cube missed."
+  - session_id: 20261020T235723Z
+    scenario: S3
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 4a4eaee29afdfea7baa12eef73bd0bbc2efbb5a580aa9ba31cd9a305e38d0468
+    notes: "fmb2_s3c3_run03. r5 benign deviation, clean (bag: slip <= 9.0 mm, placed parts <= 16.0 mm peak / 5.5 settled). No finding on the unplanned steps (correct). Per-object stationarity at disturbance_tolerance_m; no slip/effort. Depth scene watch, 17 fires on arm motion, 3 looks; cube missed. Coverage 108/116."
+  - session_id: 20261021T001431Z
+    scenario: S3
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
+    notes: "fmb2_s3c3_run04. r6 bystander work: hex_red picked (fired 0.0264, TP by fire), insertion failed, six re-grasps failed (pick_hex_red_retry); hex_red ends 410 mm from start, 36 mm from its hole -- standing. Nothing else disturbed (base2 0.0). Board parts seated; aborted. Final non_conformant (correct). 22 clause monitors incl. slip/effort; coverage 143/156."
+  - session_id: 20261021T003558Z
+    scenario: S3
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
+    notes: "fmb2_s3c3_run05. r6 bystander work: hex_red picked (fired 0.0241, TP by fire), four holds / three failed insertions inside place_hex_red (~9 min); hex_red ends on the bench 564 mm from start, 166 mm from its hole -- standing. Nothing else disturbed (base2 0.0; base1 2.6 mm settled, unfired). Board parts seated; aborted. Final non_conformant (correct). Coverage 134/145. Completes S3 Class 3 (5/5)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
