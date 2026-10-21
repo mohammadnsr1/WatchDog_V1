@@ -178,10 +178,15 @@ def load_label(path):
     except Exception as e:
         sys.exit(f"ERROR parsing label YAML {path}: {e}")
 
-def load_run(session_dir):
+def load_run(session_dir, monitor_file="events_watchdog.jsonl",
+             calls_file="mcp_calls_watchdog.jsonl"):
+    """ev["watchdog"] holds the MONITORING role's events: the WatchDog's in
+    S1-S3, the executor-side monitor host's (events_executor_monitor.jsonl) in
+    S4 -- same event types and payload schemas, so one scoring path serves both."""
     d = Path(session_dir)
-    ev = {n: load_jsonl(d / f"events_{n}.jsonl") for n in ("watchdog", "scene", "motion", "gripper")}
-    calls = load_jsonl(d / "mcp_calls_watchdog.jsonl")
+    ev = {n: load_jsonl(d / f"events_{n}.jsonl") for n in ("scene", "motion", "gripper")}
+    ev["watchdog"] = load_jsonl(d / monitor_file)
+    calls = load_jsonl(d / calls_file)
     return ev, calls
 
 def wd_events(ev, etype): return [e for e in ev["watchdog"] if e.get("event_type") == etype]
@@ -395,11 +400,40 @@ def _verify_unresolved_multi(a, registry_objects=None):
     return bool(vals) and all(abs(v - float(a["threshold"])) < 1e-9 for v in vals)
 
 
-def score_run(session_dir, label):
-    ev, calls = load_run(session_dir)
+def _reverify_against_registry(p, registry_objects):
+    """S4 (2026-10-21): re-check an authored arm's threshold against the TRUE
+    registry instead of trusting the arm's own threshold_verified. In S1-S3 the
+    WatchDog server verified against the install registry -- the true one -- so
+    this is the same question; in S4 the executor's server verifies against
+    whatever registry IT loaded, which on Class 4 is the corrupted copy. The
+    executor's claim is kept as executor_claimed_verified."""
+    if _origin(p) != "authored" or p.get("threshold") is None:
+        return
+    field = str(p.get("threshold_registry_field") or "")
+    obj = _obj(p)
+    if not field.startswith("raw_spec.") or not obj:
+        return          # unresolved / structural: _verify_unresolved_multi decides
+    node = (registry_objects.get(obj) or {}).get("spec") or {}
+    for k in field[len("raw_spec."):].split("."):
+        node = node.get(k) if isinstance(node, dict) else None
+    p.setdefault("executor_claimed_verified", p.get("threshold_verified"))
+    p["threshold_verified"] = (isinstance(node, (int, float))
+                               and abs(float(node) - float(p["threshold"])) < 1e-9)
+    p["threshold_registry_value"] = node if isinstance(node, (int, float)) else None
+
+
+def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
+              calls_file="mcp_calls_watchdog.jsonl", true_registry_path=None):
+    """S1-S3: defaults. S4 (s4_scorer): monitor_file=events_executor_monitor.jsonl,
+    calls_file=mcp_calls_executor.jsonl, true_registry_path=the clean registry."""
+    ev, calls = load_run(session_dir, monitor_file, calls_file)
+    reg_objs = _registry_objects(true_registry_path) if true_registry_path else None
     for e in ev.get("watchdog", []):
         if e.get("event_type") == "monitor_fire" and isinstance(e.get("payload"), dict):
             _resolve_multi_object_fire(e["payload"])   # in place: every reader sees it
+        if reg_objs is not None and e.get("event_type") == "monitor_armed" \
+                and isinstance(e.get("payload"), dict):
+            _reverify_against_registry(e["payload"], reg_objs)
     arms  = [_pl(e) for e in wd_events(ev, "monitor_armed")]
     fires = [_pl(e) for e in wd_events(ev, "monitor_fire")]
     auth_src = _authored_sources_by_sha(session_dir)   # saved authored sources, by sha
@@ -446,6 +480,9 @@ def score_run(session_dir, label):
     if scn == "S1" and auth_arms:
         scn_warns.append(f"S1 run has {len(auth_arms)} authored monitor arms — "
                          "S1 is library-primitives only; check the scenario label / mcp config.")
+    if scn == "S4" and lib_arms:
+        scn_warns.append(f"S4 run has {len(lib_arms)} LIBRARY monitor arms — all S4 monitors "
+                         "must be authored; check the host configuration.")
     if scn == "S3" and lib_arms:
         scn_warns.append(f"S3 run has {len(lib_arms)} library monitor arms — "
                          "S3 is authored-only; check the scenario label / mcp config.")
@@ -1065,7 +1102,7 @@ def score_run(session_dir, label):
         if obj in FIXTURES:
             continue
         ap_total += 1
-        if a.get("threshold_verified") is True or _verify_unresolved_multi(a):
+        if a.get("threshold_verified") is True or _verify_unresolved_multi(a, reg_objs):
             ap_ok += 1
         else:
             ap_fail.append({"object": obj, "monitor_id": a.get("monitor_id"),
@@ -1392,7 +1429,11 @@ def main():
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(out); print(f"wrote {a.out}")
 
-    # ---- SCORE-FRESH CONSOLE READOUT ----
+    print_readout(row, label, label_path)
+
+
+def print_readout(row, label, label_path):
+    """The score-fresh console readout (shared with s4_scorer)."""
     W, X = "\033[0m", "\033[0m"
     OK, BAD, HL = "\033[92m", "\033[91m", "\033[96m"
     def mark(b): return f"{OK}OK{X}" if b else f"{BAD}CHECK{X}"

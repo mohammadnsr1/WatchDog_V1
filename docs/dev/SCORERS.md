@@ -44,6 +44,20 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **S4 scored on the S1-S3 path** (2026-10-21): `s4_scorer.py` is now a thin
+  wrapper. Its core row is `watchdog_scorer.score_run(session,
+  monitor_file="events_executor_monitor.jsonl",
+  calls_file="mcp_calls_executor.jsonl", true_registry_path=<--registry>)`,
+  so every S1-S3 rule above applies to S4 unchanged. The one S4 difference:
+  authored thresholds are re-verified against the true registry
+  (`_reverify_against_registry`) instead of trusting the executor's own
+  threshold_verified (Class 4: the executor verifies against its corrupted
+  copy). S4-only columns (executor_self_reported, corrupted_binds,
+  serialization metrics, registry provenance) are appended after
+  results.csv's columns. Verified: S1-S3 rows cell-identical (69 rows); S4
+  stand-ins of all 23 S3 sessions score identically through s4_scorer (1403
+  cells); an executor-verified corrupted bind scores as a parameter failure
+  and a corrupted_bind.
 - **Unresolved multi-object thresholds** (2026-10-20, operator rule "equal to
   the registry counts as correct"): an authored clause monitor armed with no
   object_id (threshold_source object_unresolved) cannot be verified by the

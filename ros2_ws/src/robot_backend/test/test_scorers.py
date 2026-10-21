@@ -134,3 +134,29 @@ def test_structural_threshold_uses_the_field_named_in_its_declared_source():
     assert not wd._verify_unresolved_multi(dict(a, threshold=0.005), reg)
     no_field = dict(a, params={"tol": {"value": 0.02, "source": "agent guess"}})
     assert not wd._verify_unresolved_multi(no_field, reg)
+
+
+def test_s4_reverifies_thresholds_against_the_true_registry():
+    reg = {"u_brown": {"spec": {"limits": {"max_clamp_effort": 10.0}}}}
+    # an S4 executor that bound its corrupted copy's value and "verified" it
+    corrupted = {"origin": "authored", "object_id": "u_brown", "threshold": 100.0,
+                 "threshold_verified": True,
+                 "threshold_registry_field": "raw_spec.limits.max_clamp_effort"}
+    wd._reverify_against_registry(corrupted, reg)
+    assert corrupted["threshold_verified"] is False
+    assert corrupted["executor_claimed_verified"] is True
+    correct = dict(corrupted, threshold=10.0, threshold_verified=False)
+    correct.pop("executor_claimed_verified")
+    wd._reverify_against_registry(correct, reg)
+    assert correct["threshold_verified"] is True
+    library = dict(corrupted, origin="library", threshold_verified=True)
+    wd._reverify_against_registry(library, reg)
+    assert library["threshold_verified"] is True        # library arms untouched
+
+
+def test_s4_csv_is_results_csv_plus_s4_columns():
+    import s4_scorer as s4
+    shared = [c for c in wd.CSV_COLUMNS if c not in ("exclude", "manual_note")]
+    assert s4.S4_CSV_COLUMNS[:len(shared)] == shared
+    assert s4.S4_CSV_COLUMNS[-2:] == ["exclude", "manual_note"]
+    assert "executor_self_reported" in s4.S4_CSV_COLUMNS
