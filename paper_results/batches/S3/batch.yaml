@@ -268,6 +268,15 @@ known_invalid: []
 # threshold_source "structural" (no threshold_param): field taken from the
 # params' declared raw_spec source; changed only fmb2_s3c3_run02 (10/14 ->
 # 14/14) over 64 rows.
+# REGISTRY for Class 4 x3 (set 2026-10-21, after Class 3): source registry
+# u_brown max_clamp_effort 100 -> 10, rebuilt; install sha
+# 32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac (identical to
+# S1/S2's C4 registry). Executor copy unchanged since S1:
+# ~/.watchdog/registry/model_registry.yaml, sha
+# 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116 (u_brown at 100,
+# pinned asset_root; otherwise identical to the clean 92969cc1). C4 session
+# entries: run_registry_sha256 = 008411d8... Committed task f37da9da + cube.
+# Restore to 92969cc1 (and rebuild) after the last C4 run.
 # EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
 # run_task_sha256): runs through 20261019T202216Z used the committed task
 # 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit
