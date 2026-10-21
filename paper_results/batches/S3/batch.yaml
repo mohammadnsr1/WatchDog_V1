@@ -303,6 +303,12 @@ known_invalid: []
 # Restore to 92969cc1 (and rebuild) after the last C4 run.
 # REGISTRY RESTORED (source, 2026-10-21) after the last C4 run: u_brown
 # max_clamp_effort back to 100 -> sha 92969cc1, rebuilt.
+# Scorer revision 2026-10-21 (during S4 setup, scoring only): authored monitors
+# that return None unless their part is held (slip checks) no longer earn
+# stationarity coverage. Changed fmb2_s3c1_run03 (stationarity 90 -> 88/108,
+# arming 98 -> 96/116) and fmb2_s3c2_run09 (81 -> 78/81, 87 -> 84/87); each
+# flipped cell confirmed from the bag (operator-requested); both raw rows
+# removed and rescored. No other S1-S3 cell changed.
 # EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
 # run_task_sha256): runs through 20261019T202216Z used the committed task
 # 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit

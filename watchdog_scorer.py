@@ -74,7 +74,7 @@ FIELD PATHS (confirmed against post-change fmb_assembly_2 run):
   phase (scene/motion/gripper).payload: phase=='grasped', step_id  (grasp-confirmed time)
 """
 from __future__ import annotations
-import json, sys, argparse
+import json, re, sys, argparse
 from datetime import datetime, timezone
 from pathlib import Path
 from collections import defaultdict
@@ -280,6 +280,18 @@ def _authored_sources_by_sha(session_dir):
     return out
 
 
+_HELD_GATE = re.compile(
+    r"(held_object\(\)\s*!=\s*\S+|\bheld\s*!=\s*\S+|\S+\s*!=\s*(ctx\.)?held(_object\(\))?\b)"
+    r"[^\n]*:?\s*\n?\s*return None")
+
+
+def _held_gated(text):
+    """True when the check returns None unless a given part is held -- the
+    gate is the first thing it does (within its first few statements)."""
+    head = "\n".join(text.splitlines()[:6])
+    return bool(_HELD_GATE.search(head))
+
+
 def _coverage_kinds(p, auth_src):
     """[(object, kind)] this arm covers. Library: its family on its object.
     Authored (clause purpose): from channels_read / saved source."""
@@ -299,9 +311,14 @@ def _coverage_kinds(p, auth_src):
     out = set()
     pose_objs = {c.split(":", 1)[1] for c in chans
                  if c.startswith(("object_pose:", "object_pose_window:")) and ":" in c}
-    out |= {(o, "position_static") for o in pose_objs}
-    if obj and not pose_objs and any(k in text for k in _KIND_READS["position_static"]):
-        out.add((obj, "position_static"))
+    # A monitor that does nothing unless its part is HELD (a slip / grasp-
+    # retention check) reads the part's pose but cannot watch it at rest, so it
+    # earns no stationarity credit (2026-10-21). It still counts for grip.
+    held_gated = _held_gated(text)
+    if not held_gated:
+        out |= {(o, "position_static") for o in pose_objs}
+        if obj and not pose_objs and any(k in text for k in _KIND_READS["position_static"]):
+            out.add((obj, "position_static"))
     reads_joint = any(c.startswith(("joint:", "joint_window:")) for c in chans) or \
         any(k in text for k in _KIND_READS["clamp_effort"])
     if reads_joint and obj:
@@ -947,6 +964,14 @@ def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
             # watchdog's last event — disarming after run_ended (wrap-up
             # before the run verdict) is cleanup, not a coverage gap.
             w1 = min(end_all, run_end_t) if run_end_t else end_all
+            # ...and no later than that step's own end_step (2026-10-21): the
+            # time between the last end_step and run_ended is wind-down, not
+            # exposure (S4: the executor's own final checks, verdicts and
+            # disarm_all happen there, before it calls end_run).
+            last_end = next((ts(_pl(e)["wall_time_iso"]) for e in exec_events(ev, "end_step")
+                             if _pl(e).get("step_id") == sid and ts(_pl(e)["wall_time_iso"]) >= w0), None)
+            if last_end is not None:
+                w1 = min(w1, last_end)
         if w1 < w0: w1 = ts(t) if i+1 >= len(bs) else ts(bs[i+1][0])  # safety
         steps_tl.append((sid, active, w0, w1))
 

@@ -79,6 +79,12 @@ known_invalid: []
 # the executor's first motion after the grasp (the lift) instead of the grasp
 # itself -- the moment the gate stood for in S1-S3. S1-S3 rows unchanged;
 # 20261021T212024Z's raw rows removed and rescored on the fixed scorer.
+# Scorer revisions 2026-10-21 #2/#3 (scoring only): the last step's coverage
+# window ends at its own end_step (the executor's wind-down -- final checks,
+# verdicts, disarm_all before end_run -- is not exposure); held-gated slip
+# monitors earn no stationarity credit. S1-S3: only the two S3 rows noted in
+# S3's batch.yaml change. All S4 rows in raw/ removed and rescored; all 151
+# S4 coverage misses independently confirmed from the raw monitor events.
 # ---- S4 setup (2026-10-21, before run 01) ------------------------------------
 # Executor task: agents/tasks/fmb_assembly_2_s4.executor.yaml, re-derived on
 # 2026-10-21 (its steps were stale; now = the committed base task f37da9da's

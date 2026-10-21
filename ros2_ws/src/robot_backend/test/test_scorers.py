@@ -169,3 +169,24 @@ def test_ungated_grip_deadline_is_the_first_motion_after_the_grasp():
     assert "first_move = next((t for t in motion_starts if t > gt), None)" in src
     assert src.index("eff_dl = slip_dl = gate") < src.index("eff_dl = slip_dl = first_move") \
         < src.index("eff_dl, slip_dl = gt, gt + GRACE")
+
+
+def test_last_step_window_ends_at_its_own_end_step():
+    import inspect
+    assert "w1 = min(w1, last_end)" in inspect.getsource(wd.score_run)
+
+
+def test_held_gated_monitors_get_no_stationarity_credit():
+    gated = ('def check(ctx):\n    held = ctx.held_object()\n    if held != "u_brown":\n'
+             '        return None\n    obj = ctx.object_pose("u_brown")\n    tcp = ctx.frame_pose("tcp")\n')
+    skip_held = ('def check(ctx):\n    held = ctx.held_object()\n    for oid in ["u_brown", "u_orange"]:\n'
+                 '        if oid == held:\n            continue\n        p = ctx.object_pose(oid)\n')
+    assert wd._held_gated(gated) and not wd._held_gated(skip_held)
+    import hashlib
+    src = {hashlib.sha256(gated.encode()).hexdigest(): gated}
+    p = {"origin": "authored", "purpose": "clause", "object_id": "u_brown",
+         "code_sha256": hashlib.sha256(gated.encode()).hexdigest(),
+         "channels_read": ["frame_pose:tcp", "held_object", "object_pose:u_brown"]}
+    kinds = wd._coverage_kinds(p, src)
+    assert ("u_brown", "position_static") not in kinds
+    assert ("u_brown", "grip_relative_pose") in kinds

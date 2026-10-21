@@ -44,6 +44,21 @@ verdict-detection logic; verified on live data). Added, per run:
   monitors, run 20261015T203118Z, read rgb). The S3 coverage blanking is
   gone with it: authored monitors are credited by what they read since
   2026-10-14, so the duty grid applies in every scenario.
+- **Held-gated monitors earn no stationarity credit** (2026-10-21): an
+  authored monitor whose check returns None unless its part is held (a slip /
+  grasp-retention check, detected from the first lines of its saved source by
+  `_held_gated`) reads the part's pose but cannot watch it at rest, so it no
+  longer counts toward position_static coverage (it still counts for grip).
+  Changed only S3 fmb2_s3c1_run03 (stationarity 90 -> 88, arming 98 -> 96)
+  and fmb2_s3c2_run09 (81 -> 78, 87 -> 84); every flipped cell confirmed from
+  the run's bag (/watchdog/events + TF): the only monitor credited was a
+  never-disarmed held-gated slip monitor. run09's flipped u_orange cell is the
+  nudge knock its label already records as unmonitored (FN). S4 unaffected.
+- **Last step ends at its end_step** (2026-10-21): the final step's coverage
+  window closes at min(run_ended, that step's end_step). The gap between the
+  last end_step and run_ended is wind-down (S4: the executor's final checks,
+  verdicts and disarm_all, all before end_run), not exposure. S1-S3 rows
+  unchanged (69); S4 coverage +5..+6 on four of the first five runs.
 - **Ungated grip deadline** (2026-10-21): effort/slip coverage on a pick is
   judged at the grasped-gate release when the run has that gate (all S1-S3
   runs). Without a gate (S4, unguarded) the deadline is now the executor's
