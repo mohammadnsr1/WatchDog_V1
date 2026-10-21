@@ -199,6 +199,30 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 517a3c578229194fd4902ad85b19774d7fe02f3a871deca24a5d93abe139c0e7
     notes: "fmb2_s3c3_run05. r6 bystander work: hex_red picked (fired 0.0241, TP by fire), four holds / three failed insertions inside place_hex_red (~9 min); hex_red ends on the bench 564 mm from start, 166 mm from its hole -- standing. Nothing else disturbed (base2 0.0; base1 2.6 mm settled, unfired). Board parts seated; aborted. Final non_conformant (correct). Coverage 134/145. Completes S3 Class 3 (5/5)."
+  - session_id: 20261021T195938Z
+    scenario: S3
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c4_run01. Over-clamp at pick_u_brown (peak 60.9 vs 10) caught by fire, plus NATURAL faults: line_green effort 181.2/170 + slip + 30 mm mis-seat at place_line_green; re-grasp (recover_pick_line_green) knocked u_orange 32 mm, base1 24.7 mm and u_brown (all fired); re-seat slip 22.5 mm (fired, no verdict -> FN); inverted_u_yellow's placement knocked u_brown (fired) and pushed line_green to 20.6 mm off its placement (standing; measured in an object-less verdict -> scored FP on inverted_u_yellow + FN on line_green; hand-correct at Phase 6). Final non_conformant + not recovered (correct). TP 6 / FN 2 / FP 1."
+  - session_id: 20261021T202922Z
+    scenario: S3
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c4_run02. Over-clamp at pick_u_brown (peak 60.9 vs 10) caught by fire, recorded non_conformant at the step; nothing else (bag). Final run verdict conformant + recovered -- WRONG on both (the S2 C4 pattern)."
+  - session_id: 20261021T204256Z
+    scenario: S3
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+    notes: "fmb2_s3c4_run03. Over-clamp at pick_u_brown (peak 92.8 vs 10) caught by fire, restated at place_u_brown (continuation); nothing else (bag). Final non_conformant, not recovered, citing the over-effort -- CORRECT. S3 C4 final verdict right 2/3 (S2: 0/3). Completes S3 Class 4 (3/3) and S3."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -277,6 +301,8 @@ known_invalid: []
 # pinned asset_root; otherwise identical to the clean 92969cc1). C4 session
 # entries: run_registry_sha256 = 008411d8... Committed task f37da9da + cube.
 # Restore to 92969cc1 (and rebuild) after the last C4 run.
+# REGISTRY RESTORED (source, 2026-10-21) after the last C4 run: u_brown
+# max_clamp_effort back to 100 -> sha 92969cc1, rebuilt.
 # EXECUTOR TASK CHANGED MID-BATCH (operator, 2026-10-19; recorded per run as
 # run_task_sha256): runs through 20261019T202216Z used the committed task
 # 4166cca0. 20261019T204942Z-230955Z used an UNCOMMITTED working-tree edit
