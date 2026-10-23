@@ -1,0 +1,16 @@
+
+==============================================================================
+  PER-SCENARIO SUMMARY   (23 runs from 1 csv)
+==============================================================================
+
+  S1  (23 runs)
+    verdict_correct        : 22/23
+    verdict TP/FP/TN/FN    : 13/0/9/1   (run-level verdict call)
+    fault recall/prec      : avg 0.941 / 0.936
+    fault TP/FP/TN/FN      : 33/4/222/3   (step-level pairing)
+    library coverage       : 2296/2478   provenance: 333/383
+    monitor false alarms   : 4 (over 23 runs)
+    fire->next-verdict     : median-of-medians 34.24s   p95s seen: [34.42, 38.43, 64.4, 47.53, 45.1, 15.29, 11.43, 335.91, 60.59, 72.17, 22.76, 20.18, 748.13, 19.22, 16.73]   adjudicated 35 / never 2
+    time_to_verdict        : avg 71.466s
+
+==============================================================================
