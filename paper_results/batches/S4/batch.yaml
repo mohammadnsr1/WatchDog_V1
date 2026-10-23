@@ -158,6 +158,46 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: 3c10efa57835b121fbdd8409619084f9c03a177f221978fe9a5258ccaa3c88eb
     notes: "fmb2_s4c2_run10. r4 (S4 variant 3c10efa5, + ACM companion): u_orange carried and seated into u_brown's slot; the executor detected it after place_u_brown, removed u_orange, seated u_brown and completed -- first r4 to recover in any scenario. base1 3.9 mm (fired) at place_u_brown + 12.8 mm unfired during the extraction, 19.6 mm standing -> expected non_conformant / not recovered (as run05); executor matched. Completes S4 Class 2 (10/10)."
+  - session_id: 20261023T015428Z
+    scenario: S4
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 993e893133fdbf54cf56db3c09563f3f991fc9fe63ba90cf1110ba5f28598c46
+    notes: "fmb2_s4c3_run01. r5 + NATURAL: base1 13.0 mm during u_brown's first (mis-seated, reseated in-step) placement, fired -> standing violation (TP by fire); line_green slip 21.8 mm, caught by the end check (TP by check). No finding on the unplanned steps. Final non_conformant (correct)."
+  - session_id: 20261023T021542Z
+    scenario: S4
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 993e893133fdbf54cf56db3c09563f3f991fc9fe63ba90cf1110ba5f28598c46
+    notes: "fmb2_s4c3_run02. r5, clean; no finding on the unplanned steps; final conformant (correct)."
+  - session_id: 20261023T022457Z
+    scenario: S4
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 993e893133fdbf54cf56db3c09563f3f991fc9fe63ba90cf1110ba5f28598c46
+    notes: "fmb2_s4c3_run03. r5, clean: u_orange's first insertion caught on the slot edge and was reseated in-step (hold slip 16.0 mm, under bound). The executor's non_conformant on that intermediate mis-seat scores FP, and its 'recovered' scores wrong; final conformant (correct)."
+  - session_id: 20261023T204228Z
+    scenario: S4
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: c11dd92a8437762d67e5409eb0faaa7d89c2315779d034b36d6999c518059a16
+    notes: "fmb2_s4c3_run04. r6: hex_red moved into its hole, standing; ONLY 3 monitors all run (no hex_red, part, base or slip/effort monitor) -> hex_red FN; line_green two slips (22.0/21.9 mm) caught only as a mis-seat by check (TP by check). The executor did the hex_red job without flagging its own bystander requirement and closed conformant + recovered -- WRONG on both."
+  - session_id: 20261023T210814Z
+    scenario: S4
+    class: 3
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: c11dd92a8437762d67e5409eb0faaa7d89c2315779d034b36d6999c518059a16
+    notes: "fmb2_s4c3_run05. r6: hex_red flung out of the workspace during its lift (2.06 m, physics blow-up as S2 C3 run05), caught by its slip fire (TP); line_green slip 21.5 mm caught by fire (TP). Still no stationarity monitor on hex_red. Aborted; final non_conformant (correct). Completes S4 Class 3 (5/5)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -213,6 +253,13 @@ known_invalid: []
 # CLASS 2 COMPOSITION (S4, as run): 5 natural (runs 01-05), 2x r2 (06, 09),
 # 2x hex_red nudge (07, 08 -- the second was meant to be u_brown; no u_brown
 # nudge in S4), 1x r4 (10). run_task_sha256 null = the S4 task 8f80454e.
+# REGISTRY for Class 4 x3 (set 2026-10-23, after Class 3): source registry
+# u_brown max_clamp_effort 100 -> 10, rebuilt; install sha 32f79017 (identical
+# to S1-S3 C4). Executor copy ~/.watchdog/registry/model_registry.yaml 008411d8
+# (u_brown 100). C4 runs: EXECUTOR_REGISTRY_PATH=<that copy> ./run_executor.sh
+# s4 2; s4_scorer re-verifies against the install (true) registry, so binds to
+# the executor's 100 surface as corrupted_binds. run_registry_sha256 =
+# 008411d8... Restore to 92969cc1 (and rebuild) after the last C4 run.
 # ---- S4 setup (2026-10-21, before run 01) ------------------------------------
 # Executor task: agents/tasks/fmb_assembly_2_s4.executor.yaml, re-derived on
 # 2026-10-21 (its steps were stale; now = the committed base task f37da9da's
