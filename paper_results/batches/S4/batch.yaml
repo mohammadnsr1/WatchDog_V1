@@ -37,7 +37,127 @@ claude_cli_version: 2.1.306 (Claude Code)   # S3 ran 2.1.301-2.1.303; each sessi
 #                               # executor copy's sha (registry_provenance_executor.json)
 #   run_task_sha256: null       # null = the S4 task fmb_assembly_2_s4 (see notes)
 #   notes: ""
-sessions: []
+sessions:
+  - session_id: 20261021T212024Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run01. FIRST S4 RUN (validity: unguarded_by_config, no WatchDog events). Planned C1; NATURAL line_green slip 21.7 mm at place_line_green, caught by the executor's own slip fire (TP); 24.7 deg mis-seat reseated in-step. Final conformant + recovered (correct). Fire-to-adjudication 93 s."
+  - session_id: 20261021T213725Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: []
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c1_run01. Clean. Only bystander stationarity + base watches; no slip/effort/part monitors (grip 0/8). valid_variation verdicts at each place step (not findings). NO CUBE (not placed) -> no observation scoring."
+  - session_id: 20261021T220205Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run02. Planned C1; NATURAL line_green slip 21.9 mm; the executor's slip monitor fired 0.0205 and the executor DISMISSED it as valid_variation ('seating contact') -> FN. Final conformant (right), recovered false (wrong)."
+  - session_id: 20261021T222426Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run03. Planned C1; NATURAL collision at place_inverted_u_yellow: inverted_u_yellow slip 26.4 mm + not seated, u_brown 30.4 / u_orange 68.6 / line_green 86.0 mm, base1 29.7 mm (fired). All 5 TP by fire; aborted; final non_conformant (correct). Fire-to-adjudication 17 s."
+  - session_id: 20261021T224444Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run04. Planned C1; NATURAL u_orange slip (22.7 mm), u_brown knocked 24.2 mm (monitor armed at position_m 0.01), line_green slip + unseated at its step close; all 3 TP by fire. OPERATOR DECISION: line_green dropping into its slot (26.8 mm toward its seat) not labelled. base1 14.5 mm unfired (not labelled). Final non_conformant / not recovered -- WRONG vs label (conformant + recovered)."
+  - session_id: 20261021T233649Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c1_run02. Clean. base1 5.2 mm with NO base monitor armed (unfired -> not labelled); the executor found it by a run-end check and called the run non_conformant -> wrong final verdict + 1 FP. Placeholder arm (no params) skipped in param accuracy (scorer revision)."
+  - session_id: 20261021T235455Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c1_run03. Clean. Only 8 monitors (bystanders + effort); coverage 52/116."
+  - session_id: 20261022T000306Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c1_run04. Clean. Bystander monitors armed at an invented 0.005 with no declared source (param 11/15, genuine). base1 4.7 mm unfired."
+  - session_id: 20261022T192812Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run05. Planned C1; NATURAL: base1 moved 21.5 mm during place_u_brown's in-step reseat (fired) -> violation, standing; line_green slip 22.1 mm with NO slip monitor -> FN. u_brown's first hold peaked 13.7 mm (under bound). Final non_conformant (correct, operator agrees)."
+  - session_id: 20261022T195619Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c1_run05. Clean; param 15/15, coverage 98/116. Completes S4 Class 1 (5/5)."
+  - session_id: 20261022T203509Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 04b4e7ce9889345ed5b75446d9393cad45d5300da52854ab0710fc62968819bf
+    notes: "fmb2_s4c2_run06. r2 (S4 variant 04b4e7ce): u_orange dropped in transit and knocked line_green over (unmonitored, FN); retry jam: gripper struck u_brown, which dragged base1 (41 mm, fired); two more failed grips. OPERATOR DECISION: findings that landed one step after an in-step fire (49 s, 64 s) stay FN; the latency columns carry the serialization cost. Operator-requested abort; final non_conformant (correct)."
+  - session_id: 20261022T231310Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run07. Nudge hex_red (TP). NATURAL: line_green two slips + over-clamp 202.7/170 at place_line_green (no slip/effort monitors); holding inverted_u_yellow the executor grasped line_green -> inverted_u_yellow dropped, seated parts and base1 knocked (u_brown, base1 TP; u_orange FN). place_inverted_u_yellow FN is a nested-step attribution artifact. Operator-requested abort."
+  - session_id: 20261023T002520Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4c2_run08. SECOND hex_red nudge (operator meant u_brown); the only violation, TP. Close but under-bound slips (line_green 18.8 mm) and placement jostles (u_orange 12.0 mm). Ground truth also holds a post-run cube place+vanish (00:39, next-run setup on the old session pointer; not an episode of this run)."
+  - session_id: 20261023T004020Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 04b4e7ce9889345ed5b75446d9393cad45d5300da52854ab0710fc62968819bf
+    notes: "fmb2_s4c2_run09. r2: u_orange dropped in transit (no slip monitor, FN), unseated at place_u_orange (TP by check); four clean recovery grips; operator-requested abort. Mis-armed u_brown effort fire (106 vs 100 during a u_orange hold) = false alarm; its step's object-less finding scored FP on u_brown. Post-run cube place+vanish in ground truth (next-run setup)."
+  - session_id: 20261023T010936Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: 3c10efa57835b121fbdd8409619084f9c03a177f221978fe9a5258ccaa3c88eb
+    notes: "fmb2_s4c2_run10. r4 (S4 variant 3c10efa5, + ACM companion): u_orange carried and seated into u_brown's slot; the executor detected it after place_u_brown, removed u_orange, seated u_brown and completed -- first r4 to recover in any scenario. base1 3.9 mm (fired) at place_u_brown + 12.8 mm unfired during the extraction, 19.6 mm standing -> expected non_conformant / not recovered (as run05); executor matched. Completes S4 Class 2 (10/10)."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
@@ -85,6 +205,14 @@ known_invalid: []
 # monitors earn no stationarity credit. S1-S3: only the two S3 rows noted in
 # S3's batch.yaml change. All S4 rows in raw/ removed and rescored; all 151
 # S4 coverage misses independently confirmed from the raw monitor events.
+# Scoring decision (operator, 2026-10-22, all S4 runs): a fault whose monitor
+# fired in its own step but whose finding landed in a later step (the executor
+# kept acting first -- serialization cost) stays FN under the (step, object)
+# pairing; the delay is carried by the latency columns. A delayed finding
+# still inside the fault's step scores TP as before. First case: 20261022T203509Z.
+# CLASS 2 COMPOSITION (S4, as run): 5 natural (runs 01-05), 2x r2 (06, 09),
+# 2x hex_red nudge (07, 08 -- the second was meant to be u_brown; no u_brown
+# nudge in S4), 1x r4 (10). run_task_sha256 null = the S4 task 8f80454e.
 # ---- S4 setup (2026-10-21, before run 01) ------------------------------------
 # Executor task: agents/tasks/fmb_assembly_2_s4.executor.yaml, re-derived on
 # 2026-10-21 (its steps were stale; now = the committed base task f37da9da's

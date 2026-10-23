@@ -1,0 +1,81 @@
+{
+  "run_id": "20261022T192812Z",
+  "role": "executor",
+  "n_ground_truth_records": 8,
+  "run_ended_iso": "2026-10-22T19:39:26.216057+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_1d84e6",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-22T19:45:20.724889+00:00"
+    },
+    {
+      "name": "foreign_1d84e6",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-22T19:49:40.009758+00:00"
+    },
+    {
+      "name": "foreign_1d84e6",
+      "kind": "removal",
+      "t0_iso": "2026-10-22T19:49:46.120921+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 2,
+    "n_observation_monitors_armed": 3,
+    "n_observation_fires": 1,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 1,
+    "first_look_iso": "2026-10-22T19:31:49.281067+00:00",
+    "look_reasons": [
+      "u_brown appears misseated at u_brown_placement \u2014 checking orientation/position a",
+      "final check of all four seated parts and base1 fixture at run end"
+    ]
+  },
+  "strategy": "continuous_pose_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-22T19:31:18.846402+00:00",
+      "monitor_id": "mon_f4dd2d44a114",
+      "value": 0.005230986814393325,
+      "threshold": 0.005
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_1d84e6",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-22T19:34:02.801028+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-b5bf3e12",
+      "category": "object_moved",
+      "summary": "base1 (the fixture) shifted position by roughly 21mm and rotated about 2.9deg about world Z, detected between the start of the run and the completion of place_u"
+    }
+  ]
+}

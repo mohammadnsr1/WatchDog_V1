@@ -1,0 +1,990 @@
+{
+  "run_id": "fmb2_s4c2_run07",
+  "task": "fmb_assembly_2",
+  "scenario": "S4",
+  "class": 2,
+  "obs_flag_on_clause_reads": 2,
+  "n_library_arms": 0,
+  "n_authored_arms": 9,
+  "n_authored_clause_arms": 9,
+  "library_to_custom": "0:9",
+  "custom_monitor_share": 1.0,
+  "n_authored_obs_monitors": 0,
+  "n_observation_fires": 0,
+  "scenario_consistency_warning": null,
+  "watchdog_final_verdict": "non_conformant",
+  "watchdog_recovered": false,
+  "findings_during_run": [
+    "pick_line_green",
+    "place_line_green",
+    "recover_clear_line_green_obstruction",
+    "place_inverted_u_yellow"
+  ],
+  "n_run_verdicts": 1,
+  "expected_final_verdict": "non_conformant",
+  "verdict_correct": true,
+  "verdict_TP": 1,
+  "verdict_FN": 0,
+  "verdict_FP": 0,
+  "verdict_TN": 0,
+  "recovered_correct": true,
+  "cadence_compliant": true,
+  "label_consistency_warning": null,
+  "detection": {
+    "true_positives": [
+      "pick_line_green:hex_red",
+      "place_line_green:line_green",
+      "recover_clear_line_green_obstruction:base1",
+      "recover_clear_line_green_obstruction:u_brown"
+    ],
+    "false_negatives": [
+      "place_inverted_u_yellow:inverted_u_yellow",
+      "recover_clear_line_green_obstruction:inverted_u_yellow",
+      "recover_clear_line_green_obstruction:line_green",
+      "recover_clear_line_green_obstruction:u_orange"
+    ],
+    "false_positives": [],
+    "continuation_findings": [],
+    "clean_steps_no_finding": [
+      "pick_inverted_u_yellow",
+      "pick_u_brown",
+      "pick_u_orange",
+      "place_approach_inverted_u_yellow",
+      "place_approach_line_green",
+      "place_approach_u_brown",
+      "place_approach_u_orange",
+      "place_u_brown",
+      "place_u_orange",
+      "retry_pick_place_inverted_u_yellow"
+    ],
+    "n_real_violations": 8,
+    "n_findings": 5,
+    "tp_mode": {
+      "pick_line_green:hex_red": "fire",
+      "recover_clear_line_green_obstruction:base1": "fire",
+      "place_line_green:line_green": "check",
+      "recover_clear_line_green_obstruction:u_brown": "fire"
+    }
+  },
+  "fault_TN": 10,
+  "fault_TP_by_fire": 3,
+  "fault_TP_by_check": 1,
+  "detection_recall": 0.5,
+  "detection_precision": 0.8,
+  "n_fires": 3,
+  "authored_probe_fires": 0,
+  "monitor_false_alarms": 0,
+  "monitor_false_alarm_detail": [],
+  "authored_detection": {
+    "tp": [
+      "pick_line_green:hex_red",
+      "recover_clear_line_green_obstruction:base1",
+      "recover_clear_line_green_obstruction:u_brown"
+    ],
+    "fp": [],
+    "fn": [
+      "place_inverted_u_yellow:inverted_u_yellow",
+      "place_line_green:line_green",
+      "recover_clear_line_green_obstruction:inverted_u_yellow",
+      "recover_clear_line_green_obstruction:line_green",
+      "recover_clear_line_green_obstruction:u_orange"
+    ],
+    "release_fires": [],
+    "tn": null
+  },
+  "authored_TP": 3,
+  "authored_FP": 0,
+  "authored_FN": 5,
+  "authored_TN": null,
+  "authored_release_false_fires": 0,
+  "authored_release_fire_detail": null,
+  "time_to_verdict_s": 12.91,
+  "fire_to_next_verdict_s": [
+    51.9,
+    87.55,
+    53.99
+  ],
+  "fire_to_next_verdict_median_s": 53.99,
+  "fire_to_next_verdict_p95_s": 87.55,
+  "n_fires_adjudicated": 3,
+  "n_fires_never_adjudicated": 0,
+  "n_fires_missing_trigger_stamp": 0,
+  "per_step_coverage": [
+    {
+      "step": "pick_u_brown",
+      "active": "u_brown",
+      "expected": 11,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "effort"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_u_orange",
+      "active": "u_orange",
+      "expected": 11,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "effort"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_line_green",
+      "active": "line_green",
+      "expected": 11,
+      "covered": 8,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "effort"
+        },
+        {
+          "object": "line_green",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 8,
+          "missed": [
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 11,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "effort"
+        },
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "line_green"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "recover_clear_line_green_obstruction",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 7,
+          "missed": [
+            "hex_red",
+            "inverted_u_yellow"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "retry_pick_place_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 5,
+      "missed": [
+        {
+          "object": "base1",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "hex_red",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 5,
+          "missed": [
+            "base1",
+            "hex_red",
+            "line_green",
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    }
+  ],
+  "stationarity_coverage": "94/126",
+  "grip_coverage": "0/8",
+  "effort_late": [],
+  "arming_coverage": "94/134",
+  "arming_provenance": "n/a",
+  "arming_provenance_fail": [],
+  "authored_param_accuracy": "6/6",
+  "authored_param_fail": [],
+  "agent_chosen_obs_thresholds": 0,
+  "executor_terminal_status": "aborted",
+  "watchdog_recorded_exec_status": "aborted",
+  "independence_gap": false,
+  "step_claims": [
+    {
+      "step": "place_u_brown",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_u_orange",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "pick_line_green",
+      "watchdog": "non_conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_line_green",
+      "watchdog": "non_conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "recover_clear_line_green_obstruction",
+      "watchdog": "non_conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_inverted_u_yellow",
+      "watchdog": "non_conformant",
+      "executor_claimed": null
+    }
+  ],
+  "executor_self_reported": true,
+  "parameter_rows": [
+    {
+      "monitor_id": "mon_5f19ea6ad01f",
+      "object": null,
+      "bound_value": 0.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_9eb5024f70fc",
+      "object": "u_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_247dea731bf8",
+      "object": "inverted_u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_b5feb11a930e",
+      "object": "hex_blue",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_204fb9dca712",
+      "object": "hex_red",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_9db9ee529abc",
+      "object": "base1",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_a0ca8bb94b69",
+      "object": "base2",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_088dfac34ba3",
+      "object": "u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_f5a484bb789e",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    }
+  ],
+  "corrupted_binds": [],
+  "class4_path_untested": true,
+  "arming_contention": {
+    "monitor_tool_calls_after_first_step": 28,
+    "monitor_tool_wall_sec": 0.22,
+    "monitor_blocks_interleaved_with_actions": 22
+  },
+  "monitor_calls_in_run": 28,
+  "monitor_tool_wall_sec": 0.22,
+  "interleaved_monitor_blocks": 22,
+  "unmonitored_steps": [],
+  "n_unmonitored_steps": 0,
+  "fire_to_adjudication_s": [
+    32.94,
+    59.05,
+    25.49
+  ],
+  "fire_to_adjudication_median_s": 32.94,
+  "fire_to_adjudication_p95_s": 59.05,
+  "fires_never_adjudicated": 0,
+  "_label_used": "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/20261022T231310Z/gt_fmb2_s4c2.yaml",
+  "scored_registry_path": "/home/mohammad/watchdog/WatchDog_V1/ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml",
+  "scored_registry_sha256": "92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd",
+  "run_registry_path": null,
+  "run_registry_sha256": null,
+  "run_registry_source": null,
+  "registry_differs_from_run": null
+}
