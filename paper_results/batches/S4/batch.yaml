@@ -293,6 +293,11 @@ known_invalid: []
 # registry edits on the plain S4 task (C4: executor copy 008411d8 via
 # EXECUTOR_REGISTRY_PATH). Class 2 composition follows S3's: 2x r2, 1x r4,
 # 2x nudge, the rest natural.
+# SCORER REVISION (2026-10-23, after Phase 6): time_to_verdict_s anchored on
+# the executor's last end_step for S4 (its run_verdict precedes its own
+# end_run on 20/23 runs, so the S1-S3 run_ended anchor went negative). All 23
+# raw rows + score_s4.json rescored on that one cell, carried to corrected/
+# (CORRECTIONS.md); no other S1-S4 cell changed. SCORERS.md has the entry.
 # SCORING PARITY (settled 2026-10-21, before run 01): s4_scorer now scores on
 # watchdog_scorer.score_run (the S1-S3 path) reading
 # events_executor_monitor.jsonl, so every S1-S3 rule applies; authored

@@ -797,8 +797,19 @@ def score_run(session_dir, label, monitor_file="events_watchdog.jsonl",
         row["authored_release_false_fires"] = None
 
     # ---- TIME TO VERDICT ---------------------------------------------------
+    # From the task's end to the final verdict. S1-S3: anchored on the
+    # executor's run_ended (the watchdog cannot adjudicate before the run is
+    # declared over). S4 (2026-10-23): the executor adjudicates ITSELF and
+    # records its run verdict before or after its own end_run (20 / 3 of the
+    # S4 batch), so run_ended is not an anchor there -- it went negative on
+    # 20 rows. S4 anchors on the executor's last end_step, the task's last
+    # action, which both orderings follow. S1-S3 rows are untouched.
     ttv = None
-    if final and ended:
+    if final and scn == "S4":
+        last_end = exec_events(ev, "end_step")
+        if last_end:
+            ttv = (ts(final["wall_time_iso"]) - ts(last_end[-1]["wall_time_iso"])).total_seconds()
+    elif final and ended:
         ttv = (ts(final["wall_time_iso"]) - ts(exec_events(ev, "run_ended")[0]["wall_time_iso"])).total_seconds()
     row["time_to_verdict_s"] = round(ttv, 2) if ttv is not None else None
 

@@ -192,6 +192,17 @@ def test_held_gated_monitors_get_no_stationarity_credit():
     assert ("u_brown", "grip_relative_pose") in kinds
 
 
+def test_s4_time_to_verdict_anchors_on_the_last_end_step():
+    import inspect
+    src = inspect.getsource(wd.score_run)
+    s4 = src.index('if final and scn == "S4":')
+    # S4: last end_step -> final verdict; every other scenario keeps run_ended
+    assert 'last_end = exec_events(ev, "end_step")' in src[s4:]
+    assert 'ts(last_end[-1]["wall_time_iso"])' in src[s4:]
+    assert s4 < src.index('elif final and ended:') \
+        < src.index('exec_events(ev, "run_ended")[0]["wall_time_iso"]', s4)
+
+
 def test_parameterless_arms_are_skipped_in_param_accuracy():
     import inspect
     src = inspect.getsource(wd.score_run)

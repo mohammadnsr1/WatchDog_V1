@@ -97,6 +97,17 @@ verdict-detection logic; verified on live data). Added, per run:
   raw_spec path named in the params' declared source, checked against the
   monitor's own object (or the objects it reads). Changed only
   fmb2_s3c3_run02 (10/14 -> 14/14) over 64 rows.
+- **S4 time_to_verdict anchor** (2026-10-23): `time_to_verdict_s` is the
+  time from the task's end to the final verdict. S1–S3 anchor on the
+  executor's `run_ended` (the watchdog cannot adjudicate before the run is
+  declared over). In S4 the executor adjudicates itself and records its run
+  verdict before OR after its own `end_run` (20 / 3 of the S4 batch), so the
+  `run_ended` anchor went negative on 20 rows. S4 now anchors on the
+  executor's last `end_step` — the task's last action, which both orderings
+  follow. Scenario-keyed (label `scenario: S4`): S1/S2/S3 cells are
+  untouched (69 rows verified); only the 23 S4 `time_to_verdict_s` cells
+  changed (−7.4…12.9 s → 11.7…113.8 s), rescored into raw/ and carried to
+  corrected/.
 - **Multi-object authored fires** (2026-10-20): an authored monitor that
   reads several objects is armed with ONE object_id but watches them all, so
   its fire's subject is taken from the fire's detail -- the read object named
