@@ -1,0 +1,933 @@
+{
+  "run_id": "fmb2_s4c4_run01",
+  "task": "fmb_assembly_2",
+  "scenario": "S4",
+  "class": 4,
+  "obs_flag_on_clause_reads": 3,
+  "n_library_arms": 0,
+  "n_authored_arms": 14,
+  "n_authored_clause_arms": 14,
+  "library_to_custom": "0:14",
+  "custom_monitor_share": 1.0,
+  "n_authored_obs_monitors": 0,
+  "n_observation_fires": 0,
+  "scenario_consistency_warning": null,
+  "watchdog_final_verdict": "conformant",
+  "watchdog_recovered": false,
+  "findings_during_run": [],
+  "n_run_verdicts": 1,
+  "expected_final_verdict": "non_conformant",
+  "verdict_correct": false,
+  "verdict_TP": 0,
+  "verdict_FN": 1,
+  "verdict_FP": 0,
+  "verdict_TN": 0,
+  "recovered_correct": true,
+  "cadence_compliant": true,
+  "label_consistency_warning": null,
+  "detection": {
+    "true_positives": [],
+    "false_negatives": [
+      "pick_u_brown:u_brown",
+      "place_inverted_u_yellow:base1",
+      "place_inverted_u_yellow:u_brown",
+      "place_u_brown:base1"
+    ],
+    "false_positives": [],
+    "continuation_findings": [],
+    "clean_steps_no_finding": [
+      "pick_inverted_u_yellow",
+      "pick_line_green",
+      "pick_u_orange",
+      "place_approach_inverted_u_yellow",
+      "place_approach_line_green",
+      "place_approach_u_brown",
+      "place_approach_u_orange",
+      "place_line_green",
+      "place_u_orange"
+    ],
+    "n_real_violations": 4,
+    "n_findings": 0,
+    "tp_mode": {}
+  },
+  "fault_TN": 9,
+  "fault_TP_by_fire": 0,
+  "fault_TP_by_check": 0,
+  "detection_recall": 0.0,
+  "detection_precision": null,
+  "n_fires": 2,
+  "authored_probe_fires": 0,
+  "monitor_false_alarms": 0,
+  "monitor_false_alarm_detail": [],
+  "authored_detection": {
+    "tp": [
+      "place_inverted_u_yellow:base1",
+      "place_u_brown:base1"
+    ],
+    "fp": [],
+    "fn": [
+      "pick_u_brown:u_brown",
+      "place_inverted_u_yellow:u_brown"
+    ],
+    "release_fires": [],
+    "tn": null
+  },
+  "authored_TP": 2,
+  "authored_FP": 0,
+  "authored_FN": 2,
+  "authored_TN": null,
+  "authored_release_false_fires": 0,
+  "authored_release_fire_detail": null,
+  "time_to_verdict_s": 12.93,
+  "fire_to_next_verdict_s": [
+    20.06,
+    25.3
+  ],
+  "fire_to_next_verdict_median_s": 22.68,
+  "fire_to_next_verdict_p95_s": 25.3,
+  "n_fires_adjudicated": 2,
+  "n_fires_never_adjudicated": 0,
+  "n_fires_missing_trigger_stamp": 0,
+  "per_step_coverage": [
+    {
+      "step": "pick_u_brown",
+      "active": "u_brown",
+      "expected": 11,
+      "covered": 7,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "slip"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 0,
+          "missed": [
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -29.69,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_u_orange",
+      "active": "u_orange",
+      "expected": 11,
+      "covered": 8,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": 4.55,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -24.08,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "line_green",
+            "u_brown"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_line_green",
+      "active": "line_green",
+      "expected": 11,
+      "covered": 8,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": 4.21,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -22.07,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "inverted_u_yellow",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "inverted_u_yellow",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 11,
+      "covered": 8,
+      "missed": [
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "line_green",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": 4.55,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -23.33,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "line_green",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 6,
+      "missed": [
+        {
+          "object": "line_green",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_brown",
+          "monitor": "stationarity"
+        },
+        {
+          "object": "u_orange",
+          "monitor": "stationarity"
+        }
+      ],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 6,
+          "missed": [
+            "line_green",
+            "u_brown",
+            "u_orange"
+          ],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    }
+  ],
+  "stationarity_coverage": "72/108",
+  "grip_coverage": "7/8",
+  "effort_late": [],
+  "arming_coverage": "79/116",
+  "arming_provenance": "n/a",
+  "arming_provenance_fail": [],
+  "authored_param_accuracy": "10/11",
+  "authored_param_fail": [
+    {
+      "object": "u_brown",
+      "monitor_id": "mon_3222965a38c1",
+      "threshold": 100.0,
+      "source": "raw_spec.limits.max_clamp_effort",
+      "registry_value": 10.0
+    }
+  ],
+  "agent_chosen_obs_thresholds": 0,
+  "executor_terminal_status": "completed",
+  "watchdog_recorded_exec_status": "completed",
+  "independence_gap": false,
+  "step_claims": [
+    {
+      "step": "place_u_brown",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_u_orange",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_line_green",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    },
+    {
+      "step": "place_inverted_u_yellow",
+      "watchdog": "conformant",
+      "executor_claimed": null
+    }
+  ],
+  "executor_self_reported": true,
+  "parameter_rows": [
+    {
+      "monitor_id": "mon_dbd08e488b07",
+      "object": "u_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_00c9ff156290",
+      "object": "inverted_u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_b8c7b10a75a1",
+      "object": "hex_blue",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_2781a184d986",
+      "object": "hex_red",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_0921ea75826a",
+      "object": "base1",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_1b88baa48a80",
+      "object": "base2",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_3222965a38c1",
+      "object": "u_brown",
+      "bound_value": 100.0,
+      "executor_seen_value": 100.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 10.0,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_cc0997e90e47",
+      "object": "base1",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "mon_0852df821294",
+      "object": "u_orange",
+      "bound_value": 200.0,
+      "executor_seen_value": 200.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 200.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_6e533ea60add",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_9bff917a1e1b",
+      "object": "line_green",
+      "bound_value": 170.0,
+      "executor_seen_value": 170.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 170.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_4c5ec01ab41e",
+      "object": "line_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_50b3bbbde89c",
+      "object": "inverted_u_yellow",
+      "bound_value": 250.0,
+      "executor_seen_value": 250.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 250.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "mon_9a0832de1896",
+      "object": "inverted_u_yellow",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    }
+  ],
+  "corrupted_binds": [
+    {
+      "monitor_id": "mon_3222965a38c1",
+      "object": "u_brown",
+      "bound_value": 100.0,
+      "executor_seen_value": 100.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 10.0,
+      "matches_true_registry": false
+    }
+  ],
+  "class4_path_untested": false,
+  "arming_contention": {
+    "monitor_tool_calls_after_first_step": 38,
+    "monitor_tool_wall_sec": 0.12,
+    "monitor_blocks_interleaved_with_actions": 25
+  },
+  "monitor_calls_in_run": 38,
+  "monitor_tool_wall_sec": 0.12,
+  "interleaved_monitor_blocks": 25,
+  "unmonitored_steps": [],
+  "n_unmonitored_steps": 0,
+  "fire_to_adjudication_s": [
+    15.31,
+    18.84
+  ],
+  "fire_to_adjudication_median_s": 17.07,
+  "fire_to_adjudication_p95_s": 18.84,
+  "fires_never_adjudicated": 0,
+  "_label_used": "agents/transcripts/sessions/20261023T215632Z/gt_fmb2_s4c4.yaml",
+  "scored_registry_path": "/home/mohammad/watchdog/WatchDog_V1/ros2_ws/src/robot_backend/config/model_registry.yaml",
+  "scored_registry_sha256": "32f7901746b59ca216fa9d389dedaf9a40318f2629863a61309ee2e7a7d4aeac",
+  "run_registry_path": "/home/mohammad/.watchdog/registry/model_registry.yaml",
+  "run_registry_sha256": "008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116",
+  "run_registry_source": "registry_provenance_executor.json (EXECUTOR_REGISTRY_PATH override)",
+  "registry_differs_from_run": true
+}

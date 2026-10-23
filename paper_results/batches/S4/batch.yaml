@@ -198,6 +198,30 @@ sessions:
     run_registry_sha256: null
     run_task_sha256: c11dd92a8437762d67e5409eb0faaa7d89c2315779d034b36d6999c518059a16
     notes: "fmb2_s4c3_run05. r6: hex_red flung out of the workspace during its lift (2.06 m, physics blow-up as S2 C3 run05), caught by its slip fire (TP); line_green slip 21.5 mm caught by fire (TP). Still no stationarity monitor on hex_red. Aborted; final non_conformant (correct). Completes S4 Class 3 (5/5)."
+  - session_id: 20261023T215632Z
+    scenario: S4
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s4c4_run01. u_brown effort monitor bound to the corrupted copy's 100 (executor-verified; corrupted bind), never fired; over-clamp 81.3 vs true 10 (FN). base1 moved at place_u_brown (8.8 mm) and place_inverted_u_yellow (+6.4 mm) with fires, reported only as observations (FN x2); u_brown knocked 22.7 mm at place_inverted_u_yellow, unmonitored (FN). Final conformant (WRONG), recovered false (correct)."
+  - session_id: 20261023T221447Z
+    scenario: S4
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s4c4_run02. u_brown effort monitor bound to 100 (corrupted bind), never fired; over-clamp 63.7 vs true 10 (FN). line_green slipped on both insertions at place_line_green (21.4 / 21.8 mm); first caught by fire + non_conformant step verdict (TP), slip monitor not re-armed for the second. Final non_conformant + recovered false -- correct, but for the past slip, not the effort invariant."
+  - session_id: 20261023T223052Z
+    scenario: S4
+    class: 4
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: 008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116
+    run_task_sha256: null
+    notes: "fmb2_s4c4_run03. NO effort or slip monitor on any part; effort judged only by end-of-step readings vs the corrupted 100 (u_brown '28.6N well under 100N'); over-clamp 70.8 vs true 10 (FN). line_green slip 21.5 mm at place_line_green, unmonitored (FN). Final conformant (WRONG), recovered false (correct). Completes S4 Class 4 (3/3) and the S4 batch."
 
 # Sessions scored but excluded from paper numbers. Also set exclude=1 on their
 # rows in corrected/ and log it in corrected/CORRECTIONS.md.
