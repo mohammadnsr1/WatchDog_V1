@@ -1,0 +1,46 @@
+# Batch provenance. See paper_results/README.md and docs/dev/BATCH_RUNBOOK.md.
+batch_id: S3_opus_low
+date_utc: TODO                  # UTC date of the batch's FIRST run (fill at run 01)
+purpose: scored                 # smoke | scored -- scored batches feed paper numbers
+
+# Provenance (fill BEFORE run 01; code must not change mid-batch)
+git_sha: TODO                   # git rev-parse HEAD, clean tree, before run 01.
+                                # Scorer and prompts must be byte-identical to the
+                                # S3 batch: diff against S3/batch.yaml's git_sha.
+registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+                                # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
+                                # Same CLEAN registry as S1-S4 (verified 2026-10-25). Re-verify
+                                # src == install before run 01.
+claude_cli_version: TODO        # claude --version at run 01 (S3 ran 2.1.301-2.1.310)
+
+assembly: fmb_assembly_2        # FROZEN: every S1-S4 run used this set
+scenarios: [S3]
+
+per_role:
+  executor:
+    model: claude-sonnet-5
+    effort: low
+  watchdog:
+    model: TODO_OPUS_FULL_ID
+    effort: low
+# MODEL ID: the exact id the CLI resolves for Opus must be written above before
+# run 01 (watchdog.settings.json / executor.settings.json accept an alias such
+# as 'opus' or a full id; the launcher echoes the resolved value -- record THAT
+# string here and in each session's agent_config_*.json). Do not write 'opus'.
+
+# ---- batch design (decided 2026-10-23, before run 01) ------------------------
+# S3 (authored monitors only) with the WATCHDOG on Opus at LOW effort; executor unchanged (Sonnet-5 low).
+# Everything else is FROZEN to the S3 protocol: fmb_assembly_2, the pinned
+# benign cube (place_object at (0.08,-0.38,None), start="at_step=pick_u_orange",
+# pasted unchanged from S2/batch.yaml notes), same scorer code, same prompts,
+# same classes. Only the model and effort named above change.
+# Target: 5 scorable runs (a run that aborts before pick_u_orange has no cube and
+# is not observation-scorable; launch 6-7 to get 5). Plan Class 1; a natural
+# fault makes a run Class 2 and it still counts, as in S1-S4.
+# Observation metrics are the primary outcome; conformance metrics are reported
+# beside them as a small-n read. Report counts, not rates (n=5).
+# Cell 1 of the Opus observation study: isolates the MODEL effect vs S3 (Sonnet-5 low).
+# Fisher exact vs S3's 0 of 22 detections: 2/5 -> p=0.03, 3/5 -> p=0.003; 1/5 is an anecdote.
+# Reference row (upper bound) for the observation table: paper_results/batches/REF.
+
+# ---- sessions: []

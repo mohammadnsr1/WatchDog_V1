@@ -1,0 +1,85 @@
+# Batch provenance. See paper_results/README.md and reference_watchdog/README.md.
+batch_id: REF
+date_utc: 2026-10-25            # UTC date of the batch's first kept run
+purpose: scored                 # feeds ONE paper row: the observation upper bound.
+                                # NEVER a conformance row: the scripted watchdog records
+                                # no verdict, so watchdog_scorer output is meaningless here.
+
+# WHAT THIS BATCH IS
+# The oracle / reference watchdog: reference_watchdog/run_reference_watchdog.py
+# drives the SAME watchdog MCP server, tools, sandbox, budgets and 8000-char
+# source limit an agent gets, with two hand-written authored monitors
+# (reference_watchdog/monitors.py: ref_scene_watch on the depth array lane,
+# ref_undisturbed_watch on TF). It proves the scene-observation duty is
+# achievable with the data streams every agent already has. It is an UPPER
+# BOUND, not an agent-level baseline: it was tuned over 7 live attempts with
+# ground truth and bag replay, it knows the UR link frame names, the bench
+# height and the injection protocol, and it never forgets to look or re-arm.
+# Say so wherever its row is shown. Attempts 1-5 are diagnostic only (see
+# reference_watchdog/README.md "Live history") and are not in this batch.
+
+# Provenance
+git_sha: 7dd3be2f24d0664aa3ebe7df5874b0b7613cf8cb
+                                # HEAD at scoring (2026-10-25). reference_watchdog/ was being
+                                # revised in the working tree between the two runs, so the
+                                # monitor code each run ACTUALLY armed is pinned per session
+                                # below by the code_sha256 the server recorded at arm time
+                                # (events_watchdog.jsonl monitor_armed; source saved under
+                                # <session>/authored_monitors/). Scorer, prompts, registry
+                                # and executor task are the frozen S3 ones.
+registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
+                                # install-space model_registry.yaml, same CLEAN registry as S1-S4
+executor_task_sha256: f37da9da4776bbcff68925807906fc2f11dacbea893fed25d3139ebdfb60bbfe
+                                # agents/tasks/fmb_assembly_2.executor.yaml, both runs
+claude_cli_version: 2.1.310 (Claude Code)   # executor session; the watchdog is a script
+
+assembly: fmb_assembly_2        # as every S1-S4 run
+scenarios: [S3]                 # S3 protocol and S3 watchdog server config (watchdog_2_s3.mcp.json)
+
+per_role:
+  executor:
+    model: claude-sonnet-5      # the normal baseline executor, unchanged
+    effort: low
+  watchdog:
+    model: n/a                  # SCRIPTED (no LLM): reference_watchdog/run_reference_watchdog.py
+    effort: n/a
+
+# ---- batch design ----------------------------------------------------------
+# Each run exercises every injected event kind once, at distinct steps:
+#   place_object  (0.08,-0.38,None)  at_step=pick_u_orange          (the S1-S4 pinned cube)
+#   visit hand    dwell (0.45,-0.10) at_step=pick_line_green        (4 s dwell, 0.3 m/s)
+#   nudge_object  u_orange +0.03 x   at_step=pick_inverted_u_yellow (a conformance episode;
+#                                     reported by the TF monitor, not counted in obs cells)
+# Scored with observation_scorer.py --scenario S3 --role watchdog only.
+# The nudge's physics aftermath (parts jostled, base1 later falling off the
+# bench after the executor's abort in 20261025T200836Z) is REAL external
+# motion the TF monitor reported correctly; the scorer has no ground truth
+# for it, so those reports land in unmatched_observations / monitor false
+# fires. Reviewed by hand (see notes) -- not errors of the monitor.
+
+# ---- sessions --------------------------------------------------------------
+sessions:
+  - session_id: 20261025T200836Z
+    scenario: S3
+    class: 2                    # the nudge makes it a conformance fault by design
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    monitor_code_sha256:
+      ref_scene_watch: b0872745dad4      # first 12 hex; full value in events_watchdog.jsonl
+      ref_undisturbed_watch: e128e88652fd
+    notes: "ref_run01 (attempt 6). 2 of 2 detected: cube 2.37 s (new_static, pos/height/size correct), hand 0.32 s (moving on entry, resolved on leaving); appearance time accurate 2/2; nudge acknowledged. obs_FP 9 / monitor false fires 27, ALL hand-reviewed: 2 negative-height 'moving' reports trailing the hand (bench re-exposed; fixed in the client+monitor before run02), 1 uncovered energy-chain end at y=-0.64 (rail strip widened), u_brown_placement frame tracked as an object (frames now skipped), and the nudge's physics cascade re-firing the TF monitor every tick (base1, u_brown, u_orange knocked; later base1 fell off the bench after the abort -- real motion, no ground truth). Executor aborted at place_approach_inverted_u_yellow (user abort). Keep as the first reference row with these caveats, or report run02 alone."
+  - session_id: 20261025T202724Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit, nudge_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    monitor_code_sha256:
+      ref_scene_watch: 027f2aa0cc93
+      ref_undisturbed_watch: 7c8378d47305
+    notes: "ref_run02 (attempt 7). THE CLEAN REFERENCE ROW: TP=2 FN=0 FP=0, obs_monitor_false_fires=0; cube 2.44 s, hand 0.26 s, appearance time accurate 2/2; nudge acknowledged with a single fire (5 s settle). 9 fires, 3 observations over a 20-min run with four unplanned re-seat steps. One bookkeeping flaw invisible to the scorer: the hand's updates were merged into the cube's observation (27 cm apart) and the hand leaving resolved the cube; client merging made height-aware afterwards. Executor aborted at place_inverted_u_yellow (parts displaced by the nudge aftermath)."
+
+known_invalid: []

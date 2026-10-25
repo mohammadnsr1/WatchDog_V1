@@ -14,9 +14,10 @@ the scripted watchdog uses only the watchdog server's tools.
 - `monitors.py` — the two authored-monitor sources plus their
   `arm_custom_monitor` keyword specs.
   - `ref_scene_watch` (array lane, 1 Hz, purpose observation): depth height
-    above the bench plane versus a reference frame. The robot is masked as
-    the high region connected to the projected TCP pixel. Unexplained changes
-    fire as `new_static` (foreign object placed), `removed` (gone) or
+    above the bench plane versus a reference frame. The robot is masked
+    geometrically: every UR link origin is read from TF and projected, and
+    the mask is tubes along the link chain plus a disc at the TCP. Unexplained
+    changes fire as `new_static` (foreign object placed), `removed` (gone) or
     `moving` (external body entering or leaving). A change within 0.10 m of
     any position a registered object has occupied since arming is explained
     by TF and folded into the reference silently.
@@ -47,8 +48,8 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="$PWD/src/robot_backend:$PYTHONPATH"
   .venv/bin/python3 -m pytest -q -s ../reference_watchdog/test_reference_monitors.py
 ```
 
-Result on 2026-10-23: 9 passed; worst array-lane call 25 ms against the
-150 ms budget; sources 6.8k and 1.4k characters against the 8k limit.
+Result on 2026-10-25: 17 passed; worst array-lane call 39 ms against the
+150 ms budget at 2 Hz; sources 7.9k and 1.4k characters against the 8k limit.
 
 ## Smoke against the real server (no cell needed)
 
@@ -132,7 +133,55 @@ scored exactly as it is for an agent.
   add it but was not needed for any injected event kind.
 - Under the robot's mask nothing is observed. A foreign object placed where
   the arm is parked is reported when the arm leaves (tested).
-- A visitor overlapping the arm in the image is masked while it overlaps.
+- A visitor is masked only where it overlaps the arm's own silhouette
+  (tubes of 0.13 m around the link chain, 0.16 m at the TCP, plus 12 px).
+- Repeated fires are debounced by the client: another `new_static`/`moving`
+  fire within 0.3 m of an open observation updates it, and `object_moved`
+  fires on the same object within 30 s update one record.
+
+## Live history
+
+- 2026-10-23 attempt 1: client crashed on a logging bug at the first fire.
+  That fire was the robot's base flange uncovered by the move to home.
+- 2026-10-23 attempt 2: the floor past the bench edge, uncovered at
+  startup, fired as "removed" with NaN coordinates; client crashed on them.
+- 2026-10-24 attempt 3 (session 20261024T002625Z, ran to the end): cube
+  reported 2.7 s after placement with correct position, height and size;
+  nudge acknowledged; hand visit MISSED; 12 monitor false fires and 22
+  unmatched observations, nearly all the arm itself: the old
+  "high region connected to the TCP" mask lost the arm whenever the gripper
+  was down at bench level, fired on it, and folded it into the reference.
+  Replaced by the geometric TF-link mask above.
+- 2026-10-24 attempt 4 (session 20261024T005734Z): cube 6 s, hand 4 s on
+  entry and resolved on leaving; arm slivers at 0.6-0.7 m (UR5e upper arm
+  and elbow housing sit 0.14-0.2 m off the link-origin skeleton) and one
+  uncovered energy-chain end at y=-0.75. Per-point radii, the tall-near-tube
+  rule and the rail-strip exclusion added.
+- 2026-10-24 attempt 5 (session 20261024T011010Z): ZERO false fires; hand
+  reported at dwell and resolved on leaving; cube MISSED. Bag replay showed
+  the cube pixel 1.8 cells inside the mask all run: the near-vertical upper
+  arm's tube was sized at the elbow's depth. Radii are now interpolated per
+  link point and scaled by the depth at the closest point (replayed against
+  the bag: cube pixel never masked, worst margin 0.7 cells), and the lane
+  runs at 2 Hz so a 3 s visitor entry gets ~6 ticks instead of 3.
+- 2026-10-25 attempt 6 (session 20261025T200836Z, scored): 2 of 2 detected,
+  cube 2.4 s, hand 0.3 s, appearance time accurate 2 of 2, nudge acknowledged.
+  Noise left: the bench re-exposed behind the moving hand fired as a
+  negative-height "moving" body (now: motion needs rise > H_MIN); one
+  uncovered chain end at y=-0.64 (rail strip widened to y < -0.60);
+  u_brown_placement tracked as an object (registry frames now skipped); and
+  the nudge's physics cascade re-fired the TF monitor every tick because the
+  client re-armed it instantly (now a 5 s settle). base1 later fell off the
+  bench after the abort and was reported correctly, which the scorer cannot
+  credit. The client now resolves a moving body only after a 3 s grace with
+  no further sighting, so one visitor is one observation.
+- 2026-10-25 attempt 7 (session 20261025T202724Z, scored): THE REFERENCE
+  ROW. TP=2 FN=0 FP=0, obs_monitor_false_fires=0, cube 2.4 s, hand 0.3 s,
+  appearance time accurate 2 of 2, nudge acknowledged with a single fire.
+  9 fires and 3 observations over a 20-minute run with four re-seat steps.
+  One bookkeeping flaw, invisible to the scorer: the hand's updates were
+  merged into the cube's observation (27 cm from the hand's path) and the
+  hand leaving resolved the cube; merging is now height-aware.
 - `explained` is planar and 0.10 m wide: an intruder placed within 0.10 m of
   a registered object's current or past position is attributed to that
   object and not reported. The batch-pinned cube is 0.12 m or more from

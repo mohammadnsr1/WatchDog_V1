@@ -35,6 +35,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import sys
 import time
 from datetime import timedelta
@@ -49,10 +50,25 @@ import monitors as ref  # noqa: E402
 
 LOG_NAME = "reference_watchdog_log.jsonl"
 MATCH_RADIUS_M = 0.5        # a removal this close to an open observation resolves it
+SAME_OBJECT_RADIUS_M = 0.3  # a new/moving fire this close to an open observation updates it
+SAME_EVENT_WINDOW_S = 30.0  # repeated object_moved fires on one object within this = one event
+MOVING_MATCH_RADIUS_M = 1.0 # a moving body seen again within this of its last report = same body
+RESOLVE_GRACE_S = 3.0       # a 'removed' near a moving body resolves it only if it is not seen again
+SETTLE_S = 5.0              # after an object_moved fire, let the physics settle before re-arming
+SAME_OBJECT_HEIGHT_M = 0.08 # two sightings with heights further apart than this are different bodies
 WAIT_TIMEOUT_SEC = 180.0    # same as the agent's default
 MAX_CONSECUTIVE_TIMEOUTS = 2  # same as watchdog_agent_s3.yaml
 RUN_READY_RETRY_SEC = 2.0
 RUN_READY_MAX_SEC = 120.0
+
+
+def _finite(v: Any) -> float | None:
+    """A finite float, or None for anything else (missing, null, nan, text)."""
+    return float(v) if isinstance(v, (int, float)) and math.isfinite(v) else None
+
+
+def _num(v: Any, nd: int = 2) -> str:
+    return f"{v:.{nd}f}" if isinstance(v, (int, float)) and math.isfinite(v) else "?"
 
 
 def _session_dir() -> Path | None:
@@ -100,6 +116,9 @@ class ReferenceWatchdog:
         self.specs = {spec()["monitor_id"]: spec() for spec in ref.ALL_SPECS}
         self.armed: dict[str, str] = {}          # requested id -> server monitor_id
         self.open_obs: list[dict[str, Any]] = []  # {observation_id, x, y, kind}
+        self.recent_moves: dict[str, dict[str, Any]] = {}  # object_id -> last object_moved record
+        self.pending_resolve: list[dict[str, Any]] = []   # {obs, due, args} awaiting the grace period
+        self.pending_arm: dict[str, float] = {}           # requested_id -> monotonic time to re-arm
         self.fires = 0
         self.observations = 0
 
@@ -136,8 +155,15 @@ class ReferenceWatchdog:
             self.log("arm_failed", requested_id=requested_id, error=r.get("error"))
 
     async def arm_all(self) -> None:
+        # The scene watch is armed at the FIRST begin_step, not at run ready:
+        # the executor is then blocked at the gate with the arm at home, so
+        # the reference is captured with the arm out of the way instead of
+        # folded over the bench at startup (the live 2026-10-23 false fire
+        # came from structure uncovered by the move to home).
+        self.scene_watch_pending = True
         for rid in self.specs:
-            await self.arm(rid)
+            if rid != "ref_scene_watch":
+                await self.arm(rid)
 
     def _requested_id_for(self, monitor_id: str) -> str | None:
         for rid, mid in self.armed.items():
@@ -150,105 +176,164 @@ class ReferenceWatchdog:
         return r
 
     async def on_fire(self, fire: dict[str, Any]) -> None:
+        """Never let one fire kill the run: any failure is logged and the
+        monitor is re-armed."""
         self.fires += 1
         mid = fire.get("monitor_id", "")
         rid = self._requested_id_for(mid)
         try:
-            detail = json.loads(fire.get("detail") or "{}")
+            await self._handle_fire(fire, mid, rid)
+        except Exception as exc:  # noqa: BLE001 - the run must go on
+            import traceback
+            self.log("fire_handler_error", monitor_id=mid, error=repr(exc),
+                     traceback=traceback.format_exc()[-2000:])
+        if rid == "ref_undisturbed_watch":
+            self.pending_arm[rid] = time.monotonic() + SETTLE_S
+        elif rid is not None:
+            await self.arm(rid)
+
+    async def _handle_fire(self, fire: dict[str, Any], mid: str, rid: str | None) -> None:
+        raw = fire.get("detail") or "{}"
+        try:
+            # the sandbox has no json module; a non-finite float is spelled nan/inf
+            detail = json.loads(re.sub(r":\s*-?(nan|inf)\b", ":null", raw))
         except json.JSONDecodeError:
-            detail = {"kind": "unparsed", "raw": fire.get("detail")}
+            detail = {"kind": "unparsed", "raw": raw}
         kind = detail.get("kind", "unknown")
-        self.log("fire", monitor_id=mid, requested_id=rid, kind=kind, detail=detail,
+        self.log("fire", monitor_id=mid, requested_id=rid, fire_kind=kind, detail=detail,
                  trigger_wall_ns=fire.get("trigger_wall_ns"))
 
-        x, y, z = detail.get("x"), detail.get("y"), detail.get("z")
-        where = (f"world ({x:.2f}, {y:.2f}, {z:.2f})" if isinstance(x, (int, float)) else "unknown")
+        x, y, z = (_finite(detail.get(k)) for k in ("x", "y", "z"))
+        where = f"world ({_num(x)}, {_num(y)}, {_num(z)})" if x is not None else "an unknown position"
         reason = f"reference monitor {rid or mid} fired: {kind} at {where}; confirming visually"
         lk = await self.look(reason)
         look_ids = [lk["look_id"]] if lk.get("look_id") else []
         first_seen = detail.get("since_wall_ns") or fire.get("trigger_wall_ns")
+        if x is not None:
+            location: dict[str, Any] | None = {"frame": "world", "x": x, "y": y, "z": z}
+        elif look_ids and _finite(detail.get("u")) is not None:
+            location = {"pixel": {"u": detail["u"], "v": detail["v"]}, "look_id": look_ids[0]}
+        else:
+            location = None
 
         if kind == "removed":
-            prior = self._nearest_open(x, y)
+            prior = self._nearest_open(x, y, h=_finite(detail.get("height_m")))
             if prior is not None:
-                r = await self.call(
-                    "record_observation",
-                    summary=(f"The unlisted object previously reported at ({prior['x']:.2f}, "
-                             f"{prior['y']:.2f}) is no longer there (depth returned to the "
-                             f"reference surface at ({x:.2f}, {y:.2f}))."),
-                    category=prior["category"], location={"frame": "world", "x": x, "y": y, "z": z},
+                args = dict(
+                    summary=(f"The unlisted object previously reported at ({_num(prior['x'])}, "
+                             f"{_num(prior['y'])}) is no longer there (depth returned to the "
+                             f"reference surface at ({_num(x)}, {_num(y)}))."),
+                    category=prior["category"], location=location,
                     first_seen_wall_ns=prior["first_seen"], evidence_look_ids=look_ids,
                     evidence_monitor_ids=[mid], identity=prior.get("identity"),
                     confidence="high", requirement_impact="none",
                     observation_id=prior["observation_id"], status="resolved",
                 )
-                self.open_obs.remove(prior)
-                self.log("observation_resolved", observation_id=prior["observation_id"], result=r)
+                # a body that was moving may simply have moved on: resolve only
+                # if it is not seen again within the grace period
+                self.pending_resolve = [p for p in self.pending_resolve if p["obs"] is not prior]
+                self.pending_resolve.append({"obs": prior, "due": time.monotonic() + RESOLVE_GRACE_S, "args": args})
+                self.log("resolve_pending", observation_id=prior["observation_id"])
             else:
                 r = await self.call(
                     "record_observation",
-                    summary=(f"Something that was on the bench at ({x:.2f}, {y:.2f}) at the "
+                    summary=(f"Something that was on the bench at ({_num(x)}, {_num(y)}) at the "
                              f"reference capture is gone; no registered object was there."),
-                    category="object_missing", location={"frame": "world", "x": x, "y": y, "z": z},
+                    category="object_missing", location=location,
                     first_seen_wall_ns=first_seen, evidence_look_ids=look_ids,
                     evidence_monitor_ids=[mid], identity=None, confidence="medium",
                     requirement_impact="none", status="new",
                 )
                 self.observations += 1
-                self.log("observation_new", kind=kind, result=r)
+                self.log("observation_new", fire_kind=kind, result=r)
         elif kind == "object_moved":
             oid = detail.get("object_id")
-            r = await self.call(
-                "record_observation",
-                summary=(f"Registered object {oid} moved {detail.get('delta_m')} m from "
-                         f"({detail.get('from_x')}, {detail.get('from_y')}) to ({x}, {y}) while "
-                         f"the gripper was not holding it and the TCP was far from it: an "
-                         f"external displacement, not a robot action."),
-                category="object_moved", location={"frame": "world", "x": x, "y": y, "z": z},
-                first_seen_wall_ns=first_seen, evidence_look_ids=look_ids,
-                evidence_monitor_ids=[mid], identity=oid, confidence="high",
-                requirement_impact="unknown",
-                impact_detail="A governed part moved by an external cause; conformance is judged separately.",
-                status="new",
-            )
-            self.observations += 1
-            self.log("observation_new", kind=kind, result=r)
+            summary = (f"Registered object {oid} moved {detail.get('delta_m')} m from "
+                       f"({detail.get('from_x')}, {detail.get('from_y')}) to ({_num(x)}, {_num(y)}) "
+                       f"while the gripper was not holding it and the TCP was far from it: an "
+                       f"external displacement, not a robot action.")
+            prior = self._recent_object(oid)
+            common = dict(category="object_moved", location=location, evidence_look_ids=look_ids,
+                          evidence_monitor_ids=[mid], identity=oid, confidence="high",
+                          requirement_impact="unknown",
+                          impact_detail="A governed part moved by an external cause; conformance is judged separately.")
+            if prior is not None:
+                r = await self.call("record_observation", summary=summary + " (continued motion)",
+                                    first_seen_wall_ns=prior["first_seen"], status="update",
+                                    observation_id=prior["observation_id"], **common)
+                prior.update(x=x, y=y, t=time.monotonic())
+                self.log("observation_update", fire_kind=kind, observation_id=prior["observation_id"], ok=r.get("ok"))
+            else:
+                r = await self.call("record_observation", summary=summary,
+                                    first_seen_wall_ns=first_seen, status="new", **common)
+                self.observations += 1
+                obs_id = r.get("observation_id")
+                if obs_id:
+                    self.recent_moves[oid] = {"observation_id": obs_id, "first_seen": first_seen,
+                                              "x": x, "y": y, "t": time.monotonic()}
+                self.log("observation_new", fire_kind=kind, result=r)
         else:  # new_static / moving: an unlisted body in the workspace
-            h = detail.get("height_m")
-            side = detail.get("side_m")
+            h = _finite(detail.get("height_m"))
+            side = _finite(detail.get("side_m"))
             moving = kind == "moving"
             identity = (f"unidentified {'moving ' if moving else ''}object, about "
-                        f"{side:.2f} m across and {h:.2f} m tall" if isinstance(h, (int, float))
+                        f"{_num(side)} m across and {_num(h)} m tall" if h is not None
                         else "unidentified object")
-            r = await self.call(
-                "record_observation",
-                summary=(f"An object not on any listing {'entered the workspace and is moving' if moving else 'appeared on the bench'} "
-                         f"at world ({x:.2f}, {y:.2f}); depth shows it {h:.2f} m above the bench, "
-                         f"about {side:.2f} m across. No registered object is at that position."),
-                category="unlisted_object", location={"frame": "world", "x": x, "y": y, "z": z},
-                first_seen_wall_ns=first_seen, evidence_look_ids=look_ids,
-                evidence_monitor_ids=[mid], identity=identity,
-                confidence="high" if not moving else "medium",
-                requirement_impact="none", status="new",
-            )
-            self.observations += 1
-            oid = r.get("observation_id") or (r.get("observation") or {}).get("observation_id")
-            if oid and isinstance(x, (int, float)):
-                self.open_obs.append({"observation_id": oid, "x": x, "y": y, "kind": kind,
-                                      "category": "unlisted_object", "identity": identity,
-                                      "first_seen": first_seen})
-            self.log("observation_new", kind=kind, result=r)
+            summary = (f"An object not on any listing {'entered the workspace and is moving' if moving else 'appeared on the bench'} "
+                       f"at world ({_num(x)}, {_num(y)}); depth shows it {_num(h)} m above the bench, "
+                       f"about {_num(side)} m across. No registered object is at that position.")
+            common = dict(category="unlisted_object", location=location, evidence_look_ids=look_ids,
+                          evidence_monitor_ids=[mid], identity=identity,
+                          confidence="high" if not moving else "medium", requirement_impact="none")
+            prior = self._nearest_open(x, y, radius=SAME_OBJECT_RADIUS_M, h=h)
+            if prior is None and x is not None:
+                for pend in self.pending_resolve:   # a moving body seen again: same body
+                    o = pend["obs"]
+                    if (math.hypot(o["x"] - x, o["y"] - y) < MOVING_MATCH_RADIUS_M
+                            and (h is None or o.get("h") is None or abs(h - o["h"]) <= SAME_OBJECT_HEIGHT_M)):
+                        prior = o
+                        break
+            if prior is not None:
+                self.pending_resolve = [p for p in self.pending_resolve if p["obs"] is not prior]
+                # the same body seen again (moving then at rest, or still moving): one record
+                r = await self.call("record_observation", summary=summary + " (same object, updated position)",
+                                    first_seen_wall_ns=prior["first_seen"], status="update",
+                                    observation_id=prior["observation_id"], **common)
+                prior.update(x=x, y=y, kind=kind, identity=identity, h=h if h is not None else prior.get("h"))
+                self.log("observation_update", fire_kind=kind, observation_id=prior["observation_id"], ok=r.get("ok"))
+            else:
+                r = await self.call("record_observation", summary=summary,
+                                    first_seen_wall_ns=first_seen, status="new", **common)
+                self.observations += 1
+                obs_id = r.get("observation_id")
+                if obs_id and x is not None:
+                    self.open_obs.append({"observation_id": obs_id, "x": x, "y": y, "kind": kind,
+                                          "category": "unlisted_object", "identity": identity,
+                                          "first_seen": first_seen, "h": h})
+                self.log("observation_new", fire_kind=kind, result=r)
 
-        if rid is not None:
-            await self.arm(rid)
+    def _recent_object(self, oid: str | None) -> dict[str, Any] | None:
+        rec = self.recent_moves.get(oid) if oid else None
+        if rec and time.monotonic() - rec["t"] < SAME_EVENT_WINDOW_S:
+            return rec
+        return None
 
-    def _nearest_open(self, x: Any, y: Any) -> dict[str, Any] | None:
-        if not isinstance(x, (int, float)):
+    def _nearest_open(self, x: Any, y: Any, radius: float = MATCH_RADIUS_M,
+                      h: float | None = None) -> dict[str, Any] | None:
+        """The open observation this fire most plausibly belongs to: within
+        radius (a body last seen moving may be anywhere within its reach), and
+        of similar height when both heights are known -- a 4.5 cm cube never
+        absorbs a 19 cm forearm passing 27 cm from it (live 2026-10-25)."""
+        if x is None or y is None:
             return None
-        best, best_d = None, MATCH_RADIUS_M
+        best, best_d = None, None
         for o in self.open_obs:
+            limit = max(radius, MOVING_MATCH_RADIUS_M) if o.get("kind") == "moving" else radius
+            oh = o.get("h")
+            if h is not None and oh is not None and abs(h - oh) > SAME_OBJECT_HEIGHT_M:
+                continue
             d = math.hypot(o["x"] - x, o["y"] - y)
-            if d < best_d:
+            if d < limit and (best_d is None or d < best_d):
                 best, best_d = o, d
         return best
 
@@ -258,6 +343,9 @@ class ReferenceWatchdog:
         payload = ((ev.get("envelope") or {}).get("payload")) or {}
         if et == "begin_step":
             step = payload.get("step_id")
+            if getattr(self, "scene_watch_pending", False):
+                self.scene_watch_pending = False
+                await self.arm("ref_scene_watch")
             r = await self.call("signal_ready", scope="step", step_id=step)
             self.log("step_released", step_id=step, objects=payload.get("object_ids"), ok=r.get("ok"))
         elif et == "phase":
@@ -277,10 +365,30 @@ class ReferenceWatchdog:
             return True
         return False
 
+    async def _flush_pending(self) -> None:
+        now = time.monotonic()
+        for pend in [p for p in self.pending_resolve if p["due"] <= now]:
+            self.pending_resolve.remove(pend)
+            r = await self.call("record_observation", **pend["args"])
+            if pend["obs"] in self.open_obs:
+                self.open_obs.remove(pend["obs"])
+            self.log("observation_resolved", observation_id=pend["obs"]["observation_id"], result=r)
+        for rid in [k for k, due in self.pending_arm.items() if due <= now]:
+            del self.pending_arm[rid]
+            await self.arm(rid)
+
+    def _next_wait(self) -> float:
+        dues = [p["due"] for p in self.pending_resolve] + list(self.pending_arm.values())
+        if not dues:
+            return WAIT_TIMEOUT_SEC
+        return max(0.2, min(WAIT_TIMEOUT_SEC, min(dues) - time.monotonic()))
+
     async def loop(self) -> None:
         timeouts = 0
         while True:
-            r = await self.call("wait_for_event", timeout_sec=WAIT_TIMEOUT_SEC)
+            await self._flush_pending()
+            short = self._next_wait()
+            r = await self.call("wait_for_event", timeout_sec=short)
             wake = r.get("wake")
             if wake == "monitor_fire":
                 for fire in [r.get("fire")] + list(r.get("additional_fires") or []):
@@ -289,6 +397,8 @@ class ReferenceWatchdog:
                 timeouts = 0
                 continue
             if wake == "timeout" or wake is None:
+                if short < WAIT_TIMEOUT_SEC:
+                    continue  # a short wait for pending bookkeeping, not an executor silence
                 timeouts += 1
                 self.log("wait_timeout", consecutive=timeouts, waited_sec=r.get("waited_sec"),
                          finalized=r.get("finalized"))
@@ -301,6 +411,7 @@ class ReferenceWatchdog:
                 if ev and await self.on_event(ev):
                     ended = True
             if ended:
+                await self._flush_pending()
                 return
 
 

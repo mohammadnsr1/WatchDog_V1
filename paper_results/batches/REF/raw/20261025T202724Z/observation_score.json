@@ -1,0 +1,101 @@
+{
+  "run_id": "20261025T202724Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-25T20:47:34.849493+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_5ccd59",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-25T21:16:00.807269+00:00"
+    }
+  ],
+  "conformance_episodes": [
+    {
+      "name": "u_orange",
+      "kind": "external_displacement",
+      "t0_iso": "2026-10-25T20:41:50.120657+00:00",
+      "acknowledged_by": "obs-003-9b6a896c"
+    }
+  ],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 10,
+    "n_observation_monitors_armed": 2,
+    "n_observation_fires": 9,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 6,
+    "first_look_iso": "2026-10-25T20:27:44.023888+00:00",
+    "look_reasons": [
+      "Reference baseline of the workspace before the first step, for later comparison.",
+      "reference monitor ref_scene_watch fired: new_static at world (0.07, -0.37, 0.06)",
+      "reference monitor ref_scene_watch fired: new_static at world (0.09, -0.37, 0.05)",
+      "reference monitor ref_scene_watch fired: moving at world (-0.43, -0.10, 0.20); c",
+      "reference monitor ref_scene_watch fired: moving at world (0.05, -0.10, 0.20); co",
+      "reference monitor ref_scene_watch fired: new_static at world (0.28, -0.09, 0.20)",
+      "reference monitor ref_scene_watch fired: moving at world (0.05, -0.11, 0.20); co",
+      "reference monitor ref_scene_watch fired: removed at world (0.23, -0.10, 0.20); c",
+      "reference monitor ref_scene_watch fired: removed at world (-0.41, -0.10, 0.20); ",
+      "reference monitor ref_undisturbed_watch fired: object_moved at world (0.43, -0.2"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_5ccd59",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-25T20:31:44.690337+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 2.31,
+      "detected": true,
+      "observation_id": "obs-001-91cd32bd",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 2.44,
+      "identity": "unidentified object, about 0.04 m across and 0.04 m tall",
+      "summary": "An object not on any listing appeared on the bench at world (0.07, -0.37); depth shows it 0.04 m above the bench, about 0.04 m across. No registered object is at that position.",
+      "confidence": "high",
+      "first_seen_wall_ns": 1792960305482907591,
+      "appearance_reported": "accurate"
+    },
+    {
+      "name": "visitor_hand_c8375d",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-25T20:35:12.447239+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.15,
+      "detected": true,
+      "observation_id": "obs-002-302b3cda",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 0.26,
+      "identity": "unidentified moving object, about 0.12 m across and 0.19 m tall",
+      "summary": "An object not on any listing entered the workspace and is moving at world (-0.43, -0.10); depth shows it 0.19 m above the bench, about 0.12 m across. No registered object is at that position.",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1792960512087116403,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 1.35,
+  "detection_latency_p95_s": 2.44,
+  "appearance_reported_accurate": 2,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

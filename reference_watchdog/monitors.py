@@ -15,10 +15,31 @@ the array lane), no while loops, no underscore names, top level holds only
 
 SCENE_WATCH (array lane, 1 Hz, purpose="observation")
     Depth-based. Height above the bench plane is computed per pixel from the
-    camera intrinsics/extrinsics and the known bench top. The robot is masked
-    as the high region CONNECTED to the TCP's projected pixel (plus a disc
-    around the TCP for the gripper and a carried part); a visitor's forearm
-    or body is high too but not connected to the arm, so it is not masked.
+    camera intrinsics/extrinsics and the known bench top. Where no reference
+    exists yet, only a surface ABOVE the plane can be a candidate: below it
+    is the floor past the bench edge or a hole, never a removed object (live
+    2026-10-23: the floor corner uncovered by the arm fired as "removed").
+    A static blob uncovered from under the robot's mask that lies within
+    REVEAL_GAP cells of any high structure (robot, base, gantry) is the
+    robot's own and is folded in silently (live 2026-10-23: the base flange
+    uncovered by the move to home fired as "new_static"); an uncovered
+    object clear of the robot is still reported. The robot is masked
+    GEOMETRICALLY: every UR link origin (base_link .. wrist_3_link, tcp) is
+    read from TF through ctx.transform and projected into the image, and the
+    mask is the union of tubes along consecutive links. The radius is per
+    LINK POINT (RAD: 0.16 base, 0.20 shoulder, 0.22 elbow housing, 0.15
+    wrists, 0.16 tcp disc for the gripper and a carried part) and is
+    interpolated along each segment and scaled by the depth at the closest
+    point, never by the segment's nearest depth (live 2026-10-24: the
+    near-vertical upper arm, sized at the elbow's depth, hid the cube spot
+    30 cells from the shoulder for the whole run). A
+    visitor's forearm or body is masked only where it overlaps the arm's
+    actual silhouette. (The first live run, 2026-10-24, masked "the high
+    region connected to the TCP"; with the gripper down at bench level the
+    connection broke, the whole arm fired as a 30-60 cm object and was
+    folded into the reference, which then produced garbage all run.) Motion
+    is evaluated MOVE_GAP cells further from the arm than static change,
+    since the arm's silhouette edge is where motion artefacts live.
     The reference frame is captured immediately with the arm region unknown
     (NaN) and filled in as the arm reveals the bench. Three fire kinds:
       new_static  -- unexplained rise over the reference, static for PERSIST
@@ -50,18 +71,25 @@ BENCH_TOP_Z = 0.01  # inject_intruder.BENCH_TOP_Z: bench surface in world z
 
 SCENE_WATCH_SOURCE = r'''
 STEP = 4
-BENCH_Z = 0.01
-H_MIN = 0.015
-ARM_H = 0.10
-R_TCP_M = 0.16
-PERSIST = 3
-MOVE_PERSIST = 2
-MIN_CELLS = 6
-MIN_MOVE_CELLS = 30
-EXPLAIN_R = 0.10
-GROW_ITERS = 80
+BZ = 0.01
+HMIN = 0.015
+ARMH = 0.10
+PER = 3
+MPER = 2
+MINC = 6
+MCELLS = 30
+EXR = 0.10
+ITERS = 80
+RGAP = 6
+RAD = [0.16, 0.20, 0.20, 0.22, 0.15, 0.15, 0.14, 0.16]
+TALL_H = 0.25
+TGAP = 10
+ZY = -0.60
+MOVE_GAP = 3
+LINKS = ["base_link", "shoulder_link", "upper_arm_link", "forearm_link",
+         "wrist_1_link", "wrist_2_link", "wrist_3_link", "tcp"]
 
-def rot_from_quat(q):
+def quat_rot(q):
     qx, qy, qz, qw = q[0], q[1], q[2], q[3]
     return np.array([
         [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
@@ -77,9 +105,15 @@ def grow(seed, within):
     g[:, :-1] |= seed[:, 1:]
     return g & within
 
+def dilate(m, n):
+    ones = np.ones(m.shape, dtype=bool)
+    for i in range(n):
+        m = grow(m, ones)
+    return m
+
 def connected(seed, within):
     comp = seed & within
-    for i in range(GROW_ITERS):
+    for i in range(ITERS):
         nxt = grow(comp, within)
         if nxt.sum() == comp.sum():
             return comp
@@ -90,49 +124,60 @@ def setup(ctx, cam, shape):
     k = cam["K"]
     fx, fy, cx, cy = k[0][0], k[1][1], k[0][2], k[1][2]
     t = np.array(cam["world_T_camera"]["translation"], dtype=float)
-    rot = rot_from_quat(cam["world_T_camera"]["rotation_xyzw"])
+    rot = quat_rot(cam["world_T_camera"]["rotation_xyzw"])
     vs, us = np.mgrid[0:shape[0], 0:shape[1]]
     u = us * STEP + (STEP - 1) / 2.0
     v = vs * STEP + (STEP - 1) / 2.0
     dirs = np.stack([(u - cx) / fx, (v - cy) / fy, np.ones(u.shape)], axis=-1) @ rot.T
     dz = dirs[..., 2]
     dz = np.where(np.abs(dz) < 1e-6, -1e-6, dz)
-    ctx.state["bench_depth"] = ((BENCH_Z - t[2]) / dz).astype(np.float32)
-    ctx.state["dz"] = (-dz).astype(np.float32)
-    ctx.state["fx"], ctx.state["fy"], ctx.state["cx"], ctx.state["cy"] = fx, fy, cx, cy
-    ctx.state["rot_t"] = rot.T.copy()
-    ctx.state["t"] = t
-    ctx.state["px_per_m"] = fx / max(float(abs(t[2] - BENCH_Z)), 0.5)
+    st = ctx.state
+    st["bdepth"] = ((BZ - t[2]) / dz).astype(np.float32)
+    st["dz"] = (-dz).astype(np.float32)
+    st["fx"], st["fy"], st["cx"], st["cy"] = fx, fy, cx, cy
+    st["rot_t"] = rot.T.copy()
+    st["t"] = t
+    st["ppm"] = fx / max(float(abs(t[2] - BZ)), 0.5)
+    st["grid"] = (vs.astype(float), us.astype(float))
 
-def world_to_cell(ctx, p):
+def cpt(ctx, p):
     st = ctx.state
     rel = np.array([p["x"], p["y"], p["z"]], dtype=float) - st["t"]
     c = st["rot_t"] @ rel
     if c[2] <= 0.05:
         return None
-    u = st["fx"] * c[0] / c[2] + st["cx"]
-    v = st["fy"] * c[1] / c[2] + st["cy"]
-    return (v / STEP, u / STEP)
+    return ((st["fy"] * c[1] / c[2] + st["cy"]) / STEP,
+            (st["fx"] * c[0] / c[2] + st["cx"]) / STEP, c[2])
 
-def robot_mask(ctx, height, valid):
-    high = valid & (height > ARM_H)
-    tcp = ctx.frame_pose("tcp")
-    disc = np.zeros(height.shape, dtype=bool)
-    if tcp is not None:
-        cell = world_to_cell(ctx, tcp["pose"]["position"])
-        if cell is not None:
-            vs, us = np.mgrid[0:height.shape[0], 0:height.shape[1]]
-            r = ctx.state["px_per_m"] * R_TCP_M / STEP
-            disc = ((vs - cell[0]) ** 2 + (us - cell[1]) ** 2) <= r * r
-            arm = connected(disc & high, high) | disc
-            arm[0:2, :] |= high[0:2, :]
-            return grow(grow(grow(arm, np.ones(arm.shape, dtype=bool)),
-                             np.ones(arm.shape, dtype=bool)),
-                        np.ones(arm.shape, dtype=bool))
-    return grow(grow(high, np.ones(high.shape, dtype=bool)),
-                np.ones(high.shape, dtype=bool))
+def tube(gv, gu, a, b, ra, rb, k):
+    dv, du = b[0] - a[0], b[1] - a[1]
+    l2 = dv * dv + du * du
+    s = np.zeros(gv.shape) if l2 < 1e-9 else np.clip(((gv - a[0]) * dv + (gu - a[1]) * du) / l2, 0.0, 1.0)
+    r = k * (ra + s * (rb - ra)) / (a[2] + s * (b[2] - a[2]))
+    return (gv - (a[0] + s * dv)) ** 2 + (gu - (a[1] + s * du)) ** 2 <= r * r
 
-def track_objects(ctx):
+def rmask(ctx, hgt, valid):
+    st = ctx.state
+    gv, gu = st["grid"]
+    pts = []
+    for name in LINKS:
+        try:
+            pts.append(cpt(ctx, ctx.transform("world", name)["translation"]))
+        except:
+            pts.append(None)
+    m = np.zeros(hgt.shape, dtype=bool)
+    k = st["fx"] / STEP
+    for i in range(len(RAD) - 1):
+        a, b = pts[i], pts[i + 1]
+        if a is not None and b is not None:
+            m |= tube(gv, gu, a, b, RAD[i], RAD[i + 1], k)
+    if pts[-1] is not None:
+        m |= tube(gv, gu, pts[-1], pts[-1], RAD[-1], RAD[-1], k)
+    if not m.any():
+        return dilate(valid & (hgt > ARMH), 2)
+    return dilate(m, 3) | (valid & (hgt > TALL_H) & dilate(m, TGAP))
+
+def track(ctx):
     seen = ctx.state.setdefault("seen", {})
     for oid in ctx.object_ids():
         p = ctx.object_pose(oid)
@@ -150,26 +195,29 @@ def explained(ctx, world, kind):
         if kind != "removed":
             spots = spots[-1:]
         for xy in spots:
-            if math.hypot(xy[0] - world["x"], xy[1] - world["y"]) < EXPLAIN_R:
+            if math.hypot(xy[0] - world["x"], xy[1] - world["y"]) < EXR:
                 return oid
     return None
 
-def blob_report(ctx, kind, blob, d, ref, since_ns):
+def rep(ctx, kind, blob, d, ref, since_ns, uncov):
     st = ctx.state
     vs, us = np.nonzero(blob)
-    src = d if kind != "removed" else ref
+    src = d
+    if kind == "removed" and np.isfinite(ref[blob]).any():
+        src = ref
     z = float(np.nanmedian(src[blob]))
+    if not math.isfinite(z):
+        z = float(np.nanmedian(st["bdepth"][blob]))
     u = float(us.mean()) * STEP + (STEP - 1) / 2.0
     v = float(vs.mean()) * STEP + (STEP - 1) / 2.0
     w = ctx.deproject(u, v, z)
-    h = float(np.nanmedian(((st["bench_depth"] - src) * st["dz"])[blob]))
+    h = float(np.nanmedian(((st["bdepth"] - src) * st["dz"])[blob]))
     area_px = int(blob.sum()) * STEP * STEP
-    side_m = math.sqrt(area_px) / st["px_per_m"]
-    detail = ('{"kind":"' + kind + '","u":' + str(round(u, 1)) + ',"v":' + str(round(v, 1))
-              + ',"x":' + str(round(w["x"], 3)) + ',"y":' + str(round(w["y"], 3))
-              + ',"z":' + str(round(w["z"], 3)) + ',"height_m":' + str(round(h, 3))
-              + ',"side_m":' + str(round(side_m, 3)) + ',"area_px":' + str(area_px)
-              + ',"since_wall_ns":' + str(int(since_ns)) + '}')
+    fields = [("u", round(u, 1)), ("v", round(v, 1)), ("x", round(w["x"], 3)),
+              ("y", round(w["y"], 3)), ("z", round(w["z"], 3)), ("height_m", round(h, 3)),
+              ("side_m", round(math.sqrt(area_px) / st["ppm"], 3)),
+              ("since_wall_ns", int(since_ns)), ("uncov", int(uncov))]
+    detail = '{"kind":"' + kind + '"' + "".join(',"' + k + '":' + str(x) for k, x in fields) + "}"
     return w, {"value": float(area_px), "detail": detail}
 
 def check(ctx):
@@ -180,63 +228,67 @@ def check(ctx):
     d = d[::STEP, ::STEP]
     st = ctx.state
     now = ctx.now_wall_ns()
-    if "bench_depth" not in st or st["bench_depth"].shape != d.shape:
+    if "bdepth" not in st or st["bdepth"].shape != d.shape:
         setup(ctx, cam, d.shape)
         st["ref"] = np.full(d.shape, np.nan, dtype=np.float32)
         st["age"] = np.zeros(d.shape, dtype=np.int16)
         st["stable"] = np.zeros(d.shape, dtype=np.int16)
         st["since"] = np.zeros(d.shape, dtype=np.int64)
-        st["move_ticks"] = 0
-        st["move_since"] = 0
+        st["mticks"] = 0
+        st["msince"] = 0
         st["prev"] = d.copy()
-    track_objects(ctx)
+    track(ctx)
     valid = np.isfinite(d)
-    height = (st["bench_depth"] - d) * st["dz"]
-    mask = robot_mask(ctx, np.where(valid, height, 0.0), valid)
+    hgt = (st["bdepth"] - d) * st["dz"]
+    mask = rmask(ctx, np.where(valid, hgt, 0.0), valid)
     ref = st["ref"]
     known = np.isfinite(ref)
-    rise = np.where(known, ref - d, np.where(valid, height, 0.0))
+    rise = np.where(known, ref - d, np.where(valid, np.maximum(hgt, 0.0), 0.0))
     if "init" not in st:
         st["init"] = True
         ref[valid & ~mask] = d[valid & ~mask]
         st["prev"] = d.copy()
         return None
     prev = st["prev"]
-    still = valid & np.isfinite(prev) & (np.abs(d - prev) < H_MIN)
+    still = valid & np.isfinite(prev) & (np.abs(d - prev) < HMIN)
     st["stable"] = np.where(still, st["stable"] + 1, 0)
     st["prev"] = d.copy()
-    changed = valid & ~mask & (np.abs(rise) > H_MIN)
-    fill = valid & ~mask & ~known & (st["stable"] >= PERSIST) & ~changed
+    changed = valid & ~mask & (np.abs(rise) > HMIN)
+    fill = valid & ~mask & ~known & (st["stable"] >= PER) & ~changed
     ref[fill] = d[fill]
-    moving = valid & ~mask & ~still & (np.abs(rise) > H_MIN)
+    moving = valid & ~dilate(mask, MOVE_GAP) & ~still & (rise > HMIN)
     st["age"] = np.where(changed & ~mask, st["age"] + 1, 0)
     st["since"] = np.where(st["age"] == 1, now, st["since"])
-    hit = st["age"] >= PERSIST
-    if hit.sum() >= MIN_CELLS:
+    hit = st["age"] >= PER
+    if hit.sum() >= MINC:
         flat = np.argmax(np.where(hit, st["age"], 0))
         seed = np.zeros(hit.shape, dtype=bool)
         seed[flat // hit.shape[1], flat % hit.shape[1]] = True
         blob = connected(seed, hit)
-        if blob.sum() >= MIN_CELLS:
+        if blob.sum() >= MINC:
             kind = "new_static" if float(np.nanmedian(rise[blob])) > 0 else "removed"
-            w, report = blob_report(ctx, kind, blob, d, ref, st["since"][blob].min())
+            uncov = float(np.mean(~known[blob])) > 0.5
+            w, report = rep(ctx, kind, blob, d, ref, st["since"][blob].min(), uncov)
             ref[blob] = d[blob]
             st["age"][blob] = 0
+            struct = dilate(mask | (valid & (hgt > ARMH)), RGAP)
+            if uncov and (bool((struct & blob).any()) or w["y"] < ZY):
+                return None
             if explained(ctx, w, kind) is None:
                 return report
         else:
             st["age"][blob] = 0
-    if moving.sum() >= MIN_MOVE_CELLS:
-        st["move_ticks"] += 1
-        if st["move_ticks"] == 1:
-            st["move_since"] = now
-        if st["move_ticks"] >= MOVE_PERSIST:
-            w, report = blob_report(ctx, "moving", moving, d, ref, st["move_since"])
-            st["move_ticks"] = 0
+    if moving.sum() >= MCELLS:
+        st["mticks"] += 1
+        if st["mticks"] == 1:
+            st["msince"] = now
+        if st["mticks"] >= MPER:
+            w, report = rep(ctx, "moving", moving, d, ref, st["msince"], False)
+            st["mticks"] = 0
             if explained(ctx, w, "moving") is None:
                 return report
     else:
-        st["move_ticks"] = 0
+        st["mticks"] = 0
     return None
 '''
 
@@ -251,6 +303,8 @@ def check(ctx):
     tcp_pos = tcp["pose"]["position"] if tcp is not None else None
     held = ctx.held_object()
     for oid in ctx.object_ids():
+        if oid.endswith("_placement") or oid.endswith("_reorient") or oid.endswith("_hole"):
+            continue
         p = ctx.object_pose(oid)
         if p is None:
             continue
@@ -294,7 +348,7 @@ def scene_watch_spec() -> dict[str, Any]:
         "clause": None,
         "object_id": None,
         "threshold_param": "min_rise_m",
-        "rate_hz": 1.0,
+        "rate_hz": 2.0,
         "purpose": "observation",
         "threshold_rationale": (
             "0.015 m is above the simulated depth quantisation and below the "
