@@ -11,22 +11,22 @@ registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8b
                                 # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
                                 # Same CLEAN registry as S1-S4 (verified 2026-10-25). Re-verify
                                 # src == install before run 01.
-claude_cli_version: TODO        # claude --version at run 01 (S4 ran 2.1.301-2.1.310)
+claude_cli_version: 2.1.310 (Claude Code)   # verified 2026-10-25; re-check at run 01 (S4 ran 2.1.301-2.1.310)
 
 assembly: fmb_assembly_2        # FROZEN: every S1-S4 run used this set
 scenarios: [S4]
 
 per_role:
   executor:
-    model: TODO_OPUS_FULL_ID
+    model: claude-opus-5-5
     effort: medium
   watchdog:
     model: n/a
     effort: n/a
-# MODEL ID: the exact id the CLI resolves for Opus must be written above before
-# run 01 (watchdog.settings.json / executor.settings.json accept an alias such
-# as 'opus' or a full id; the launcher echoes the resolved value -- record THAT
-# string here and in each session's agent_config_*.json). Do not write 'opus'.
+# MODEL ID: claude-opus-5-5 is what the CLI resolved for the 'opus' alias on
+# 2026-10-25 (claude -p --model opus --output-format json, modelUsage key).
+# The settings file carries the full id, never the alias, so the launch echo
+# and each session's agent_config_*.json record exactly this string.
 
 # ---- batch design (decided 2026-10-23, before run 01) ------------------------
 # S4 (executor self-monitoring, NO watchdog session) with the EXECUTOR on Opus at MEDIUM effort.
