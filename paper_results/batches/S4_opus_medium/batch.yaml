@@ -11,7 +11,7 @@ registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8b
                                 # sha256sum ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml
                                 # Same CLEAN registry as S1-S4 (verified 2026-10-25). Re-verify
                                 # src == install before run 01.
-claude_cli_version: 2.1.310 (Claude Code)   # verified 2026-10-25; re-check at run 01 (S4 ran 2.1.301-2.1.310)
+claude_cli_version: 2.1.310 (Claude Code)   # verified 2026-10-26; re-check at run 01 (S4 ran 2.1.301-2.1.310)
 
 assembly: fmb_assembly_2        # FROZEN: every S1-S4 run used this set
 scenarios: [S4]
@@ -30,10 +30,21 @@ per_role:
 
 # ---- batch design (decided 2026-10-23, before run 01) ------------------------
 # S4 (executor self-monitoring, NO watchdog session) with the EXECUTOR on Opus at MEDIUM effort.
-# Everything else is FROZEN to the S4 protocol: fmb_assembly_2, the pinned
-# benign cube (place_object at (0.08,-0.38,None), start="at_step=pick_u_orange",
-# pasted unchanged from S2/batch.yaml notes), same scorer code, same prompts,
-# same classes. Only the model and effort named above change.
+# Everything else is FROZEN to the S4 protocol: fmb_assembly_2, same scorer code,
+# same prompts, same classes. Only the executor's model and effort change vs S4.
+# INJECTIONS, every run, as S3_opus_medium (pasted unchanged from
+# isaac/script_editor/s1_c1_inject.py):
+#   place_object(position_xyz_world=(0.08, -0.38, None),
+#                label="foreign cube on free bench area",
+#                expected_impact="benign", start="at_step=pick_u_orange")
+#   visit(shape="hand", dwell_position=(0.45, -0.10), dwell_s=4.0, speed_mps=0.3,
+#         label="forearm over the work area", expected_impact="benign",
+#         start="at_step=place_line_green")
+# The S4 (Sonnet) batch injected the cube only; the cube is placed first, so cube
+# detection stays comparable with it, and both events compare with S3_opus_medium.
+# STAGE: runs with the inverted_u_brown TF/mesh offset FIXED (operator, 2026-10-26);
+# the S4 (Sonnet) batch ran with it. inverted_u_brown never moves, so conformance is
+# unaffected.
 # Target: 5 scorable runs (a run that aborts before pick_u_orange has no cube and
 # is not observation-scorable; launch 6-7 to get 5). Plan Class 1; a natural
 # fault makes a run Class 2 and it still counts, as in S1-S4.

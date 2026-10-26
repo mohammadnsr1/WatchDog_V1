@@ -83,6 +83,38 @@ sessions:
     run_task_sha256: null
     notes: "fmb2_s3om_c2_run01. Planned C1; NATURAL faults: u_brown mis-seat at place_u_brown (13.6 mm / 26.4 deg, re-seated), u_orange slip 35.8 mm at place_approach_u_orange and mis-seat 53.9 deg at place_u_orange (re-seated), base1 pushed 21.3 mm at reseat_pick_u_orange (fired), and the place_inverted_u_yellow collision (base1 shoved 44.5 mm, u_brown/u_orange/line_green carried 45-67 mm, inverted_u_yellow never seated). Aborted. Operator confirmed every fire and finding true. Scorer: fault TP 8 / FN 1, verdict and recovered correct, coverage 149/152, grip 8/8, param accuracy 22/22, no false alarms. The FN place_inverted_u_yellow:base1 is attribution: the agent armed its base1 re-arm monitor with object_id u_orange, so the base1 fire (0.0205 at 01:54:59, detail 'base1 displaced') is credited to u_orange, and its verdict judged base1 0.0289 only in clause text. PROPOSED corrected/ edit at Phase 6: TP 9, FN 0, recall 1.0, TP by fire. Observation: BOTH events detected. Edge-strip depth monitor fired on the hand 0.54 s after it came into view; the look it triggered showed the hand mid-dwell, and the watchdog recorded the hand (obs-001 'tan slab', 78.8 s; obs-003 'crossed the right edge', 87.2 s) and the cube (obs-002, 549.1 s). The scorer matched by category and time and SWAPPED them (cube 545.76 via obs-001, hand 82.11 via obs-002), credited the hand's edge fire to the cube as fire latency 467.5 s, and counted obs-003 (true) as obs FP. PROPOSED corrected/ edits at Phase 6: obs_FP 1 -> 0, detection_latency_p95_s 545.76 -> 549.1 (median unchanged at 313.9)."
 
+  - session_id: 20261026T193945Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3om_c1_run01. Clean. git 02cef47, last run WITH the inverted_u_brown TF/mesh offset. Coverage 116/116, param accuracy 13/13, no clause fires. Cube 40 s (routine look, first_seen accurate). Hand caught on entry by cam_unregistered_brown, an ROI monitor Opus placed around the brown part it had reported (the hand entered the image through that ROI); obs-003 'transient object' at 65 s, accurate. obs-001 (the brown part, before any injection) IGNORED by operator decision: a true sighting caused by the stage offset, fixed after this run (corrected/: obs_FP 0)."
+  - session_id: 20261026T200219Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3om_c1_run02. Clean. git d475fbf, FIRST run with the stage offset fixed. Coverage 116/116, param accuracy 18/18. Two clamp monitors died with authored_timeout on the 20 ms scalar budget (26.9 / 21.7 ms), leaving inverted_u_yellow's hold without an effort monitor for ~61 s until re-armed; first such timeouts, likely CPU contention from the depth-array monitors. Cube 68 s (routine look, accurate). Hand caught on entry by scene_watch_1; obs-002 at 38 s, accurate. 1 monitor false fire (scene_watch_2 on the arm reaching for inverted_u_yellow), correctly counted."
+  - session_id: 20261026T203312Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3om_c1_run03. Clean under the study's bounds although inverted_u_yellow's descent struck the seated line_green at 20:44:32: peak 43.1 deg rotation (0.85 s above 10 deg) and 14.7 mm (< 0.02), settled to 3.0 deg / 6.0 mm, seated 7.2 mm / 3.1 deg. Disturbance is position-bounded only, so no violation (as fmb2_s3c1_run01); the 43 deg transient is unbounded by the registry, not missed. Coverage 116/116, param accuracy 14/14. Cube 206 s (look; first_seen not accurate). Hand caught on entry by ws_depth_watch_r1; obs-002 at 43 s, accurate; obs-003 also the hand (corrected/: obs_FP 0). 1 monitor false fire (ws_depth_watch_r0 on the arm before any injection)."
+  - session_id: 20261026T205416Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3om_c1_run04. Clean. Coverage 116/116, param accuracy 19/19. workspace_watch_1..4: deprojects depth to world, masks a 0.30 m TCP disc from TF, excludes the rail strip, counts changes where current and reference surfaces are below 0.15 m. CUBE BY MONITOR: workspace_watch_3 fired 1 s after placement; obs-001 at 29.9 s, accurate (first agent run where a camera monitor found the cube). HAND MISSED: the visit ran, but the hand's top (~0.20 m) is above the 0.15 m band, and no look fell in the visit (scorer credited it via the cube update; corrected/: visitor FN). RULE REFINEMENT (operator, 2026-10-26): these monitors READ frame_pose (tcp) only to mask the arm, so the 2026-10-16 exemption-by-reads rule had classed them as clause monitors (raw: monitor_false_alarms 4, authored_FP 4). Reclassified as observation monitors in corrected/ (8 cells, CORRECTIONS.md); their fires are scored on the observation side only."
 # Excluded sessions (operator/infrastructure failures, replaced by a rerun).
 known_invalid:
   - session_id: 20261026T011838Z
