@@ -1,10 +1,11 @@
 # Batch provenance. See paper_results/README.md and docs/dev/BATCH_RUNBOOK.md.
 batch_id: S3_opus_low
-date_utc: TODO                  # UTC date of the batch's FIRST run (fill at run 01)
+date_utc: 2026-10-25            # UTC date of the batch's FIRST run (20261025T221254Z)
 purpose: scored                 # smoke | scored -- scored batches feed paper numbers
 
 # Provenance (fill BEFORE run 01; code must not change mid-batch)
-git_sha: TODO                   # git rev-parse HEAD, clean tree, before run 01.
+git_sha: a93c0c85b9ae9c5651b69ac3045c53a228434536
+                                # a93c0c8, committed 22:12:22 UTC, 32 s before run 01; tree clean.
                                 # Scorer and prompts must be byte-identical to the
                                 # S3 batch: diff against S3/batch.yaml's git_sha.
 registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
@@ -42,5 +43,74 @@ per_role:
 # Cell 1 of the Opus observation study: isolates the MODEL effect vs S3 (Sonnet-5 low).
 # Fisher exact vs S3's 0 of 22 detections: 2/5 -> p=0.03, 3/5 -> p=0.003; 1/5 is an anecdote.
 # Reference row (upper bound) for the observation table: paper_results/batches/REF.
+# DESIGN CHANGE (operator, 2026-10-25, from run 03 = 20261025T234229Z on): the hand
+# visit was ADDED to the injections -- visit(shape="hand", dwell_position=(0.45,-0.10),
+# dwell_s=4.0, speed_mps=0.3, start="at_step=place_line_green"). Runs 01, 02 and
+# c2_run01 are cube only. Cube detection stays comparable across all six runs (the
+# cube is placed first, at pick_u_orange); the hand has n=3 in this batch.
 
-# ---- sessions: []
+# ---- sessions: append one entry per run ------------------------------------
+# - session_id: 2026....T......Z
+#   scenario: S3
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2
+#   injection_scenarios: [place_object]
+#   run_registry_sha256: null   # null = batch registry_sha256. Class 4: the
+#                               # executor copy's sha (registry_provenance_executor.json)
+#   run_task_sha256: null       # null = committed task; variants: executor_task_sha256
+#   notes: ""
+sessions:
+  - session_id: 20261025T221254Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c1_run01. Clean (bag: sustained hold deviation <= 7.3 mm, placed parts <= 2.7 mm, effort under every limit). 7 arms, all clause, grouped by state: bystander+base1 set, four rolling inactive-part sets, ONE slip_all and ONE clamp_effort_all gated on held_object with per-part limits. Scorer coverage 106/116 with grip 2/8: both grouped monitors were armed with object_id u_brown, so the scorer credits them for u_brown only, but they were armed before the first grasp and never disarmed and follow ctx.held_object(), so they covered all four holds. PROPOSED corrected/ edit at Phase 6: grip 8/8, coverage 112/116. Cube REPORTED from the end-of-run look, 335 s after placement (obs TP; appearance time not accurate). 2 looks, no observation monitor."
+  - session_id: 20261025T225349Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c1_run02. Clean (bag: sustained hold deviation <= 16.1 mm, u_brown re-gripped inside place_u_brown, base1 drifted ~10 mm, fixture unfired, not labelled). 13 arms, all clause, per part; coverage 110/116, grip 8/8, param accuracy 13/13. Cube REPORTED 64 s after placement from a mid-run look (obs TP, appearance time accurate); strategy polling_by_look (4 looks). obs FP 1 = an object_moved observation on base1 describing its real ~11 mm drift (no ground truth); hand-review as correct (precedent fmb2_s3c2_run04)."
+  - session_id: 20261025T230709Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c2_run01. Planned C1; NATURAL line_green slip at place_line_green (21.8 mm, then 28.6 / 28.3 mm on two unannounced re-place holds), mis-seat 21.1 mm / 24.5 deg; the recovery ran with no begin_step, knocked u_brown out of its seat and shoved base1 29.7 mm carrying u_orange. Aborted. Watchdog: TP 3 by fire (line_green, u_brown, base1), recall 0.75, precision 1.0, final non_conformant (right), recovered false (right). FN place_line_green:u_orange is a scorer attribution gap: the watchdog judged u_orange 0.031 non_conformant in its 23:19:03 verdict text with no object_id and no u_orange fire. PROPOSED corrected/ edit at Phase 6: reattribute -> TP 4, FN 0, recall 1.0 (precedent fmb2_s3c4_run01). base1 labelled because it fired on a real shove; drop from the label if fixtures stay unlabelled. Coverage 83/87. Cube in view at the end look, NOT reported (obs FN)."
+  - session_id: 20261025T234229Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c1_run03. Clean (bag: sustained hold deviation <= 6.9 mm, effort under every limit, bystanders still). FIRST run with the hand visit added (at_step=place_line_green; runs 01-02 and c2_run01 were cube only). 13 clause arms per part, coverage 110/116, grip 8/8, param accuracy 12/12, no fires. 2 looks. Cube REPORTED from the end-of-run look, 360 s after placement (obs TP). Hand in view 11 s between the two looks, not reported (obs FN)."
+  - session_id: 20261026T003713Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c1_run04. Clean (bag: sustained hold deviation <= 7.4 mm, effort under every limit). 13 clause arms per part, coverage 110/116, grip 8/8, param accuracy 13/13, no clause fires. FIRST observation-purpose camera monitor in this batch: workspace_depth_watch, whole-frame depth vs one reference, fires only if >35% of pixels change by >5 cm; cube ~0.1% and hand ~2% of the frame, so it could not fire and never did. Cube REPORTED from the end-of-run look, 401 s after placement (obs TP). Hand not reported (obs FN)."
+  - session_id: 20261026T005219Z
+    scenario: S3
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3ol_c1_run05. Clean (bag: sustained hold deviation <= 7.2 mm, base1 drifted 10 mm, fixture unfired, not labelled). 7 clause arms (grouped bystander/inactive sets, ONE in_hand_slip on held_object, effort per part), param accuracy 7/7, no clause fires. Scorer grip 5/8, coverage 113/116: in_hand_slip was armed with object_id u_brown but follows ctx.held_object() and was never disarmed, so it covered all four holds. PROPOSED corrected/ edit at Phase 6: grip 8/8, coverage 116/116 (same gap as c1_run01). Two observation-purpose depth STRIP monitors (>3% of strip pixels changing by >5 cm vs an arm-time reference): scene_border fired 00:53:55 on the arm crossing the top edge; scene_bottom fired 00:59:47 on the arm's wrist reaching into the bottom strip to pick inverted_u_yellow. Neither fired on the hand: its path spans image rows ~261-291, above the bottom strip (rows >= 315), and it left view 47 s before. The look after the scene_bottom fire found the cube: obs TP, 292 s, before run end. SCORER ARTEFACT: the observation scorer credits the hand as detected (latency 150 s) by matching the cube observation's UPDATE (01:01:20) to the visitor episode, although that update describes the cube; observation_scorer.py's own docstring says a report and its updates are consumed together, but the code consumes each event separately. PROPOSED corrected/ edit at Phase 6: transient_visitor FN -> n_detected 1, obs_TP 1, obs_FN 1. obs_monitor_false_fires 2 (both arm) is correct."
+
+# raw/ housekeeping (2026-10-25): observation_results.csv row 1 (blank run_id,
+# strategy none) and raw/observation_score.json at the top level were written
+# by an operator copy-paste error (the scorer ran on the repo root, not a
+# session). Not a session; raw/ stays append-only, so exclude it in corrected/
+# at Phase 6 (exclude=1 + CORRECTIONS.md line).

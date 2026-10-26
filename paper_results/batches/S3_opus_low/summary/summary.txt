@@ -1,0 +1,18 @@
+
+==============================================================================
+  PER-SCENARIO SUMMARY   (6 runs from 1 csv)
+==============================================================================
+
+  S3  (6 runs)
+    verdict_correct        : 6/6
+    verdict TP/FP/TN/FN    : 1/0/5/0   (run-level verdict call)
+    fault recall/prec      : avg 1.0 / 1.0
+    fault TP/FP/TN/FN      : 4/0/68/0   (step-level pairing)
+    authored TP/FP/FN      : 3/0/1   TN(clean runs): 5/5
+    authored release fires : 0
+    authored param accuracy: 64/64   agent-chosen obs thresholds: 3
+    monitor false alarms   : 0 (over 6 runs)
+    fire->next-verdict     : median-of-medians 34.53s   p95s seen: [45.43]   adjudicated 3 / never 0
+    time_to_verdict        : avg 43.588s
+
+==============================================================================

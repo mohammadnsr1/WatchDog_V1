@@ -1,0 +1,80 @@
+{
+  "run_id": "20261025T225349Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-25T23:05:31.180566+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_73db03",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-25T23:07:01.915093+00:00"
+    },
+    {
+      "name": "foreign_73db03",
+      "kind": "removal",
+      "t0_iso": "2026-10-25T23:07:04.171525+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 4,
+    "n_observation_monitors_armed": 0,
+    "n_observation_fires": 0,
+    "n_record_observation_new": 2,
+    "n_record_observation_updates": 2,
+    "first_look_iso": "2026-10-25T22:54:49.968758+00:00",
+    "look_reasons": [
+      "Run-start baseline of the workspace: check for any objects not listed under obje",
+      "Milestone place_u_brown: confirm u_brown visibly seated on base1, check base1's ",
+      "After u_orange's milestone: confirm u_brown and u_orange visibly seated, and rec",
+      "Run end: confirm all four parts are visibly on base1, check whether the unlisted"
+    ]
+  },
+  "strategy": "polling_by_look",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_73db03",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-25T22:58:27.262715+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": true,
+      "observation_id": "obs-001-085be3b4",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 64.14,
+      "identity": "Unidentified small red/orange block, roughly 2-3 cm across; not any of the ten registered FMB objects",
+      "summary": "A small red/orange cuboid block is visible near pixel (376,178) in look 0002-64133ecb that was not present in the run-start baseline look 0001-985947f7. Its location matches no registered object pose:",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1792969127249664500,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 1,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 64.14,
+  "detection_latency_p95_s": 64.14,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 1,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-002-137f51de",
+      "category": "object_moved",
+      "summary": "base1 (the fixture) shifted during place_u_brown. From run start (0.4028,-0.1986) it had moved to (0.3957,-0.1900), about 11 mm, by the first-seat verification "
+    }
+  ]
+}

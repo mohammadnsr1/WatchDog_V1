@@ -1,10 +1,14 @@
 # Batch provenance. See paper_results/README.md and docs/dev/BATCH_RUNBOOK.md.
 batch_id: S3_opus_medium
-date_utc: TODO                  # UTC date of the batch's FIRST run (fill at run 01)
+date_utc: 2026-10-26            # UTC date of the batch's FIRST valid run (20261026T013751Z)
 purpose: scored                 # smoke | scored -- scored batches feed paper numbers
 
 # Provenance (fill BEFORE run 01; code must not change mid-batch)
-git_sha: TODO                   # git rev-parse HEAD, clean tree, before run 01.
+git_sha: a93c0c85b9ae9c5651b69ac3045c53a228434536
+                                # NOT a clean tree: uncommitted at run 01 were batch.yaml / CORRECTIONS.md
+                                # files, watchdog.settings.json (effortLevel low -> medium, the point of
+                                # the batch) and isaac/script_editor/s1_c1_inject.py (the visit call added).
+                                # No server, prompt or scorer code differs from a93c0c8.
                                 # Scorer and prompts must be byte-identical to the
                                 # S3 batch: diff against S3/batch.yaml's git_sha.
 registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd
@@ -30,10 +34,18 @@ per_role:
 
 # ---- batch design (decided 2026-10-23, before run 01) ------------------------
 # S3 (authored monitors only) with the WATCHDOG on Opus at MEDIUM effort; executor unchanged (Sonnet-5 low).
-# Everything else is FROZEN to the S3 protocol: fmb_assembly_2, the pinned
-# benign cube (place_object at (0.08,-0.38,None), start="at_step=pick_u_orange",
-# pasted unchanged from S2/batch.yaml notes), same scorer code, same prompts,
-# same classes. Only the model and effort named above change.
+# Everything else is FROZEN to the S3 protocol: fmb_assembly_2, same scorer
+# code, same prompts, same classes. Only the watchdog's effort changes vs
+# S3_opus_low. INJECTIONS, every run, pasted unchanged from
+# isaac/script_editor/s1_c1_inject.py (the two calls S3_opus_low used from its run 03):
+#   place_object(position_xyz_world=(0.08, -0.38, None),
+#                label="foreign cube on free bench area",
+#                expected_impact="benign", start="at_step=pick_u_orange")
+#   visit(shape="hand", dwell_position=(0.45, -0.10), dwell_s=4.0, speed_mps=0.3,
+#         label="forearm over the work area", expected_impact="benign",
+#         start="at_step=place_line_green")
+# Comparison with S3_opus_low: cube over all 6 low runs (placed first, so the hand
+# cannot prompt its discovery before pick_line_green); hand vs low runs 03-05 only.
 # Target: 5 scorable runs (a run that aborts before pick_u_orange has no cube and
 # is not observation-scorable; launch 6-7 to get 5). Plan Class 1; a natural
 # fault makes a run Class 2 and it still counts, as in S1-S4.
@@ -43,4 +55,47 @@ per_role:
 # Optional later cell S3_sonnet_medium would attribute effort independently of model.
 # Reference row (upper bound) for the observation table: paper_results/batches/REF.
 
-# ---- sessions: []
+# ---- sessions: append one entry per run ------------------------------------
+# - session_id: 2026....T......Z
+#   scenario: S3
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2
+#   injection_scenarios: [place_object]
+#   run_registry_sha256: null   # null = batch registry_sha256. Class 4: the
+#                               # executor copy's sha (registry_provenance_executor.json)
+#   run_task_sha256: null       # null = committed task; variants: executor_task_sha256
+#   notes: ""
+sessions:
+  - session_id: 20261026T013751Z
+    scenario: S3
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s3om_c2_run01. Planned C1; NATURAL faults: u_brown mis-seat at place_u_brown (13.6 mm / 26.4 deg, re-seated), u_orange slip 35.8 mm at place_approach_u_orange and mis-seat 53.9 deg at place_u_orange (re-seated), base1 pushed 21.3 mm at reseat_pick_u_orange (fired), and the place_inverted_u_yellow collision (base1 shoved 44.5 mm, u_brown/u_orange/line_green carried 45-67 mm, inverted_u_yellow never seated). Aborted. Operator confirmed every fire and finding true. Scorer: fault TP 8 / FN 1, verdict and recovered correct, coverage 149/152, grip 8/8, param accuracy 22/22, no false alarms. The FN place_inverted_u_yellow:base1 is attribution: the agent armed its base1 re-arm monitor with object_id u_orange, so the base1 fire (0.0205 at 01:54:59, detail 'base1 displaced') is credited to u_orange, and its verdict judged base1 0.0289 only in clause text. PROPOSED corrected/ edit at Phase 6: TP 9, FN 0, recall 1.0, TP by fire. Observation: BOTH events detected. Edge-strip depth monitor fired on the hand 0.54 s after it came into view; the look it triggered showed the hand mid-dwell, and the watchdog recorded the hand (obs-001 'tan slab', 78.8 s; obs-003 'crossed the right edge', 87.2 s) and the cube (obs-002, 549.1 s). The scorer matched by category and time and SWAPPED them (cube 545.76 via obs-001, hand 82.11 via obs-002), credited the hand's edge fire to the cube as fire latency 467.5 s, and counted obs-003 (true) as obs FP. PROPOSED corrected/ edits at Phase 6: obs_FP 1 -> 0, detection_latency_p95_s 545.76 -> 549.1 (median unchanged at 313.9)."
+
+# Excluded sessions (operator/infrastructure failures, replaced by a rerun).
+known_invalid:
+  - session_id: 20261026T011838Z
+    reason: >
+      INFRASTRUCTURE: the watchdog MCP server stalled. The executor's begin_step
+      for pick_u_brown (01:20:42) was published with 2 subscribers (bag
+      /watchdog/events). The watchdog called wait_for_event at 01:21:12; the
+      server never returned it -- not even at the call's own 180 s timeout (CLI
+      log: still running at 210 s) -- and logged nothing after its three startup
+      lines. The gate timed out at 01:22:42; the executor proceeded unguarded;
+      the CLI moved the wait to the background at 120 s and the agent ended its
+      turn, so nothing could recover. Server killed with the session at 01:24:45.
+      Only stall of this kind in 148 watchdog server logs. The watchdog had
+      armed obs_workspace_depth 11 s earlier, on the ARRAY lane at rate_hz 1.0
+      (mcp_calls_watchdog.jsonl; the monitor_armed event does not carry the
+      rate). It reads seven joint windows plus a depth frame per tick. Offline,
+      the same source on a real engine with the array lane running and
+      realistic joint windows evaluates in ~7 ms per call with no strikes and
+      no lock contention, so it does not reproduce the stall. (A 2026-10-26
+      note here said the monitor was armed without rate_hz on the scalar
+      lane; that was a misreading of the event payload, corrected.) Root cause
+      not determined; next time, py-spy dump the server before closing the
+      session.
+

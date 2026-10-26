@@ -1,0 +1,107 @@
+{
+  "run_id": "20261026T005219Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T01:01:09.640741+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_a3e37c",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T01:02:36.525718+00:00"
+    },
+    {
+      "name": "foreign_a3e37c",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T01:06:59.860532+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 5,
+    "n_observation_monitors_armed": 2,
+    "n_observation_fires": 2,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 1,
+    "first_look_iso": "2026-10-26T00:53:34.523758+00:00",
+    "look_reasons": [
+      "Baseline of workspace at run start: check for unlisted objects or people.",
+      "scene_border observation fired: check whether something entered the workspace or",
+      "scene_bottom fired during pick_inverted_u_yellow: check for something entering f",
+      "Confirm a small red/orange block near top-centre of bench (~half-scale pixel 187",
+      "End-of-run scene check: confirm whether the unlisted red cube (obs-001) is still"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 2,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T00:53:55.561924+00:00",
+      "monitor_id": "scene_border",
+      "value": 0.03229166666666667,
+      "threshold": 0.03
+    },
+    {
+      "wall_time_iso": "2026-10-26T00:59:47.088303+00:00",
+      "monitor_id": "scene_bottom",
+      "value": 0.034131944444444444,
+      "threshold": 0.03
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_a3e37c",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T00:55:30.757100+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 256.33,
+      "detected": true,
+      "observation_id": "obs-001-a73244ba",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 292.42,
+      "identity": "unidentified small red/orange cube; not a registered FMB part",
+      "summary": "A small red/orange cube (~3-4 cm) is resting on the bench near the top-centre of the camera image, behind the base1 fixture. It was absent in look 0001 (run start) and look 0002 (during pick_u_brown) ",
+      "confidence": "high",
+      "first_seen_wall_ns": 1792976389759309600,
+      "appearance_reported": "off_by_259.0s"
+    },
+    {
+      "name": "visitor_hand_037446",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T00:58:49.983086+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 57.11,
+      "detected": true,
+      "observation_id": "obs-001-a73244ba",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 150.08,
+      "identity": "unidentified small red/orange cube; not a registered FMB part",
+      "summary": "The cube is still present at run end (look 0005) at the same image location. It did not move during the run and never interacted with any task part or bystander. It first appeared between look 0002 (w",
+      "confidence": "high",
+      "first_seen_wall_ns": 1792976389759309600,
+      "appearance_reported": "off_by_59.8s"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 221.25,
+  "detection_latency_p95_s": 292.42,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

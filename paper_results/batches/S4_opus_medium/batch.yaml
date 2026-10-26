@@ -45,4 +45,14 @@ per_role:
 # ./run_executor.sh s4 2, score with s4_scorer.py + observation_scorer.py --role executor.
 # Reference row (upper bound) for the observation table: paper_results/batches/REF.
 
-# ---- sessions: []
+# ---- sessions: append one entry per run ------------------------------------
+# - session_id: 2026....T......Z
+#   scenario: S3
+#   class: 1                    # 1 | 2 | 3 | 4
+#   assembly: fmb_assembly_2
+#   injection_scenarios: [place_object]
+#   run_registry_sha256: null   # null = batch registry_sha256. Class 4: the
+#                               # executor copy's sha (registry_provenance_executor.json)
+#   run_task_sha256: null       # null = the S4 task fmb_assembly_2_s4
+#   notes: ""
+sessions: []

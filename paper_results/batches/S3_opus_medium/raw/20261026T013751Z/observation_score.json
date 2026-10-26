@@ -1,0 +1,95 @@
+{
+  "run_id": "20261026T013751Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 11,
+  "run_ended_iso": "2026-10-26T01:57:11.540911+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_dc704b",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T02:00:48.716383+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 5,
+    "n_observation_monitors_armed": 2,
+    "n_observation_fires": 1,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 3,
+    "first_look_iso": "2026-10-26T01:39:31.692811+00:00",
+    "look_reasons": [
+      "Baseline of the working area before the first step: confirm the ten listed FMB o",
+      "After place_u_brown: see how u_brown sits on base1 (TF says tilted ~26 deg and 1",
+      "Edge-strip depth monitor fired on the right image edge (13% of pixels changed >3",
+      "After pick_inverted_u_yellow: check whether the unlisted slab (obs-001) was dist",
+      "Final end-state look: confirm the seated stack on base1, inverted_u_yellow perch"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_dc704b",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T01:44:33.502735+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 467.54,
+      "detected": true,
+      "observation_id": "obs-001-ec653326",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 545.76,
+      "identity": "flat board/sheet-like object, unidentified",
+      "summary": "A large flat tan/beige rectangular slab (board or sheet), not among the listed objects, is lying on the bench across the middle of the workspace. It spans roughly x 0.27-0.69 m and y -0.13 to -0.05 m,",
+      "confidence": "high",
+      "first_seen_wall_ns": 1792979547773876500,
+      "appearance_reported": "off_by_474.3s"
+    },
+    {
+      "name": "visitor_hand_4fbfde",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T01:52:20.496958+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.54,
+      "detected": true,
+      "observation_id": "obs-002-fa8a33b0",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 82.11,
+      "identity": "small red cube/block, unidentified",
+      "summary": "A small red cube (~3 cm across), not among the listed objects, is standing on the bench near (0.09, -0.38). It was not present in look 0001 or look 0002. The listed red part hex_red is still at its ow",
+      "confidence": "high",
+      "first_seen_wall_ns": 1792979547773876500,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 313.94,
+  "detection_latency_p95_s": 545.76,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-003-a7a8eb49",
+      "category": "other_unexpected",
+      "summary": "Something crossed the right edge of the workspace. That edge corresponds to the far -x end of the bench, beyond base2. At wall_ns 1792979541040197000 the edge-s"
+    }
+  ]
+}

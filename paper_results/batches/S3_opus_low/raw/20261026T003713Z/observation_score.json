@@ -1,0 +1,82 @@
+{
+  "run_id": "20261026T003713Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T00:47:27.958869+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_19f624",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T00:48:43.281402+00:00"
+    },
+    {
+      "name": "foreign_19f624",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T00:48:46.506208+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 2,
+    "n_observation_monitors_armed": 1,
+    "n_observation_fires": 0,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-26T00:38:21.945104+00:00",
+    "look_reasons": [
+      "Run-start baseline of the workspace: confirm only listed objects are present and",
+      "End-of-assembly scene check: confirm four parts seated on base1, bystanders unmo"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_19f624",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T00:40:57.577844+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": true,
+      "observation_id": "obs-001-80f94a66",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 401.34,
+      "identity": "unidentified small red block (not a registered FMB part)",
+      "summary": "A small red cube-like object is on the bench at roughly world (0.08, -0.38). It was not in the run-start look and it is not one of the ten registered objects. The registered red part, hex_red, is stil",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1792975642012244200,
+      "appearance_reported": "off_by_384.4s"
+    },
+    {
+      "name": "visitor_hand_994f61",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T00:45:04.940929+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": false
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 1,
+  "detection_rate": 0.5,
+  "detection_latency_median_s": 401.34,
+  "detection_latency_p95_s": 401.34,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 1,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}
