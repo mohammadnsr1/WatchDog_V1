@@ -44,6 +44,14 @@ per_role:
 #   visit(shape="hand", dwell_position=(0.45, -0.10), dwell_s=4.0, speed_mps=0.3,
 #         label="forearm over the work area", expected_impact="benign",
 #         start="at_step=place_line_green")
+# STAGE CHANGE (operator, 2026-10-26, after run 20261026T193945Z): fixed an offset between
+# inverted_u_brown's TF frame and its mesh in assets/usd/assembly_room.usd (found because the
+# watchdog reported the brown part as unregistered). Every run up to and including
+# 20261026T193945Z, and every S1-S4 and S3_opus_low run, ran with the offset; later runs
+# run without it. Registry unchanged (92969cc1). inverted_u_brown is a bystander that never
+# moves, so conformance scoring is unaffected; the only effect is that a brown part no
+# longer sits where no registered pose is. Commit the stage before the next run and
+# record its sha on the next session entry.
 # Comparison with S3_opus_low: cube over all 6 low runs (placed first, so the hand
 # cannot prompt its discovery before pick_line_green); hand vs low runs 03-05 only.
 # Target: 5 scorable runs (a run that aborts before pick_u_orange has no cube and
