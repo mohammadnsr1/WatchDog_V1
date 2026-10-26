@@ -1,10 +1,10 @@
 # Batch provenance. See paper_results/README.md and docs/dev/BATCH_RUNBOOK.md.
 batch_id: S4_opus_medium
-date_utc: TODO                  # UTC date of the batch's FIRST run (fill at run 01)
+date_utc: 2026-10-26            # UTC date of the batch's FIRST run (20261026T221922Z)
 purpose: scored                 # smoke | scored -- scored batches feed paper numbers
 
 # Provenance (fill BEFORE run 01; code must not change mid-batch)
-git_sha: TODO                   # git rev-parse HEAD, clean tree, before run 01.
+git_sha: 8450e1bc94c1cb51276323c2306df5475c1ea0f5   # HEAD at run 01; clean tree
                                 # Scorer and prompts must be byte-identical to the
                                 # S4 batch: diff against S4/batch.yaml's git_sha.
 registry_sha256: 92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd

@@ -1,0 +1,116 @@
+{
+  "run_id": "20261026T221922Z",
+  "role": "executor",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T22:37:29.810834+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_5b9be2",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T22:38:41.617527+00:00"
+    },
+    {
+      "name": "foreign_5b9be2",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T22:44:53.479733+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 8,
+    "n_observation_monitors_armed": 5,
+    "n_observation_fires": 3,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 5,
+    "first_look_iso": "2026-10-26T22:20:20.163864+00:00",
+    "look_reasons": [
+      "Baseline view of workspace before run: confirm all listed parts present and chec",
+      "Verify u_brown seated in its base1 slot after release/retreat; check scene for u",
+      "After u_orange insertion: confirm u_brown resettled in its slot after the transi",
+      "Verify line_green seated in base1; confirm u_brown/u_orange still seated; check ",
+      "Identify and locate the large pale slab that appeared near base1/inverted_u_yell",
+      "After second line_green release: see how line_green rests on base1 and whether u",
+      "Final verification: all four parts on base1, inverted_u_yellow seated; check bys",
+      "End-of-run scene check with arm at ready: confirm final assembly state, bystande"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 2,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T22:26:24.808167+00:00",
+      "monitor_id": "obs_base_fixtures",
+      "value": 0.008639494623883068,
+      "threshold": 0.005
+    },
+    {
+      "wall_time_iso": "2026-10-26T22:36:37.219437+00:00",
+      "monitor_id": "scene_watch_3",
+      "value": 151.0,
+      "threshold": 30.0
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_5b9be2",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T22:25:02.645375+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 82.16,
+      "detected": true,
+      "observation_id": "obs-002-08c4f446",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 155.28,
+      "identity": "small red/orange cube, possibly the registry's disabled red_cube; not a task object",
+      "summary": "Unlisted object appeared on the bench: a small red/orange cube (~5 cm, top at z~0.055 m) near world (0.083, -0.381). Not present in the baseline look (0001) or in look 0002 (place_u_brown); visible in",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793053628461608200,
+      "appearance_reported": "off_by_125.8s"
+    },
+    {
+      "name": "visitor_hand_1bbcd8",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T22:30:12.645649+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.49,
+      "detected": true,
+      "observation_id": "obs-003-c8ec449a",
+      "match": "category",
+      "category": "other_unexpected",
+      "latency_s": 55.86,
+      "identity": "unidentified pale slab/board, transient; entered and left the workspace",
+      "summary": "A large pale, slab-like object (~0.45 m x ~0.1 m in the image) entered the workspace and later left. It was visible in look 0004 spanning image u 170-320, v 260-292 (roughly world x 0.25-0.70, y -0.05",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793053813132225800,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 105.57,
+  "detection_latency_p95_s": 155.28,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-87ef352a",
+      "category": "object_moved",
+      "summary": "Fixture base1 shifted ~1.35 mm (dx +0.43 mm, dy +1.28 mm) and yawed ~0.34 deg during the u_brown insertion (place_u_brown); placement frames moved with it. No r"
+    }
+  ]
+}
