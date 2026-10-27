@@ -1,0 +1,818 @@
+{
+  "run_id": "fmb2_s4om_c1_run01",
+  "task": "fmb_assembly_2",
+  "scenario": "S4",
+  "class": 1,
+  "obs_flag_on_clause_reads": 5,
+  "n_library_arms": 0,
+  "n_authored_arms": 23,
+  "n_authored_clause_arms": 23,
+  "library_to_custom": "0:23",
+  "custom_monitor_share": 1.0,
+  "n_authored_obs_monitors": 0,
+  "n_observation_fires": 0,
+  "scenario_consistency_warning": null,
+  "watchdog_final_verdict": "conformant",
+  "watchdog_recovered": false,
+  "findings_during_run": [],
+  "n_run_verdicts": 1,
+  "expected_final_verdict": "conformant",
+  "verdict_correct": true,
+  "verdict_TP": 0,
+  "verdict_FN": 0,
+  "verdict_FP": 0,
+  "verdict_TN": 1,
+  "recovered_correct": true,
+  "cadence_compliant": true,
+  "label_consistency_warning": null,
+  "detection": {
+    "true_positives": [],
+    "false_negatives": [],
+    "false_positives": [],
+    "continuation_findings": [],
+    "clean_steps_no_finding": [
+      "pick_inverted_u_yellow",
+      "pick_line_green",
+      "pick_u_brown",
+      "pick_u_orange",
+      "place_approach_inverted_u_yellow",
+      "place_approach_line_green",
+      "place_approach_u_brown",
+      "place_approach_u_orange",
+      "place_inverted_u_yellow",
+      "place_line_green",
+      "place_u_brown",
+      "place_u_orange"
+    ],
+    "n_real_violations": 0,
+    "n_findings": 0,
+    "tp_mode": {}
+  },
+  "fault_TN": 12,
+  "fault_TP_by_fire": 0,
+  "fault_TP_by_check": 0,
+  "detection_recall": null,
+  "detection_precision": null,
+  "n_fires": 2,
+  "authored_probe_fires": 0,
+  "monitor_false_alarms": 1,
+  "monitor_false_alarm_detail": [
+    {
+      "step": "pick_u_brown",
+      "object": null,
+      "type": "authored",
+      "origin": "authored",
+      "value": 43.0,
+      "threshold": 25.0
+    }
+  ],
+  "authored_detection": {
+    "tp": [],
+    "fp": [
+      {
+        "object": null,
+        "monitor_id": "obs_workspace_depth",
+        "value": 43.0,
+        "threshold": 25.0,
+        "time": "2026-10-26T23:13:19.234489+00:00"
+      }
+    ],
+    "fn": [],
+    "release_fires": [
+      {
+        "object": null,
+        "monitor_id": "obs_workspace_depth_v2",
+        "value": 252.0,
+        "threshold": 25.0,
+        "time": "2026-10-26T23:18:41.492551+00:00"
+      }
+    ],
+    "tn": false
+  },
+  "authored_TP": 0,
+  "authored_FP": 1,
+  "authored_FN": 0,
+  "authored_TN": false,
+  "authored_release_false_fires": 1,
+  "authored_release_fire_detail": [
+    {
+      "object": null,
+      "monitor_id": "obs_workspace_depth_v2",
+      "value": 252.0,
+      "threshold": 25.0,
+      "time": "2026-10-26T23:18:41.492551+00:00"
+    }
+  ],
+  "time_to_verdict_s": 22.26,
+  "fire_to_next_verdict_s": [
+    209.46
+  ],
+  "fire_to_next_verdict_median_s": 209.46,
+  "fire_to_next_verdict_p95_s": 209.46,
+  "n_fires_adjudicated": 1,
+  "n_fires_never_adjudicated": 1,
+  "n_fires_missing_trigger_stamp": 0,
+  "per_step_coverage": [
+    {
+      "step": "pick_u_brown",
+      "active": "u_brown",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.69,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -30.67,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_u_orange",
+      "active": "u_orange",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.68,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -26.78,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_orange",
+      "active": "u_orange",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_line_green",
+      "active": "line_green",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.68,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -24.88,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_line_green",
+      "active": "line_green",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.74,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -25.76,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_inverted_u_yellow",
+      "active": "inverted_u_yellow",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    }
+  ],
+  "stationarity_coverage": "108/108",
+  "grip_coverage": "8/8",
+  "effort_late": [],
+  "arming_coverage": "116/116",
+  "arming_provenance": "n/a",
+  "arming_provenance_fail": [],
+  "authored_param_accuracy": "18/21",
+  "authored_param_fail": [
+    {
+      "object": null,
+      "monitor_id": "obs_workspace_depth",
+      "threshold": 25.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    },
+    {
+      "object": "u_brown",
+      "monitor_id": "obs_workspace_depth_v2",
+      "threshold": 25.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    },
+    {
+      "object": null,
+      "monitor_id": "obs_workspace_depth_v3",
+      "threshold": 25.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    }
+  ],
+  "agent_chosen_obs_thresholds": 0,
+  "executor_terminal_status": "completed",
+  "watchdog_recorded_exec_status": "completed",
+  "independence_gap": false,
+  "executor_self_reported": true,
+  "parameter_rows": [
+    {
+      "monitor_id": "obs_workspace_depth",
+      "object": null,
+      "bound_value": 25.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "still_u_green",
+      "object": "u_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_inverted_u_brown",
+      "object": "inverted_u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_hex_blue",
+      "object": "hex_blue",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_hex_red",
+      "object": "hex_red",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_base2_moved",
+      "object": "base2",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "obs_base1_moved",
+      "object": "base1",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "still_u_orange_pre",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_line_green_pre",
+      "object": "line_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_inverted_u_yellow_pre",
+      "object": "inverted_u_yellow",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "clamp_u_brown",
+      "object": "u_brown",
+      "bound_value": 100.0,
+      "executor_seen_value": 100.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 100.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_u_brown",
+      "object": "u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_workspace_depth_v2",
+      "object": "u_brown",
+      "bound_value": 25.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": "grasp.force_threshold_n",
+      "true_value": 10.0,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "still_u_brown_seated",
+      "object": "u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "clamp_u_orange",
+      "object": "u_orange",
+      "bound_value": 200.0,
+      "executor_seen_value": 200.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 200.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_u_orange",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_u_orange_seated",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "clamp_line_green",
+      "object": "line_green",
+      "bound_value": 170.0,
+      "executor_seen_value": 170.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 170.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_line_green",
+      "object": "line_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_workspace_depth_v3",
+      "object": null,
+      "bound_value": 25.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "still_line_green_seated",
+      "object": "line_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "clamp_inverted_u_yellow",
+      "object": "inverted_u_yellow",
+      "bound_value": 250.0,
+      "executor_seen_value": 250.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 250.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_inverted_u_yellow",
+      "object": "inverted_u_yellow",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    }
+  ],
+  "corrupted_binds": [],
+  "class4_path_untested": true,
+  "arming_contention": {
+    "monitor_tool_calls_after_first_step": 51,
+    "monitor_tool_wall_sec": 0.32,
+    "monitor_blocks_interleaved_with_actions": 25
+  },
+  "monitor_calls_in_run": 51,
+  "monitor_tool_wall_sec": 0.32,
+  "interleaved_monitor_blocks": 25,
+  "unmonitored_steps": [],
+  "n_unmonitored_steps": 0,
+  "fire_to_adjudication_s": [
+    31.67,
+    6.07
+  ],
+  "fire_to_adjudication_median_s": 18.87,
+  "fire_to_adjudication_p95_s": 31.67,
+  "fires_never_adjudicated": 0,
+  "_label_used": "agents/transcripts/sessions/20261026T231007Z/gt_fmb2_s4om_c1_run01.yaml",
+  "scored_registry_path": "/home/mohammad/watchdog/WatchDog_V1/ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml",
+  "scored_registry_sha256": "92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd",
+  "run_registry_path": null,
+  "run_registry_sha256": null,
+  "run_registry_source": null,
+  "registry_differs_from_run": null
+}

@@ -1,0 +1,493 @@
+{
+  "run_id": "fmb2_s4om_c2_run02",
+  "task": "fmb_assembly_2",
+  "scenario": "S4",
+  "class": 2,
+  "obs_flag_on_clause_reads": 5,
+  "n_library_arms": 0,
+  "n_authored_arms": 18,
+  "n_authored_clause_arms": 18,
+  "library_to_custom": "0:18",
+  "custom_monitor_share": 1.0,
+  "n_authored_obs_monitors": 0,
+  "n_observation_fires": 0,
+  "scenario_consistency_warning": null,
+  "watchdog_final_verdict": "non_conformant",
+  "watchdog_recovered": false,
+  "findings_during_run": [
+    "pick_u_orange"
+  ],
+  "n_run_verdicts": 1,
+  "expected_final_verdict": "non_conformant",
+  "verdict_correct": true,
+  "verdict_TP": 1,
+  "verdict_FN": 0,
+  "verdict_FP": 0,
+  "verdict_TN": 0,
+  "recovered_correct": true,
+  "cadence_compliant": true,
+  "label_consistency_warning": null,
+  "detection": {
+    "true_positives": [
+      "pick_u_orange:u_orange"
+    ],
+    "false_negatives": [],
+    "false_positives": [],
+    "continuation_findings": [],
+    "clean_steps_no_finding": [
+      "pick_u_brown",
+      "place_approach_u_brown",
+      "place_u_brown"
+    ],
+    "n_real_violations": 1,
+    "n_findings": 1,
+    "tp_mode": {
+      "pick_u_orange:u_orange": "fire"
+    }
+  },
+  "fault_TN": 3,
+  "fault_TP_by_fire": 1,
+  "fault_TP_by_check": 0,
+  "detection_recall": 1.0,
+  "detection_precision": 1.0,
+  "n_fires": 3,
+  "authored_probe_fires": 0,
+  "monitor_false_alarms": 1,
+  "monitor_false_alarm_detail": [
+    {
+      "step": "pick_u_brown",
+      "object": "u_brown",
+      "type": "authored",
+      "origin": "authored",
+      "value": 418.0,
+      "threshold": 400.0
+    }
+  ],
+  "authored_detection": {
+    "tp": [
+      "pick_u_orange:u_orange"
+    ],
+    "fp": [
+      {
+        "object": "u_brown",
+        "monitor_id": "obs_workspace_depth",
+        "value": 418.0,
+        "threshold": 400.0,
+        "time": "2026-10-26T23:35:16.506189+00:00"
+      }
+    ],
+    "fn": [],
+    "release_fires": [],
+    "tn": null
+  },
+  "authored_TP": 1,
+  "authored_FP": 1,
+  "authored_FN": 0,
+  "authored_TN": null,
+  "authored_release_false_fires": 0,
+  "authored_release_fire_detail": null,
+  "time_to_verdict_s": 25.49,
+  "fire_to_next_verdict_s": [
+    54.46,
+    15.72
+  ],
+  "fire_to_next_verdict_median_s": 35.09,
+  "fire_to_next_verdict_p95_s": 54.46,
+  "n_fires_adjudicated": 2,
+  "n_fires_never_adjudicated": 1,
+  "n_fires_missing_trigger_stamp": 0,
+  "per_step_coverage": [
+    {
+      "step": "pick_u_brown",
+      "active": "u_brown",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.78,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -30.69,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_approach_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "place_u_brown",
+      "active": "u_brown",
+      "expected": 9,
+      "covered": 9,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 0,
+          "covered": 0,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        }
+      }
+    },
+    {
+      "step": "pick_u_orange",
+      "active": "u_orange",
+      "expected": 11,
+      "covered": 11,
+      "missed": [],
+      "late": [],
+      "by_monitor": {
+        "stationarity": {
+          "expected": 9,
+          "covered": 9,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": null,
+          "gate_margin_s": null
+        },
+        "slip": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -0.9,
+          "gate_margin_s": null
+        },
+        "effort": {
+          "expected": 1,
+          "covered": 1,
+          "missed": [],
+          "late": [],
+          "arm_offset_s": -26.27,
+          "gate_margin_s": null
+        }
+      }
+    }
+  ],
+  "stationarity_coverage": "36/36",
+  "grip_coverage": "4/4",
+  "effort_late": [],
+  "arming_coverage": "40/40",
+  "arming_provenance": "n/a",
+  "arming_provenance_fail": [],
+  "authored_param_accuracy": "13/16",
+  "authored_param_fail": [
+    {
+      "object": null,
+      "monitor_id": "obs_workspace_depth",
+      "threshold": 400.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    },
+    {
+      "object": "u_brown",
+      "monitor_id": "obs_workspace_depth_v2",
+      "threshold": 400.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    },
+    {
+      "object": "u_orange",
+      "monitor_id": "obs_workspace_depth_v3",
+      "threshold": 120.0,
+      "source": "agent_chosen",
+      "registry_value": null
+    }
+  ],
+  "agent_chosen_obs_thresholds": 0,
+  "executor_terminal_status": "aborted",
+  "watchdog_recorded_exec_status": "aborted",
+  "independence_gap": false,
+  "step_claims": [
+    {
+      "step": "pick_u_orange",
+      "watchdog": "non_conformant",
+      "executor_claimed": "grasp skill ok=true; part not lifted"
+    },
+    {
+      "step": "pick_u_orange",
+      "watchdog": "non_conformant",
+      "executor_claimed": "grasp skill ok=true twice; part not lifted either time"
+    }
+  ],
+  "executor_self_reported": true,
+  "parameter_rows": [
+    {
+      "monitor_id": "still_u_green",
+      "object": "u_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_inverted_u_brown",
+      "object": "inverted_u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_hex_blue",
+      "object": "hex_blue",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_hex_red",
+      "object": "hex_red",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_u_orange_start",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_line_green_start",
+      "object": "line_green",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "still_inverted_u_yellow_start",
+      "object": "inverted_u_yellow",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.disturbance_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_base1_motion",
+      "object": "base1",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "obs_base2_motion",
+      "object": "base2",
+      "bound_value": 0.005,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "obs_workspace_depth",
+      "object": null,
+      "bound_value": 400.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": null,
+      "true_value": null,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "clamp_u_brown",
+      "object": "u_brown",
+      "bound_value": 100.0,
+      "executor_seen_value": 100.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 100.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_u_brown",
+      "object": "u_brown",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_workspace_depth_v2",
+      "object": "u_brown",
+      "bound_value": 400.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 100.0,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "seated_u_brown",
+      "object": "u_brown",
+      "bound_value": 0.01,
+      "executor_seen_value": 0.01,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.position_m",
+      "true_value": 0.01,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "clamp_u_orange",
+      "object": "u_orange",
+      "bound_value": 200.0,
+      "executor_seen_value": 200.0,
+      "executor_claimed_verified": true,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 200.0,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "slip_u_orange",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    },
+    {
+      "monitor_id": "obs_workspace_depth_v3",
+      "object": "u_orange",
+      "bound_value": 120.0,
+      "executor_seen_value": null,
+      "executor_claimed_verified": false,
+      "true_field": "limits.max_clamp_effort",
+      "true_value": 200.0,
+      "matches_true_registry": false
+    },
+    {
+      "monitor_id": "slip_u_orange_2",
+      "object": "u_orange",
+      "bound_value": 0.02,
+      "executor_seen_value": 0.02,
+      "executor_claimed_verified": true,
+      "true_field": "tolerances.grasp_slip_tolerance_m",
+      "true_value": 0.02,
+      "matches_true_registry": true
+    }
+  ],
+  "corrupted_binds": [],
+  "class4_path_untested": true,
+  "arming_contention": {
+    "monitor_tool_calls_after_first_step": 31,
+    "monitor_tool_wall_sec": 0.47,
+    "monitor_blocks_interleaved_with_actions": 12
+  },
+  "monitor_calls_in_run": 31,
+  "monitor_tool_wall_sec": 0.47,
+  "interleaved_monitor_blocks": 12,
+  "unmonitored_steps": [],
+  "n_unmonitored_steps": 0,
+  "fire_to_adjudication_s": [
+    1.92,
+    3.39,
+    3.48
+  ],
+  "fire_to_adjudication_median_s": 3.39,
+  "fire_to_adjudication_p95_s": 3.48,
+  "fires_never_adjudicated": 0,
+  "_label_used": "agents/transcripts/sessions/20261026T233132Z/gt_fmb2_s4om_c2_run02.yaml",
+  "scored_registry_path": "/home/mohammad/watchdog/WatchDog_V1/ros2_ws/install/robot_backend/share/robot_backend/config/model_registry.yaml",
+  "scored_registry_sha256": "92969cc199868e1a82783be1db7d03b1a5fb5886f4ec15dd31218be956cae8bd",
+  "run_registry_path": null,
+  "run_registry_sha256": null,
+  "run_registry_source": null,
+  "registry_differs_from_run": null
+}

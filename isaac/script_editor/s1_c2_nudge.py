@@ -55,4 +55,10 @@ if PLACE_BENIGN_CUBE:
                  start="at_step=pick_u_orange")
 
 
+visit(shape="hand", dwell_position=(0.45, -0.10), dwell_s=4.0, speed_mps=0.3,
+      label="forearm over the work area", expected_impact="benign",
+      start="at_step=place_line_green")
+
+
+
 

@@ -45,6 +45,14 @@ per_role:
 # STAGE: runs with the inverted_u_brown TF/mesh offset FIXED (operator, 2026-10-26);
 # the S4 (Sonnet) batch ran with it. inverted_u_brown never moves, so conformance is
 # unaffected.
+# r2 RE-TUNE (operator decision, 2026-10-26): r2 is defined by its failure nature (missed
+# grasp on u_orange), not by fixed values. After fmb2_s4om_c1_run01 (r2 at 04b4e7ce, the S4
+# Sonnet value; u_orange held, no fault) the operator edited the S4 r2 file in place:
+# pick/place u_orange grasp_center_offset y -0.0481 -> -0.049 (sha f2455325). Same practice as
+# S2 (r2 re-tuned twice, cdbd1024 -> 0d7ec902). Each run's executor_task_sha256 records which
+# values it ran; S4 Sonnet's r2 runs used 04b4e7ce. NOTE: this S4 file is normally generated
+# from agents/tasks/runs/fmb_assembly_2.r2.executor.yaml by regenerate_variants.py, so a
+# regeneration would overwrite the edit and test_prompt_variants will flag the drift.
 # Target: 5 scorable runs (a run that aborts before pick_u_orange has no cube and
 # is not observation-scorable; launch 6-7 to get 5). Plan Class 1; a natural
 # fault makes a run Class 2 and it still counts, as in S1-S4.
@@ -66,4 +74,50 @@ per_role:
 #                               # executor copy's sha (registry_provenance_executor.json)
 #   run_task_sha256: null       # null = the S4 task fmb_assembly_2_s4
 #   notes: ""
-sessions: []
+sessions:
+  - session_id: 20261026T221922Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4om_c2_run01. Planned C1; NATURAL line_green slip at place_line_green (21.8 / 22.5 mm sustained, both fired, TP). Mid-step mis-seat corrected in-step (13.6 mm at close). FPs: u_brown at place_u_orange (seated_u_brown armed at position_m 0.01, bag 15.3 mm < 0.02) and the line_green end-state finding at place_inverted_u_yellow (15.004 vs 15 mm). Final non_conformant (STRICT: line_green 4 micrometres over at run end). base1 at place_u_orange added to the label at Phase 6 (fixture rule). Executor claim 'ctx.transform throws TypeError' traced to a missing frame (tool0) plus the recorder's fallback masking the lookup error; existing frames work. Cube 155 s, hand 56 s (fire at +1 s)."
+  - session_id: 20261026T231007Z
+    scenario: S4
+    class: 1
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: 04b4e7ce
+    notes: "fmb2_s4om_c1_run01. PLANNED r2 (committed S4 r2, the S4 Sonnet value): u_orange held (effort 36.8, 0.3 mm at release), no fault -> Class 1. Clean; conformant (correct). Hand by monitor on entry (37 s), cube from the look it triggered (231 s); scorer swapped the matches (corrected/)."
+  - session_id: 20261026T233132Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object]
+    run_registry_sha256: null
+    run_task_sha256: f2455325
+    notes: "fmb2_s4om_c2_run02. r2 at the operator's re-tuned values (y -0.049, sha f2455325): missed grasp at pick_u_orange twice (part rose <= 0.7 mm), caught by fire twice, aborted; final non_conformant (correct). Hand never triggered (aborted before place_line_green) -> cube only, 92 s."
+  - session_id: 20261027T192136Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4om_c2_run03. Planned C1; NATURAL u_orange slip at place_approach_u_orange (35.5 mm sustained, fired, TP), re-gripped and seated in-step; u_brown jammed but did NOT slip (15.8 mm < 0.02, monitor correctly silent). base1 labelled at place_u_brown / place_u_orange / place_inverted_u_yellow (fixture rule, 6.1 / 3.1 / 3.3 mm, all fired); the executor recorded them as observations -> 2 FN stand (fixture rule). Final conformant, recovered true (correct). Cube 95 s, hand 34 s (fire on entry)."
+  - session_id: 20261027T200520Z
+    scenario: S4
+    class: 2
+    assembly: fmb_assembly_2
+    injection_scenarios: [place_object, visit]
+    run_registry_sha256: null
+    run_task_sha256: null
+    notes: "fmb2_s4om_c2_run04. OPERATOR DRAG of hex_red (0.36 m at place_approach_u_orange; no ground-truth record, precedent fmb2_s2c2_run03; hex_blue planned but not moved), caught by fire. NATURAL collapse at place_inverted_u_yellow (gripper opened in the slot, assembly levered ~0.4 m), all caught; base1 at place_line_green (fixture rule, 5.7 mm, fired). TP 7/7 after reattributing inverted_u_yellow's mis-seat (corrected/). Final non_conformant (correct). Cube 85 s, hand 31 s (fire on entry)."
+
+# Phase 6 (2026-10-27): corrected/ = raw + 65 logged cell edits (CORRECTIONS.md): camera
+# monitors reading arm/object poses only to mask them out of the depth image reclassified
+# as observation (operator rule 2026-10-26, extended from arm-only masking), base1 watches
+# exempt from parameter accuracy (fixture rule), two reattributions, one swap, and true
+# but ground-truth-less observations zeroed. summary/summary.txt written from corrected/.

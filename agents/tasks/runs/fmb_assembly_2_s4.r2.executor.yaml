@@ -124,7 +124,7 @@ steps:
     grasp_width_m: 0.02
     approach_distance_m: -0.1
     grasp_center_offset:
-      position: {x: 0.025, y: -0.0481, z: 0.0}
+      position: {x: 0.025, y: -0.049, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
     lift_height_m: 0.2
 
@@ -137,7 +137,7 @@ steps:
     #   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_width_m: 0.02
     grasp_center_offset:
-      position: {x: 0.025, y: -0.0481, z: 0.0}
+      position: {x: 0.025, y: -0.049, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
   - step_id: place_u_orange
@@ -149,7 +149,7 @@ steps:
     #   position: {x: 0.001, y: 0.0, z: 0.0}
     #   orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
     grasp_center_offset:
-      position: {x: 0.025, y: -0.0481, z: 0.0}
+      position: {x: 0.025, y: -0.049, z: 0.0}
       orientation: {x: -0.5, y: -0.5, z: -0.5, w: 0.5}
 
     motion:
