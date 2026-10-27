@@ -28,6 +28,23 @@ for example `20261012_scored_sonnet_low`. A batch is either a smoke batch,
 which checks that the pipeline works and never feeds a paper number, or a
 scored batch, which does. `batch.yaml` records which one it is.
 
+## Batches
+
+| batch_id | agents | scenario | runs | note |
+|---|---|---|---|---|
+| `20261005_smoke` | Sonnet-5 low | S1 | smoke | pipeline check, never scored |
+| `S1`, `S2`, `S3` | Sonnet-5 low / Sonnet-5 low | S1, S2, S3 | 23 each (C1 5, C2 10, C3 5, C4 3) | the baseline |
+| `S4` | Sonnet-5 low executor, no watchdog | S4 | 23 | the baseline, self-monitoring |
+| `S3_opus_low` | Opus-5.5 low watchdog / Sonnet-5 low executor | S3 | 6 (C1 5, C2 1) | capability study; hand visit added from run 03 |
+| `S3_opus_medium` | Opus-5.5 medium watchdog / Sonnet-5 low executor | S3 | 5 (C1 4, C2 1) | capability study; cube + hand every run |
+| `S4_opus_medium` | Opus-5.5 medium executor, no watchdog | S4 | 5 (C1 1, C2 4) | capability study; cube + hand every run |
+| `REF` | scripted oracle watchdog / Sonnet-5 low executor | S3 protocol | 2 | observation upper bound; observation-scored only |
+
+Opus batches ran Class 1 and 2 only, so conformance comparisons against the
+baseline use the baseline's Class 1 and 2 rows. Each `batch.yaml` records the
+design, every session, the stage and rule changes that happened during the
+batch, and the sessions excluded as `known_invalid`.
+
 ## Which scorer writes which file
 
 Each scorer writes one JSON file per session and appends one row per session

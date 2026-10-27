@@ -1,5 +1,14 @@
 # WatchDog / Executor Agent Harness
 
+> **Two launch paths.** This README describes the harness as built around
+> `run_agent.py`, the API-key path (`agents/config/*.yaml`, providers in
+> `agent_harness/`). Every SCORED run in `paper_results/` was driven instead
+> through the Claude Code CLI with `run_watchdog.sh` / `run_executor.sh`,
+> which load the same prompts, task files and MCP servers but take model and
+> effort from `watchdog.settings.json` / `executor.settings.json`. That path
+> is documented in `docs/dev/RUN.md`; the isolation rules, the gate, the
+> transcripts and the verification sections below apply to both.
+
 Two independent agents study the same assembly task from opposite sides:
 
 - **Executor** — commands the robot through the `gripper`, `motion`, and

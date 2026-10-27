@@ -211,11 +211,13 @@ changing, and the launchers pick them up automatically.
 
 | Key | Accepted values |
 | --- | --- |
-| `model` | an alias (`opus`, `sonnet`, `haiku`, `fable`) or a full id (`claude-sonnet-5`, `claude-opus-5`) |
+| `model` | an alias (`opus`, `sonnet`, `haiku`, `fable`) or a full id (`claude-sonnet-5`, `claude-opus-5-5`). Scored batches record the FULL id the launcher echoes, never an alias (`opus` resolved to `claude-opus-5-5` on 2026-10-25). |
 | `effortLevel` | `low`, `medium`, `high`, `xhigh`, `max` |
 
-Current setting: **both roles on `claude-sonnet-5` at `low` effort**,
-deliberately matched so the two sides of a run differ only in role.
+Baseline batches (S1 to S4) ran **both roles on `claude-sonnet-5` at `low` effort**,
+deliberately matched so the two sides of a run differ only in role. The Opus
+batches changed one role at a time (see each `batch.yaml` `per_role`); the
+settings files hold whatever the last batch used, so check them before a run.
 
 If you later want them to differ, raise the watchdog first: its turns are
 conformance judgment (arming discipline, trigger-versus-bound adjudication)

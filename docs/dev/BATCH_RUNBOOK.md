@@ -1,8 +1,9 @@
-# Batch runbook — S1 Class 1 (clean runs)
+# Batch runbook
 
-The per-run procedure for collecting scored paper data, written for the S1 C1
-batch (`paper_results/batches/S1/`) and reusable for the other scenarios with
-the noted substitutions. The principle throughout: **every number in the paper
+The per-run procedure for collecting scored paper data. Written for the S1 C1
+batch (`paper_results/batches/S1/`) and used, with the substitutions at the
+end, for every batch since: S2, S3, S4, the Opus model/effort batches and the
+reference oracle. The principle throughout: **every number in the paper
 must trace back through `corrected/` → `raw/` → a session directory → this
 checklist.** Anything that skipped a step gets excluded, not patched.
 
@@ -107,7 +108,7 @@ agent behaviour is not.
    run, from what you SAW, not from the agents' claims:
 
    ```bash
-   cp gt_fmb2_s1c1.yaml "$SD/"           # template for fmb_assembly_2, S1, C1
+   cp label_templates/gt_fmb2_s1c1.yaml "$SD/"   # template for fmb_assembly_2, S1, C1
    ```
 
    Edit in `$SD`: unique `run_id` (e.g. `fmb2_s1c1_run03`),
@@ -213,3 +214,26 @@ session directory.
   `./run_executor.sh s4 2`; score with `s4_scorer.py` (+ observation scorer
   `--role executor`); authored-monitor coverage rows are reviewed by hand
   against the saved sources (you already do this).
+- **Model/effort batches** (`S3_opus_low`, `S3_opus_medium`,
+  `S4_opus_medium`): same protocol as the scenario they copy; only the
+  varied role's `model`/`effortLevel` in its settings file changes, recorded
+  in `batch.yaml` `per_role` as the full id the launcher echoes (never an
+  alias). Commit before run 01 so `git_sha` names a clean tree. Injections
+  from `S3_opus_low` run 03 on are the pinned cube PLUS the hand visit
+  (`isaac/script_editor/s1_c1_inject.py` carries both); earlier batches
+  injected the cube only, which `batch.yaml` says per session.
+- **Operator-made faults.** A fault the operator produces by hand (dragging a
+  part in Isaac) counts as Class 2 and is labelled from the bag like any
+  other, but it has no ground-truth record, so the observation scorer sees
+  any report of it as unmatched; Phase 6 zeroes that (see SCORERS.md,
+  hand-correction rules). Prefer `nudge_object` where it works; never nudge a
+  seated part into the fixture (the teleport ejects it).
+- **Reference oracle** (`REF`): `reference_watchdog/run_reference_watchdog.py`
+  replaces the watchdog session; score with the observation scorer only; its
+  README has the full recipe.
+- **Scoring S4 and S4-based batches**: `s4_scorer.py $SD --csv
+  $B/raw/results_s4.csv --out $B/raw/$SID/score_s4.json`, then the leak
+  audit, then `observation_scorer.py ... --scenario S4 --role executor`.
+- **Phase 6 for any batch**: corrected/ starts as an unchanged copy of raw/;
+  the standing hand-correction rules are listed in `docs/dev/SCORERS.md`
+  and every applied edit is one `CORRECTIONS.md` line with the bag evidence.

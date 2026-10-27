@@ -1,4 +1,4 @@
-# Scorers (updated 2026-10-06)
+# Scorers (core 2026-10-06; hand-correction rules and known artefacts added 2026-10-27)
 
 Three scorers, two tables-of-record plus one observation table. Verified on
 live sessions (incl. the first S4 run, 20261006T215544Z); batch collection
@@ -272,3 +272,66 @@ continuous_depth_monitor, scored the scripted edge intruder OUT-OF-VIEW
 (the known hand-drag ground-truth gap). S4 validity gate correctly rejects a
 guarded S1–S3 session with three named violations; the Class-4 crux flags an
 executor-verified corrupted bind.
+
+## Hand-correction rules applied at Phase 6 (standing, every batch)
+
+The scorers are never revised mid-study; rows they get wrong are fixed by
+hand in `corrected/` with a `CORRECTIONS.md` line each. These are the rules
+that have been applied, in the order they were decided; each names its first
+case so the precedent can be checked.
+
+1. **Fixture rule** (2026-10-06, S1/S2). base1 and base2 carry no registry
+   bound. A fixture move is labelled as a violation only when a monitor on it
+   FIRED and the move is real in the bag; a recorded-but-unfired fixture
+   shift is not labelled. Agent-chosen thresholds on fixtures are never a
+   parameter failure.
+2. **Judged at place-step close** (S2 c2 run03). A mis-seat corrected inside
+   its own place step is not a violation; the seat is judged at step close.
+3. **Object-less findings** (S3 c4 run01). A verdict that judges the right
+   object in its clause text but without `object_id`, with no fire on that
+   object, is attributed by hand to that object (TP by check), because the
+   scorer attributes it to the step's active object or to whatever fired.
+4. **Bag-verified observations** (S3/S4 Phase 6, commit 18fabf3). A
+   `record_observation` that matches no ground-truth episode but describes
+   something true in the bag (a real base1 drift, an operator drag, a
+   collapse) is not a false scene report: `obs_FP` and
+   `n_unmatched_observations` are zeroed for it.
+5. **Grouped held-object monitors** (S3_opus_low c1 run01). A slip or effort
+   monitor that follows `ctx.held_object()` covers every hold it is armed
+   through; the scorer credits only the `object_id` it was armed with. Grip
+   coverage is corrected from the arm/disarm record.
+6. **Camera monitors that read poses only to mask** (S3_opus_medium c1
+   run04, extended in S4_opus_medium). A purpose=observation camera monitor
+   that reads `frame_pose`, `transform` or `object_pose` only to cut the arm
+   or the registered parts out of the depth image is an observation monitor.
+   The exemption-by-reads rule (`_is_observation`) classes it as clause; by
+   hand its fires leave `monitor_false_alarms`/`authored_FP`, join
+   `n_observation_fires`, and its agent-chosen thresholds leave parameter
+   accuracy. Fixture watches that read fixture poses to judge the fixture
+   stay clause monitors.
+7. **Operator decisions** are logged as such: a report ignored because the
+   stage was wrong (S3_opus_medium c1 run01, inverted_u_brown TF/mesh
+   offset), a planned fault that did not occur relabelled Class 1
+   (S4_opus_medium c1 run01).
+
+## Known scorer artefacts (left in the code so scored batches stay identical)
+
+- **Observation updates are matched as new reports.** `match_observations`
+  consumes each observation EVENT, not each `observation_id`, although its
+  docstring says a report and its updates are one. A later update of one
+  report can therefore be credited to a second episode (S3_opus_low c1
+  run05, S3_opus_medium c1 run04: the cube's end-of-run update credited the
+  hand). Fixed by hand: the episode becomes FN.
+- **Category-and-time matching can swap two reports.** Episodes are matched
+  in t0 order to the earliest compatible report, so a hand report filed
+  before the cube report takes the cube's episode (S3_opus_medium c2 run01,
+  S4_opus_medium c1 run01). Detection counts are unaffected; the two
+  latencies are swapped by hand.
+- **`fire_to_next_verdict` and `time_to_verdict` are heuristic pairings**
+  (S4's `time_to_verdict` is anchored on the executor's last `end_step`
+  since 2026-10-21). Compare them within a scorer, never across the
+  watchdog and S4 scorers.
+- **`ctx.transform` reports a missing frame as a TypeError** ("time must
+  have sec and nanosec") because the recorder's fallback lookup masks the
+  real error; an agent that probes a non-existent frame name (e.g. `tool0`)
+  can conclude TF is unavailable. Existing frames work.
