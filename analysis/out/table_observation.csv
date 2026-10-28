@@ -1,0 +1,9 @@
+row,is_oracle,n_runs,n_obs_rows_wholebatch,obs_engagement_wholebatch,obs_detection_wholebatch,obs_false_fire_fraction_wholebatch
+S1,False,23,19,15/19,0/16,0/0
+S2,False,23,18,10/18,0/18,3/3
+S3,False,23,22,21/22,0/22,142/144
+S4,False,23,22,21/22,0/22,10/10
+S3_opus_low,False,6,6,6/6,5/9,2/2
+S3_opus_medium,False,5,5,5/5,9/10,5/10
+S4_opus_medium,False,5,5,5/5,9/9,15/19
+REF,True,2,2,2/2,4/4,27/66

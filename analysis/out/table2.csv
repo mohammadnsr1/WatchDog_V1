@@ -1,0 +1,6 @@
+row,n,step_level_caught,step_level_caught_scorer_raw,verdict_correct,n_detected_misadjudicated,n_undetected,n_other,failing_runs,fisher_table,fisher_p_one_sided
+S1,3,3/3,3/3,2/3,1,0,0,fmb2_s1c4_run01:detected_misadjudicated,NA,NA
+S2,3,3/3,3/3,0/3,3,0,0,fmb2_s2c4_run01:detected_misadjudicated;fmb2_s2c4_run02:detected_misadjudicated;fmb2_s2c4_run03:detected_misadjudicated,NA,NA
+S3,3,3/3,3/3,2/3,1,0,0,fmb2_s3c4_run02:detected_misadjudicated,NA,NA
+S4,3,1/3,1/3,1/3,0,2,0,fmb2_s4c4_run01:undetected;fmb2_s4c4_run03:undetected,NA,NA
+fisher,12,NA,NA,NA,NA,NA,NA,NA,"[[9,0],[1,2]]",0.045455

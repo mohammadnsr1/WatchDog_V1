@@ -314,6 +314,16 @@ case so the precedent can be checked.
    offset), a planned fault that did not occur relabelled Class 1
    (S4_opus_medium c1 run01).
 
+**Retroactive audit (2026-10-27).** Rules 1 to 4 and 7 were applied to the
+baseline batches at their own Phase 6 (commit 18fabf3) or arose there. Rules
+5 and 6 were decided during the Opus batches, so every S1 to S4 session was
+audited for them afterwards: no baseline session armed a camera monitor that
+reads poses (rule 6), and every held-object slip or effort monitor in the
+baseline is gated on one named part (`ctx.held_object() != "<part>"`), not a
+grouped monitor following whichever part is held (rule 5). No baseline cell
+needed changing. The two observation-scorer artefacts cannot have affected
+the baseline, which has no scene detections to mis-credit.
+
 ## Known scorer artefacts (left in the code so scored batches stay identical)
 
 - **Observation updates are matched as new reports.** `match_observations`

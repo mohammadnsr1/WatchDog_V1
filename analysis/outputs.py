@@ -1,0 +1,196 @@
+"""Writers: per_run.csv, table CSV/TeX, audit.md, manifest.json."""
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable
+
+from .fractions import Frac
+from .loader import Loaded, Run
+from .tables import Table
+
+ID_COLUMNS = ["batch_id", "run_id", "session_id", "scenario", "class", "role",
+              "model_executor", "effort_executor", "model_watchdog", "effort_watchdog",
+              "is_oracle", "excluded", "exclude_reason", "obs_excluded", "obs_exclude_reason",
+              "has_observation_row", "param_accuracy_source", "corrections_count", "corrections_applied"]
+
+
+def fmt(v: Any) -> str:
+    if v is None:
+        return "NA"
+    if isinstance(v, Frac):
+        return str(v)
+    if isinstance(v, bool):
+        return "True" if v else "False"
+    if isinstance(v, float):
+        return f"{v:.6f}".rstrip("0").rstrip(".") if abs(v) < 1e12 else repr(v)
+    return str(v)
+
+
+def per_run_columns(runs: list[Run]) -> list[str]:
+    res: list[str] = []
+    obs: list[str] = []
+    der: set[str] = set()
+    for r in runs:
+        for c in r.results:
+            if c not in res:
+                res.append(c)
+        if r.obs:
+            for c in r.obs:
+                if c not in obs:
+                    obs.append(c)
+        der.update(k for k in r.derived if not k.startswith("_"))
+    frac_cols = [f"{c}_{suf}" for c in ("arming_coverage", "stationarity_coverage", "grip_coverage",
+                                        "arming_provenance", "authored_param_accuracy") for suf in ("num", "den")]
+    return ID_COLUMNS + res + [f"obs_{c}" for c in obs] + frac_cols + sorted(der - set(ID_COLUMNS)) + ["na_reasons", "flags"]
+
+
+def write_per_run_csv(runs: list[Run], path: Path) -> list[str]:
+    cols = per_run_columns(runs)
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(cols)
+        for r in runs:
+            row: dict[str, Any] = {
+                "batch_id": r.batch_id, "run_id": r.run_id, "session_id": r.session_id, "scenario": r.scenario,
+                "class": r.cls, "role": r.role, "model_executor": r.model_executor, "effort_executor": r.effort_executor,
+                "model_watchdog": r.model_watchdog, "effort_watchdog": r.effort_watchdog, "is_oracle": r.is_oracle,
+                "excluded": r.excluded, "exclude_reason": r.exclude_reason, "obs_excluded": r.obs_excluded,
+                "obs_exclude_reason": r.obs_exclude_reason, "has_observation_row": r.has_observation_row,
+                "param_accuracy_source": r.derived.get("param_accuracy_source"),
+                "corrections_count": len(r.corrections),
+                "corrections_applied": json.dumps([c.as_record() for c in r.corrections], ensure_ascii=False),
+                "na_reasons": json.dumps(r.na_reasons, sort_keys=True), "flags": json.dumps(r.flags, sort_keys=True),
+            }
+            row.update(r.results)
+            if r.obs:
+                row.update({f"obs_{k}": v for k, v in r.obs.items()})
+            for c, f in r.fracs.items():
+                row[f"{c}_num"] = None if f is None else f.num
+                row[f"{c}_den"] = None if f is None else f.den
+            for k, v in r.derived.items():
+                if not k.startswith("_") and k not in row:
+                    row[k] = v
+            w.writerow([fmt(row.get(c)) for c in cols])
+    return cols
+
+
+def write_table_csv(t: Table, path: Path) -> None:
+    cols = ["row"] + t.columns
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(cols)
+        for row in t.rows:
+            w.writerow([fmt(row.get(c)) for c in cols])
+        for (label, col), reason in sorted(t.na.items()):
+            pass
+    na_path = path.with_suffix(".na.csv")
+    with na_path.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["row", "column", "na_reason"])
+        for (label, col), reason in sorted(t.na.items()):
+            w.writerow([label, col, reason])
+
+
+def _tex_escape(s: str) -> str:
+    return str(s).replace("\\", "\\textbackslash{}").replace("_", "\\_").replace("%", "\\%").replace("&", "\\&").replace("#", "\\#")
+
+
+def _tex_cell(v: Any) -> str:
+    if v is None:
+        return "--"
+    if isinstance(v, Frac):
+        return f"{v.num}/{v.den}" if v.den == 0 else f"{v.num}/{v.den} ({100 * v.ratio:.1f}\\%)"
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    if isinstance(v, float):
+        return f"{v:.2f}" if abs(v) >= 0.01 or v == 0 else f"{v:.4f}"
+    return _tex_escape(v)
+
+
+def write_table_tex(t: Table, path: Path, caption: str, label: str, columns: list[str] | None = None) -> None:
+    cols = columns or t.columns
+    cols = [c for c in cols if c in t.columns]
+    lines = [
+        "% Generated by analysis/ -- do not edit by hand. Requires \\usepackage{booktabs}.",
+        "\\begin{table}[t]", "\\centering", f"\\caption{{{_tex_escape(caption)}}}", f"\\label{{{label}}}",
+        "\\footnotesize", "\\setlength{\\tabcolsep}{3pt}",
+        "\\begin{tabular}{l" + "r" * len(cols) + "}", "\\toprule",
+        " & ".join(["Row"] + [_tex_escape(c) for c in cols]) + " \\\\", "\\midrule",
+    ]
+    for row in t.rows:
+        lines.append(" & ".join([_tex_escape(row["row"])] + [_tex_cell(row.get(c)) for c in cols]) + " \\\\")
+    lines += ["\\bottomrule", "\\end{tabular}", "\\end{table}", ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def git_commit(repo: Path) -> str:
+    try:
+        return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    except Exception as exc:  # noqa: BLE001
+        return f"unavailable: {type(exc).__name__}"
+
+
+def write_manifest(path: Path, repo: Path, inputs: Iterable[Path], outputs: Iterable[Path], extra: dict) -> None:
+    uniq = sorted({p.resolve() for p in inputs if p.exists()})
+    man = {
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "git_commit": git_commit(repo),
+        "repo": str(repo.resolve()),
+        "n_inputs": len(uniq),
+        "inputs": [{"path": str(p), "sha256": sha256_of(p), "bytes": p.stat().st_size} for p in uniq],
+        "outputs": [str(p.resolve()) for p in outputs],
+        **extra,
+    }
+    path.write_text(json.dumps(man, indent=1), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# audit.md
+# ---------------------------------------------------------------------------
+
+def _md_table(headers: list[str], rows: list[list[Any]]) -> list[str]:
+    out = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
+    for r in rows:
+        out.append("| " + " | ".join(str(x).replace("|", "\\|") for x in r) + " |")
+    return out
+
+
+def table_section(t: Table) -> list[str]:
+    L = [f"## {t.name}", ""]
+    L += _md_table(["row", "n included", "n excluded", "excluded (run: reason)"],
+                   [[lab, len(t.included.get(lab, [])), len(t.excluded.get(lab, [])),
+                     "; ".join(f"{a}: {b}" for a, b in t.excluded.get(lab, [])) or "-"] for lab in t.included])
+    L.append("")
+    if t.na:
+        L.append("NA cells:")
+        L += _md_table(["row", "column", "reason"], [[a, b, c] for (a, b), c in sorted(t.na.items())])
+        L.append("")
+    L.append("Numerator / denominator behind every pooled cell:")
+    L += _md_table(["row", "column", "derivation"], [[a, b, c] for a, b, c in t.provenance])
+    L.append("")
+    for n in t.notes:
+        L.append(f"- {n}")
+    L.append("")
+    return L
+
+
+def write_audit(path: Path, loaded: Loaded, tables: list[Table], sections: dict[str, list[str]]) -> None:
+    L = ["# Analysis audit", "", f"Generated {datetime.now(timezone.utc).isoformat()}", ""]
+    for name, lines in sections.items():
+        L += [f"## {name}", ""] + lines + [""]
+    for t in tables:
+        L += table_section(t)
+    path.write_text("\n".join(L), encoding="utf-8")
