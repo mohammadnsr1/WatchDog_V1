@@ -1,0 +1,14 @@
+# Replay compositor (offline, any Python 3.10+ venv).
+matplotlib>=3.7
+numpy>=1.24
+Pillow>=10.1
+PyYAML>=6.0
+imageio>=2.31
+imageio-ffmpeg>=0.4.9
+# Reads the session rosbag2 directory (mcap storage) for continuous signals.
+# Pure Python, no ROS install needed.
+rosbags>=0.10
+#
+# The frame recorder is NOT installed from this file. It runs under the ROS 2
+# Python that has rclpy, and needs Pillow there (apt: python3-pil) unless it
+# records a .../compressed topic, which is written as-is.

@@ -1,0 +1,68 @@
+# Example story. Every value marked PLACEHOLDER must be checked before use.
+#
+# The session below is a real one: S1, Class 4 run 01 (executor registry
+# override: u_brown max_clamp_effort 100 for the executor, 10 for the WatchDog).
+# Run `summary` on it first and adjust window, excerpts and captions to what
+# the summary shows.
+
+session_dir: ../../agents/transcripts/sessions/20261010T020201Z   # relative to this file, or absolute
+
+run_id: s1_c4_run01                     # web file name: letters, digits, _ . - only
+scenario: S1                            # no session manifest exists in this campaign, so these four
+fault_class: 4                          # come from the story. PLACEHOLDER: confirm against batch.yaml
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Class 4: stale spec"
+subtitle: "Executor check passes, WatchDog effort monitor fires"
+
+camera: main          # frames/<camera>/ from the frame recorder. This session predates the recorder,
+                      # so the compositor falls back to look() and capture_frames() stills and says so on screen.
+window: null          # PLACEHOLDER: e.g. [60.0, 260.0] to crop to the pick of u_brown
+
+speed:
+  idle: 8.0
+  event: 1.0
+  event_pad_s: 1.5
+  hold_s: 2.0
+
+# Kinds that slow down and hold. `arm` fires once per monitor arming (often 15 or more
+# per run, each adding hold_s); drop it here if the video gets long.
+key_events: [fire, verdict, halt, look_frame]
+
+# Executor tool calls hidden from the panel and swimlane (pose polling is noisy).
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+prompt_excerpts:
+  - lane: watchdog
+    at_event: arm
+    heading: "WatchDog instruction"
+    text: "[PLACEHOLDER] Grasp effort must stay below the registry clamp limit."
+  - lane: executor
+    at_t: 3.0
+    heading: "Executor instruction"
+    text: "[PLACEHOLDER] Pick the part and insert it into the board."
+
+captions:
+  - at_t: 0.0
+    text: "Two agents, disjoint tools, separate observation channels."
+
+signals: [effort_finger, gripper_width_true]
+
+thresholds:
+  - signal: effort_finger
+    value_from: watchdog_registry
+    object: u_brown
+    field: limits.max_clamp_effort
+    fallback_value: 10.0      # PLACEHOLDER: batch.yaml records 10 for the install registry during S1 Class 4.
+                              # Used because no session manifest records the WatchDog's registry.
+    label: "WatchDog limit"
+  - signal: effort_finger
+    value_from: executor_registry      # read from registry_provenance_executor.json if the file is unchanged
+    object: u_brown
+    field: limits.max_clamp_effort
+    fallback_value: 100.0     # PLACEHOLDER: the executor's override value
+    label: "Executor limit (stale)"
+
+# Optional: pin filmstrip frames for the paper figure, session seconds.
+# figure_frames_at: [80.0, 120.0, 150.0, 300.0]
