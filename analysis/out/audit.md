@@ -1,6 +1,6 @@
 # Analysis audit
 
-Generated 2026-10-28T00:43:10.429545+00:00
+Generated 2026-10-28T19:52:33.113109+00:00
 
 ## Sessions attempted / scored / voided (A1)
 
@@ -34,10 +34,10 @@ Provisional hand-computed expectations (analysis/expectations.py) vs pipeline. A
 | table1/S2 | obs_detection | 0/18 | 0/18 | ok |
 | table2/S2 | step_level_caught | 3/3 | 3/3 | ok |
 | table1/S3 | arming_coverage | 2370/2626 | 2370/2626 | ok |
-| table1/S3 | grip_coverage | 91/178 | 107/178 | DISAGREE |
+| table1/S3 | grip_coverage | 107/178 | 107/178 | ok |
 | table1/S3 | verdict_correct | 22/23 | 22/23 | ok |
 | table1/S3 | fault_recall | 25/33 | 25/33 | ok |
-| table1/S3 | fault_precision | 25/27 | 25/26 | DISAGREE |
+| table1/S3 | fault_precision | 25/26 | 25/26 | ok |
 | table1/S3 | obs_detection | 0/22 | 0/22 | ok |
 | table2/S3 | step_level_caught | 3/3 | 3/3 | ok |
 | table1/S4 | arming_coverage | 1809/2726 | 1809/2726 | ok |
@@ -52,7 +52,7 @@ Provisional hand-computed expectations (analysis/expectations.py) vs pipeline. A
 | table3/S3 | grip_coverage | 71/108 | 71/108 | ok |
 | table3/S3 | verdict_correct | 15/15 | 15/15 | ok |
 | table3/S3 | fault_recall | 14/21 | 14/21 | ok |
-| table3/S3 | fault_precision | 14/16 | 14/15 | DISAGREE |
+| table3/S3 | fault_precision | 14/15 | 14/15 | ok |
 | table3/S3_opus_low | n | 6 | 6 | ok |
 | table3/S3_opus_low | arming_coverage | 641/667 | 641/667 | ok |
 | table3/S3_opus_low | grip_coverage | 46/46 | 46/46 | ok |
@@ -75,10 +75,10 @@ Provisional hand-computed expectations (analysis/expectations.py) vs pipeline. A
 | table3/S4_opus_medium | arming_coverage | 503/504 | 503/504 | ok |
 | table3/S4_opus_medium | grip_coverage | 36/36 | 36/36 | ok |
 | table3/S4_opus_medium | verdict_correct | 5/5 | 5/5 | ok |
-| table3/S4_opus_medium | fault_recall | 12/15 | 12/14 | DISAGREE |
+| table3/S4_opus_medium | fault_recall | 12/14 | 12/14 | ok |
 | table3/S4_opus_medium | fault_precision | 12/14 | 12/14 | ok |
 
-**4 disagreement(s).**
+**0 disagreement(s).**
 
 ## Corrections density (D8)
 
@@ -230,206 +230,16 @@ Runs where adjusted fault_* and scorer_raw_fault_* disagree, with the logged cor
 
 ## Transcript mapping (2e)
 
-Transcript dir: `/home/mohammad/.claude/projects/-home-mohammad-watchdog-WatchDog_V1` (0 transcripts indexed).
+Transcript dir: `/home/mohammad/.claude/projects/-home-mohammad-watchdog-WatchDog-V1` (351 transcripts indexed).
 Rule: role from MCP server names; session = the one transcript whose first record is within [-60, +300] s of agent_config_<role>.json launched_wall_time_iso.
 
 | role | status | n |
 |---|---|---|
-| executor | no_transcript_dir | 108 |
-| watchdog | no_transcript_dir | 80 |
+| executor | unique | 108 |
 | watchdog | no_watchdog_role | 28 |
+| watchdog | unique | 80 |
 
-Unmapped role-sessions: 188
-| batch | run | role | status | candidates |
-|---|---|---|---|---|
-| S1 | fmb2_s1c1_run01 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run01 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run02 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run02 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run03 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run03 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run01 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run01 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run02 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run02 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run04 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run04 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run05 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c1_run05 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run03 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run03 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run04 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run04 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run05 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run05 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run06 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run06 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run07 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run07 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run08 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run08 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run09 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run09 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run01 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run01 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run02 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run02 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run10 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c2_run10 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run03 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run03 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run04 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run04 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run05 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c3_run05 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run01 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run01 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run02 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run02 | watchdog | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run03 | executor | no_transcript_dir |  |
-| S1 | fmb2_s1c4_run03 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run01 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run01 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run02 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run02 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run01 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run01 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run03 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run03 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run02 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run02 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run04 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run04 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run05 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run05 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run06 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run06 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run07 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run07 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run08 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run08 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run09 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run09 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run10 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c2_run10 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run01 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run01 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run02 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run02 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run03 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c4_run03 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run01 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run01 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run02 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run02 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run03 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run03 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run04 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run04 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run05 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c3_run05 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run03 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run03 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run04 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run04 | watchdog | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run05 | executor | no_transcript_dir |  |
-| S2 | fmb2_s2c1_run05 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run01 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run01 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run02 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run02 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run01 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run01 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run02 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run02 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run03 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run03 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run04 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run04 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run04 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run04 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run05 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run05 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run05 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run05 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run06 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run06 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run07 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run07 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run08 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run08 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run10 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run10 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run01 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run01 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run02 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run02 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run03 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run03 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run04 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run04 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run05 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c3_run05 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run01 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run01 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run02 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run02 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run03 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c4_run03 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run03 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c1_run03 | watchdog | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run09 | executor | no_transcript_dir |  |
-| S3 | fmb2_s3c2_run09 | watchdog | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run01 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c1_run01 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run02 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run03 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run04 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c1_run02 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c1_run03 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c1_run04 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run05 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c1_run05 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run06 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run07 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run08 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run09 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c2_run10 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c3_run01 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c3_run02 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c3_run03 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c3_run04 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c3_run05 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c4_run01 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c4_run02 | executor | no_transcript_dir |  |
-| S4 | fmb2_s4c4_run03 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run01 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run01 | watchdog | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run02 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run02 | watchdog | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c2_run01 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c2_run01 | watchdog | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run03 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run03 | watchdog | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run04 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run04 | watchdog | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run05 | executor | no_transcript_dir |  |
-| S3_opus_low | fmb2_s3ol_c1_run05 | watchdog | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c2_run01 | executor | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c2_run01 | watchdog | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run01 | executor | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run01 | watchdog | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run02 | executor | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run02 | watchdog | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run03 | executor | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run03 | watchdog | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run04 | executor | no_transcript_dir |  |
-| S3_opus_medium | fmb2_s3om_c1_run04 | watchdog | no_transcript_dir |  |
-| S4_opus_medium | fmb2_s4om_c2_run01 | executor | no_transcript_dir |  |
-| S4_opus_medium | fmb2_s4om_c1_run01 | executor | no_transcript_dir |  |
-| S4_opus_medium | fmb2_s4om_c2_run02 | executor | no_transcript_dir |  |
-| S4_opus_medium | fmb2_s4om_c2_run03 | executor | no_transcript_dir |  |
-| S4_opus_medium | fmb2_s4om_c2_run04 | executor | no_transcript_dir |  |
+Unmapped role-sessions: 0
 
 ## Log hygiene, clock domains, non-comparable columns
 
@@ -463,12 +273,8 @@ watchdog_postrun_tail_s (run_ended -> last watchdog MCP return) overlaps time_to
 
 | column | reason | n runs | runs |
 |---|---|---|---|
-| cache_creation_tokens_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | cache_creation_tokens_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| cache_creation_tokens_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
-| cache_read_tokens_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | cache_read_tokens_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| cache_read_tokens_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
 | fire_delivery_max_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
 | fire_delivery_median_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
 | fire_delivery_p95_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
@@ -482,27 +288,17 @@ watchdog_postrun_tail_s (run_ended -> last watchdog MCP return) overlaps time_to
 | gate_wait_p95_s | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | gate_wait_total_ex_timeout_s | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | gate_wait_total_s | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| n_assistant_msgs_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | n_assistant_msgs_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| n_assistant_msgs_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
 | n_gate_timeouts | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | n_gates | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | tokens_in_executor | oracle_batch_not_an_agent_condition | 2 | REF/20261025T200836Z, REF/20261025T202724Z |
-| tokens_in_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | tokens_in_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | tokens_in_watchdog | oracle_batch_not_an_agent_condition | 2 | REF/20261025T200836Z, REF/20261025T202724Z |
-| tokens_in_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
 | tokens_out_executor | oracle_batch_not_an_agent_condition | 2 | REF/20261025T200836Z, REF/20261025T202724Z |
-| tokens_out_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | tokens_out_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | tokens_out_watchdog | oracle_batch_not_an_agent_condition | 2 | REF/20261025T200836Z, REF/20261025T202724Z |
-| tokens_out_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
-| transcript_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
-| transcript_model_executor | transcript_no_transcript_dir | 108 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+100) |
 | transcript_model_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| transcript_model_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
 | transcript_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| transcript_watchdog | transcript_no_transcript_dir | 80 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c2_run01, S1/fmb2_s1c2_run02, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c2_run03 (+72) |
 | watchdog_adjudication_s | no_watchdog_role_s4_time_to_verdict_not_comparable | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | watchdog_adjudication_s | time_to_verdict_s_blank | 2 | REF/20261025T200836Z, REF/20261025T202724Z |
 | watchdog_postrun_tail_s | no_gates_in_scenario | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
@@ -627,94 +423,30 @@ NA cells:
 | row | column | reason |
 |---|---|---|
 | S3 | S4_fire_to_adjudication_median_s_median | not_S4 |
-| S3 | cache_creation_tokens_executor_median_per_run | no_transcript_mapped |
-| S3 | cache_creation_tokens_executor_sum | no_transcript_mapped |
-| S3 | cache_creation_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3 | cache_creation_tokens_watchdog_sum | no_transcript_mapped |
-| S3 | cache_read_tokens_executor_median_per_run | no_transcript_mapped |
-| S3 | cache_read_tokens_executor_sum | no_transcript_mapped |
-| S3 | cache_read_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3 | cache_read_tokens_watchdog_sum | no_transcript_mapped |
-| S3 | tokens_in_executor_median_per_run | no_transcript_mapped |
-| S3 | tokens_in_executor_sum | no_transcript_mapped |
-| S3 | tokens_in_watchdog_median_per_run | no_transcript_mapped |
-| S3 | tokens_in_watchdog_sum | no_transcript_mapped |
-| S3 | tokens_out_executor_median_per_run | no_transcript_mapped |
-| S3 | tokens_out_executor_sum | no_transcript_mapped |
-| S3 | tokens_out_watchdog_median_per_run | no_transcript_mapped |
-| S3 | tokens_out_watchdog_sum | no_transcript_mapped |
 | S3_opus_low | S4_fire_to_adjudication_median_s_median | not_S4 |
-| S3_opus_low | cache_creation_tokens_executor_median_per_run | no_transcript_mapped |
-| S3_opus_low | cache_creation_tokens_executor_sum | no_transcript_mapped |
-| S3_opus_low | cache_creation_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_low | cache_creation_tokens_watchdog_sum | no_transcript_mapped |
-| S3_opus_low | cache_read_tokens_executor_median_per_run | no_transcript_mapped |
-| S3_opus_low | cache_read_tokens_executor_sum | no_transcript_mapped |
-| S3_opus_low | cache_read_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_low | cache_read_tokens_watchdog_sum | no_transcript_mapped |
-| S3_opus_low | tokens_in_executor_median_per_run | no_transcript_mapped |
-| S3_opus_low | tokens_in_executor_sum | no_transcript_mapped |
-| S3_opus_low | tokens_in_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_low | tokens_in_watchdog_sum | no_transcript_mapped |
-| S3_opus_low | tokens_out_executor_median_per_run | no_transcript_mapped |
-| S3_opus_low | tokens_out_executor_sum | no_transcript_mapped |
-| S3_opus_low | tokens_out_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_low | tokens_out_watchdog_sum | no_transcript_mapped |
 | S3_opus_medium | S4_fire_to_adjudication_median_s_median | not_S4 |
-| S3_opus_medium | cache_creation_tokens_executor_median_per_run | no_transcript_mapped |
-| S3_opus_medium | cache_creation_tokens_executor_sum | no_transcript_mapped |
-| S3_opus_medium | cache_creation_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_medium | cache_creation_tokens_watchdog_sum | no_transcript_mapped |
-| S3_opus_medium | cache_read_tokens_executor_median_per_run | no_transcript_mapped |
-| S3_opus_medium | cache_read_tokens_executor_sum | no_transcript_mapped |
-| S3_opus_medium | cache_read_tokens_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_medium | cache_read_tokens_watchdog_sum | no_transcript_mapped |
-| S3_opus_medium | tokens_in_executor_median_per_run | no_transcript_mapped |
-| S3_opus_medium | tokens_in_executor_sum | no_transcript_mapped |
-| S3_opus_medium | tokens_in_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_medium | tokens_in_watchdog_sum | no_transcript_mapped |
-| S3_opus_medium | tokens_out_executor_median_per_run | no_transcript_mapped |
-| S3_opus_medium | tokens_out_executor_sum | no_transcript_mapped |
-| S3_opus_medium | tokens_out_watchdog_median_per_run | no_transcript_mapped |
-| S3_opus_medium | tokens_out_watchdog_sum | no_transcript_mapped |
 | S4 | S1S3_fire_to_next_verdict_median_s_median | not_S1S3 |
-| S4 | cache_creation_tokens_executor_median_per_run | no_transcript_mapped |
-| S4 | cache_creation_tokens_executor_sum | no_transcript_mapped |
 | S4 | cache_creation_tokens_watchdog_median_per_run | no_watchdog_role |
 | S4 | cache_creation_tokens_watchdog_sum | no_watchdog_role |
-| S4 | cache_read_tokens_executor_median_per_run | no_transcript_mapped |
-| S4 | cache_read_tokens_executor_sum | no_transcript_mapped |
 | S4 | cache_read_tokens_watchdog_median_per_run | no_watchdog_role |
 | S4 | cache_read_tokens_watchdog_sum | no_watchdog_role |
 | S4 | gate_overhead_fraction | no_gates_in_scenario |
 | S4 | gate_overhead_fraction_ex_timeout | no_gates_in_scenario |
 | S4 | gate_wait_median_s | no_gates_in_scenario |
-| S4 | tokens_in_executor_median_per_run | no_transcript_mapped |
-| S4 | tokens_in_executor_sum | no_transcript_mapped |
 | S4 | tokens_in_watchdog_median_per_run | no_watchdog_role |
 | S4 | tokens_in_watchdog_sum | no_watchdog_role |
-| S4 | tokens_out_executor_median_per_run | no_transcript_mapped |
-| S4 | tokens_out_executor_sum | no_transcript_mapped |
 | S4 | tokens_out_watchdog_median_per_run | no_watchdog_role |
 | S4 | tokens_out_watchdog_sum | no_watchdog_role |
 | S4_opus_medium | S1S3_fire_to_next_verdict_median_s_median | not_S1S3 |
-| S4_opus_medium | cache_creation_tokens_executor_median_per_run | no_transcript_mapped |
-| S4_opus_medium | cache_creation_tokens_executor_sum | no_transcript_mapped |
 | S4_opus_medium | cache_creation_tokens_watchdog_median_per_run | no_watchdog_role |
 | S4_opus_medium | cache_creation_tokens_watchdog_sum | no_watchdog_role |
-| S4_opus_medium | cache_read_tokens_executor_median_per_run | no_transcript_mapped |
-| S4_opus_medium | cache_read_tokens_executor_sum | no_transcript_mapped |
 | S4_opus_medium | cache_read_tokens_watchdog_median_per_run | no_watchdog_role |
 | S4_opus_medium | cache_read_tokens_watchdog_sum | no_watchdog_role |
 | S4_opus_medium | gate_overhead_fraction | no_gates_in_scenario |
 | S4_opus_medium | gate_overhead_fraction_ex_timeout | no_gates_in_scenario |
 | S4_opus_medium | gate_wait_median_s | no_gates_in_scenario |
-| S4_opus_medium | tokens_in_executor_median_per_run | no_transcript_mapped |
-| S4_opus_medium | tokens_in_executor_sum | no_transcript_mapped |
 | S4_opus_medium | tokens_in_watchdog_median_per_run | no_watchdog_role |
 | S4_opus_medium | tokens_in_watchdog_sum | no_watchdog_role |
-| S4_opus_medium | tokens_out_executor_median_per_run | no_transcript_mapped |
-| S4_opus_medium | tokens_out_executor_sum | no_transcript_mapped |
 | S4_opus_medium | tokens_out_watchdog_median_per_run | no_watchdog_role |
 | S4_opus_medium | tokens_out_watchdog_sum | no_watchdog_role |
 
@@ -742,8 +474,8 @@ Numerator / denominator behind every pooled cell:
 | S3 | obs_false_fire_fraction_wholebatch | 142/144 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3 | frac_fires_during_motion | 84/92 fires inside a motion-or-gripper call interval (pooled over runs) |
 | S3 | fire_delivery_median_s | median over 92 delivered fires pooled across runs |
-| S3 | tokens_executor | summed over 0/15 runs with a uniquely mapped executor transcript |
-| S3 | tokens_watchdog | summed over 0/15 runs with a uniquely mapped watchdog transcript |
+| S3 | tokens_executor | summed over 15/15 runs with a uniquely mapped executor transcript |
+| S3 | tokens_watchdog | summed over 15/15 runs with a uniquely mapped watchdog transcript |
 | S3_opus_low | arming_coverage | 641/667 from arming_coverage over 6 runs |
 | S3_opus_low | grip_coverage | 46/46 from grip_coverage over 6 runs |
 | S3_opus_low | param_accuracy | 64/64 from authored_param_accuracy over 6 runs |
@@ -765,8 +497,8 @@ Numerator / denominator behind every pooled cell:
 | S3_opus_low | obs_false_fire_fraction_wholebatch | 2/2 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3_opus_low | frac_fires_during_motion | 5/5 fires inside a motion-or-gripper call interval (pooled over runs) |
 | S3_opus_low | fire_delivery_median_s | median over 5 delivered fires pooled across runs |
-| S3_opus_low | tokens_executor | summed over 0/6 runs with a uniquely mapped executor transcript |
-| S3_opus_low | tokens_watchdog | summed over 0/6 runs with a uniquely mapped watchdog transcript |
+| S3_opus_low | tokens_executor | summed over 6/6 runs with a uniquely mapped executor transcript |
+| S3_opus_low | tokens_watchdog | summed over 6/6 runs with a uniquely mapped watchdog transcript |
 | S3_opus_medium | arming_coverage | 613/616 from arming_coverage over 5 runs |
 | S3_opus_medium | grip_coverage | 40/40 from grip_coverage over 5 runs |
 | S3_opus_medium | param_accuracy | 86/86 from authored_param_accuracy over 5 runs |
@@ -788,8 +520,8 @@ Numerator / denominator behind every pooled cell:
 | S3_opus_medium | obs_false_fire_fraction_wholebatch | 5/10 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3_opus_medium | frac_fires_during_motion | 11/16 fires inside a motion-or-gripper call interval (pooled over runs) |
 | S3_opus_medium | fire_delivery_median_s | median over 16 delivered fires pooled across runs |
-| S3_opus_medium | tokens_executor | summed over 0/5 runs with a uniquely mapped executor transcript |
-| S3_opus_medium | tokens_watchdog | summed over 0/5 runs with a uniquely mapped watchdog transcript |
+| S3_opus_medium | tokens_executor | summed over 5/5 runs with a uniquely mapped executor transcript |
+| S3_opus_medium | tokens_watchdog | summed over 5/5 runs with a uniquely mapped watchdog transcript |
 | S4 | arming_coverage | 1191/1740 from arming_coverage over 15 runs |
 | S4 | grip_coverage | 80/120 from grip_coverage over 15 runs |
 | S4 | param_accuracy | 166/171 from authored_param_accuracy over 15 runs |
@@ -808,7 +540,7 @@ Numerator / denominator behind every pooled cell:
 | S4 | obs_false_fire_fraction_wholebatch | 10/10 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S4 | frac_fires_during_motion | 19/24 fires inside a motion-or-gripper call interval (pooled over runs) |
 | S4 | fire_delivery_median_s | median over 24 delivered fires pooled across runs |
-| S4 | tokens_executor | summed over 0/15 runs with a uniquely mapped executor transcript |
+| S4 | tokens_executor | summed over 15/15 runs with a uniquely mapped executor transcript |
 | S4 | tokens_watchdog | summed over 0/15 runs with a uniquely mapped watchdog transcript |
 | S4_opus_medium | arming_coverage | 503/504 from arming_coverage over 5 runs |
 | S4_opus_medium | grip_coverage | 36/36 from grip_coverage over 5 runs |
@@ -828,7 +560,7 @@ Numerator / denominator behind every pooled cell:
 | S4_opus_medium | obs_false_fire_fraction_wholebatch | 15/19 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S4_opus_medium | frac_fires_during_motion | 24/29 fires inside a motion-or-gripper call interval (pooled over runs) |
 | S4_opus_medium | fire_delivery_median_s | median over 29 delivered fires pooled across runs |
-| S4_opus_medium | tokens_executor | summed over 0/5 runs with a uniquely mapped executor transcript |
+| S4_opus_medium | tokens_executor | summed over 5/5 runs with a uniquely mapped executor transcript |
 | S4_opus_medium | tokens_watchdog | summed over 0/5 runs with a uniquely mapped watchdog transcript |
 
 

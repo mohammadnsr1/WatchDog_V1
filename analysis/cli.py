@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,9 @@ from .transcripts import index_transcripts
 
 
 def default_transcript_dir(repo: Path) -> Path:
-    slug = str(repo.resolve()).replace("/", "-")
+    # Claude Code names the project folder by replacing every non-alphanumeric character
+    # of the absolute path with '-', so '/home/x/WatchDog_V1' -> '-home-x-WatchDog-V1'.
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(repo.resolve()))
     return Path.home() / ".claude" / "projects" / slug
 
 
