@@ -18,7 +18,11 @@ A standalone rclpy node. It is not an MCP tool and is in no `--mcp-config`
 file, so neither agent can see or call it. It subscribes best effort, depth 1,
 so it never slows the simulator.
 
-- Default topic `/camera/depth/rgb` (the RGB stream `look()` reads).
+- Default topic `/recorder_rgb`, a recording-only camera on the stage (1280 x 720,
+  intrinsics on `/recorder_camera_info`). No agent subscribes to it. Frames go to
+  `frames/recorder/` at JPEG quality 95.
+- To record the agents' own 640 x 360 view instead, pass
+  `-p image_topic:=/camera/depth/rgb -p camera_name:=main`.
 - Writes `<session>/frames/<camera_name>/<index:06d>.jpg` and one line per
   frame to `frames.jsonl`: `index`, `file`, `wall_time_iso` (wall clock at
   receipt, UTC), `header_stamp` (simulation time, reference only), `topic`.
@@ -26,7 +30,7 @@ so it never slows the simulator.
   `~/.watchdog/current_session`. If none resolves it logs an error and exits.
 - Run it with the ROS 2 Python. Raw topics need Pillow there
   (`sudo apt install python3-pil`); a `.../compressed` topic is written as is.
-- A second camera: run another instance with `-p camera_name:=cinematic -p image_topic:=<topic>`.
+- Both views at once: run a second instance with `-p image_topic:=/camera/depth/rgb -p camera_name:=main`.
 
 ## Replay compositor
 

@@ -5,6 +5,7 @@
     python -m paper_media.replay.cli video   <story.yaml> --out <file.mp4>
     python -m paper_media.replay.cli figure  <story.yaml> --out <file.pdf> [--width double|single]
     python -m paper_media.replay.cli web     <story1.yaml> [<story2.yaml> ...] --site <SITE_REPO>
+    python -m paper_media.replay.cli package <story.yaml> [...] [--out-root paper_media/outputs] [--no-video]
 """
 from __future__ import annotations
 
@@ -33,6 +34,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("web", help="export videos, posters and run JSON into the website repository")
     p.add_argument("stories", type=Path, nargs="+")
     p.add_argument("--site", type=Path, required=True)
+    p = sub.add_parser("package", help="figure, key frames, video and media.yaml into paper_media/outputs/<media_id>/")
+    p.add_argument("stories", type=Path, nargs="+")
+    p.add_argument("--out-root", type=Path, default=Path(__file__).resolve().parents[1] / "outputs")
+    p.add_argument("--no-video", action="store_true")
     a = ap.parse_args(argv)
 
     if a.mode == "summary":
@@ -50,6 +55,15 @@ def main(argv: list[str] | None = None) -> int:
 
     from .load_session import load_story
     from .timeline import prepare
+    if a.mode == "package":
+        from .package import package
+        for sp in a.stories:
+            try:
+                package(load_story(sp), a.out_root, video=not a.no_video)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+        return 0
     story = load_story(a.story)
     if a.mode == "preview":
         from .render_video import render_preview

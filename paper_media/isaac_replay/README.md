@@ -27,28 +27,43 @@ python -m paper_media.isaac_replay.extract_bag <session_dir> --config paper_medi
 
 ## Step 2: render
 
-From the Script Editor, using the running app:
+From the Script Editor, using the running app. **This opens the configured stage
+in place of whatever is open, so never run it while a live session uses the app.**
+Bag seconds (`t_rel`) are seconds from the first bag message; session seconds in a
+story are about half a second later (the summary prints both t0 values).
 
 ```python
 import sys, importlib, asyncio
 sys.path.insert(0, "/home/mohammad/watchdog/WatchDog_V1"); importlib.invalidate_caches()
 import paper_media.isaac_replay.render_replay as rr; importlib.reload(rr)
-asyncio.ensure_future(rr.run_async(
-    "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/<id>/replay/replay_state.npz",
-    "/home/mohammad/watchdog/WatchDog_V1/paper_media/isaac_replay/replay_config.yaml",
-    check=True))
+S = "/home/mohammad/watchdog/WatchDog_V1/agents/transcripts/sessions/<id>"
+CFG = "/home/mohammad/watchdog/WatchDog_V1/paper_media/isaac_replay/replay_config.yaml"
+
+# 1. check: a few chosen bag seconds, every camera, into frames/replay_<camera>_check/
+asyncio.ensure_future(rr.run_async(S + "/replay/replay_state.npz", CFG, check_at=[100.0, 300.0], overwrite=True))
+
+# 2. a window for a video: bag seconds 99 to 330 at 15 fps, cell camera only,
+#    into frames/replay_cell_99-330s/   (use `camera: replay_cell_99-330s` in the story)
+asyncio.ensure_future(rr.run_async(S + "/replay/replay_state.npz", CFG, start=99.0, end=330.0, fps=15,
+                                   cameras=["cell"], overwrite=True))
 ```
 
-Standalone, with Isaac's Python:
+Standalone, with Isaac's Python (same options as flags):
 
 ```bash
 ~/isaacsim/python.sh paper_media/isaac_replay/render_replay.py \
-    --state <session>/replay/replay_state.npz --config paper_media/isaac_replay/replay_config.yaml --check
+    --state <session>/replay/replay_state.npz --config paper_media/isaac_replay/replay_config.yaml \
+    --check-at 100 300 --overwrite
+~/isaacsim/python.sh paper_media/isaac_replay/render_replay.py \
+    --state <session>/replay/replay_state.npz --config paper_media/isaac_replay/replay_config.yaml \
+    --start 99 --end 330 --fps 15 --cameras cell --overwrite
 ```
 
-- **Check mode** renders the first, middle and last ticks into `frames/replay_<camera>_check/`, so a check never mixes with a real render.
-- **A full render** writes into `frames/replay_<camera>/` and refuses to overwrite an existing `frames.jsonl` unless you pass `--overwrite` (`overwrite=True` in the Script Editor).
-- **Each `frames.jsonl` line** has `index`, `file`, `wall_time_iso`, `log_time_ns`, `t_rel`, `camera` and `tick`. The compositor reads `file` and `wall_time_iso`, so in a story file `camera: replay_main` works unchanged.
+- **Output folders.** `frames/replay_<camera>_check/` for checks, `frames/replay_<camera>_<start>-<end>s/` for a window, `frames/replay_<camera>/` for a whole run, or `frames/replay_<camera>_<label>/` with `label=` / `--label`.
+- **Overwrite.** A render refuses to replace an existing `frames.jsonl` unless you pass `--overwrite` (`overwrite=True`).
+- **Each `frames.jsonl` line** has `index`, `file`, `wall_time_iso`, `log_time_ns`, `t_rel`, `camera` and `tick`. The compositor reads `file` and `wall_time_iso`, so a story can use any replay folder as its `camera`.
+- **Speed.** About 3 s per 1080p frame on the shared A4500 while two other Isaac apps were running (2026-10-29), so a 230 s window at 15 fps is roughly 3 hours. Check and keyframe renders take minutes.
+- **Warm-up.** The real-time renderer accumulates over frames, so a jump between distant ticks leaves faint ghosts of where parts were. Ticks after a jump of more than 1 s get 24 render passes instead of `warmup_subframes`.
 
 ## The physics-free method, and why
 
@@ -59,7 +74,8 @@ calls Save. Then:
 1. **Nothing can push anything.**
    - Gravity is set to 0 on every physics scene.
    - Every collider is disabled.
-   - Every rigid body is made kinematic with zero velocity, or disabled entirely with `part_physics: disable`.
+   - Robot links stay dynamic rigid bodies. Making them kinematic turns every robot joint into a joint between static bodies, and PhysX then drops the articulation (the 2026-10-29 failure: "cannot create a joint between static bodies").
+   - Every other rigid body (the parts) is disabled with `part_physics: disable`, or made kinematic with `part_physics: kinematic`.
    - The ROS bridge graphs are deactivated, so no `/joint_command` subscriber drives the arm and nothing is published.
 2. **The robot state is overwritten in full every frame.** `SingleArticulation.set_joint_positions(q)`, `set_joint_velocities(0)`, and `apply_action(ArticulationAction(joint_positions=q))`, so the drives' targets equal the state they are given.
 3. **One `world.step(render=False)` commits the state.** With no gravity, no contacts, zero velocity and drives already at target, that step cannot move anything. It only makes PhysX publish the teleported link transforms and pick up the kinematic part poses.
@@ -81,6 +97,6 @@ I chose this over the alternatives for these reasons:
 
 ## Known limits
 
-- **Injected scene events do not appear.** Intruder cubes and visiting hands live under `/World/WatchdogIntruders`, which is deliberately outside the object TF publisher's target list, so they are not in TF. Reconstructing them would need a separate pass over `ground_truth_injections.jsonl`.
+- **Injected objects come from ground truth, not the bag.** Objects under `/World/WatchdogIntruders` are deliberately outside the TF publisher, so the replay rebuilds them under `/Replay/Intruders` from `ground_truth_injections.jsonl`, with the injector's geometry and colors. A placed object holds each logged pose (place, then the pose tracker's moved and settled records). A visitor moves linearly between its logged phase points (enter_start, in_view, dwell_start, leave_start, out_of_view, removed), which is how the injector moves it: straight lines at constant speed. On 20261030T003243Z the rebuilt cube and visitor match the recorder frames at the same wall time.
 - **Stage drift.** `assets/usd/assembly_room.usd` was re-saved between batches (layout changes are recorded in `batch.yaml`). Parts and robot come from the bag, so they are exact. Static scenery comes from whatever stage you open: for an older session, export the stage from that batch's `git_sha` and point `stage` at the copy.
 - **Wall time.** It is the bag recorder's receive time, the same axis as every other session log.

@@ -697,6 +697,9 @@ STORY_DEFAULTS: dict[str, Any] = {
     "prompt_excerpts": [], "captions": [], "signals": [], "thresholds": [],
     "figure_frames_at": None, "executor_tools_hide": [], "registry_paths": {},
     "run_id": None, "scenario": None, "fault_class": None, "assembly": None, "trial": None,
+    # packaging (paper_media/outputs/<media_id>/)
+    "media_id": None, "kind": None, "tags": [], "notes": "",
+    "figure_frame_cameras": [], "video_camera": None,
 }
 _KNOWN_STORY_KEYS = set(STORY_DEFAULTS) | {"session_dir"}
 
@@ -829,7 +832,22 @@ def resolve_thresholds(session: Session, story: Story,
             continue
         role = {"watchdog_registry": "watchdog", "executor_registry": "executor"}.get(str(vf))
         value = None
-        if role:
+        if vf == "armed_monitor":
+            # the threshold the WatchDog bound when it armed this monitor (first arming)
+            mid = th.get("monitor_id")
+            for env in read_jsonl(Path(session.dir) / "events_watchdog.jsonl", []):
+                p = env[1].get("payload") or {}
+                if env[1].get("event_type") == "monitor_armed" and p.get("monitor_id") == mid \
+                        and isinstance(p.get("threshold"), (int, float)):
+                    value = float(p["threshold"])
+                    src = p.get("threshold_source") or "?"
+                    break
+            if value is not None:
+                out.append({"signal": sig, "value": value, "label": label,
+                            "source": f"monitor_armed {mid} threshold ({src})"})
+                continue
+            warn(f"threshold {label!r}: no monitor_armed record for {mid!r}")
+        elif role:
             reg = registry_for_role(session, story, role, warn)
             obj, fld = th.get("object"), th.get("field")
             if reg is not None and obj and fld:

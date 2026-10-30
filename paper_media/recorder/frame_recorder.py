@@ -28,20 +28,22 @@ Timing: wall_time_iso is the only cross-process ordering key. header.stamp is
 simulation time, reset to zero each run, and is stored for reference only.
 
 Parameters:
-    image_topic   default /camera/depth/rgb  (the RGB stream look() reads;
-                  see robot_backend/watchdog/image_buffer.py). A topic ending
-                  in /compressed is subscribed as CompressedImage and its JPEG
-                  bytes are written unchanged (no resize).
+    image_topic   default /recorder_rgb: the recording-only camera added to the
+                  stage on 2026-10-29 (1280 x 720, fx 1826.39, frame sim_camera,
+                  intrinsics on /recorder_camera_info). No agent reads it. Pass
+                  /camera/depth/rgb to record the agents' own 640 x 360 view.
+                  A topic ending in /compressed is subscribed as
+                  CompressedImage and its JPEG bytes are written unchanged.
     out_dir       default ""  (resolve as above)
-    camera_name   default "main"
+    camera_name   default "recorder"   (frames/recorder/; use "main" for /camera/depth/rgb)
     rate_hz       default 10.0   wall-clock throttle
-    jpeg_quality  default 90
+    jpeg_quality  default 95
     max_width     default 1280   downscale wider raw frames, keep aspect
 
 Run (ROS 2 Python, alongside a session):
     python3 paper_media/recorder/frame_recorder.py
     python3 paper_media/recorder/frame_recorder.py --ros-args \
-        -p image_topic:=/cinematic/rgb -p camera_name:=cinematic
+        -p image_topic:=/camera/depth/rgb -p camera_name:=main
 """
 from __future__ import annotations
 
@@ -57,7 +59,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 
-DEFAULT_IMAGE_TOPIC = "/camera/depth/rgb"
+DEFAULT_IMAGE_TOPIC = "/recorder_rgb"
 
 # sensor_msgs/Image encodings handled for raw topics: encoding -> (Pillow mode, rawmode)
 _RAW_MODES = {
@@ -94,9 +96,9 @@ class FrameRecorder(Node):
         super().__init__("paper_media_frame_recorder")
         self.declare_parameter("image_topic", DEFAULT_IMAGE_TOPIC)
         self.declare_parameter("out_dir", "")
-        self.declare_parameter("camera_name", "main")
+        self.declare_parameter("camera_name", "recorder")
         self.declare_parameter("rate_hz", 10.0)
-        self.declare_parameter("jpeg_quality", 90)
+        self.declare_parameter("jpeg_quality", 95)
         self.declare_parameter("max_width", 1280)
 
         self.topic = str(self.get_parameter("image_topic").value)

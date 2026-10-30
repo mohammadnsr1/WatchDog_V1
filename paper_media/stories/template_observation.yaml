@@ -1,0 +1,43 @@
+# TEMPLATE: observation monitoring (unexpected objects or visitors). Copy to
+# <UTC date>_<scenario>_<class>_observation.yaml, set media_id to the same name,
+# and replace every PLACEHOLDER from the session's `summary` output and
+# ground_truth_injections.jsonl.
+
+session_dir: ../../agents/transcripts/sessions/PLACEHOLDER_SESSION_ID
+
+media_id: PLACEHOLDER
+kind: observation_monitoring
+tags: [PLACEHOLDER_SCENARIO, observation, foreign_object, transient_visitor, unscored]
+notes: ""
+
+run_id: PLACEHOLDER
+scenario: PLACEHOLDER
+fault_class: PLACEHOLDER
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Unexpected objects in the cell"
+subtitle: "PLACEHOLDER"
+
+camera: recorder
+window: [PLACEHOLDER_START, PLACEHOLDER_END]
+
+speed: {idle: 8.0, event: 1.0, event_pad_s: 1.5, hold_s: 2.0}
+key_events: [fire, observation, verdict, halt, look_frame]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+# Video only. The WatchDog clause text is in the fire's payload (clause.requirement).
+prompt_excerpts:
+  - lane: watchdog
+    at_event: fire
+    heading: "WatchDog clause"
+    text: "PLACEHOLDER"
+captions:
+  - {at_t: PLACEHOLDER, text: "PLACEHOLDER"}
+
+signals: []
+
+# Key frames, session seconds. Suggested: before the injection, the object in view,
+# the WatchDog's observation, the visitor entering, dwelling, leaving, clear again.
+figure_frames_at: [PLACEHOLDER]
+figure_frame_cameras: [recorder]

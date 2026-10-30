@@ -71,7 +71,7 @@ def _wrap(draw, text: str, font, max_w: int, max_lines: int) -> list[str]:
 def _fitted(path: str, w: int, h: int) -> Image.Image:
     img = Image.open(path).convert("RGB")
     scale = min(w / img.width, h / img.height)
-    return img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.BILINEAR)
+    return img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.LANCZOS)
 
 
 def _dashed_hline(draw, x0: int, x1: int, y: int, color, dash: int = 10, gap: int = 6, width: int = 2) -> None:
@@ -109,6 +109,8 @@ class Compositor:
         }
         self.panel_t = {k: [e.t for e in v] for k, v in self.panel_events.items()}
         self.signal_rows = list(prep.signals.values())[:3]
+        # With no signals the swimlanes take the signal strip's space.
+        self.swim_box = S.SWIM_BOX if self.signal_rows else (S.SWIM_BOX[0], S.SWIM_BOX[1], S.SWIM_BOX[2], S.SIGNAL_BOX[3])
         self.sig_range = {}
         for sig in self.signal_rows:
             vals = list(sig.v) + [th["value"] for th in prep.thresholds if th["signal"] == sig.name]
@@ -120,14 +122,14 @@ class Compositor:
     # ---- geometry ---------------------------------------------------------
     @property
     def lane_h(self) -> float:
-        return (S.SWIM_BOX[3] - S.SWIM_BOX[1]) / len(S.LANES)
+        return (self.swim_box[3] - self.swim_box[1]) / len(S.LANES)
 
     def lane_y(self, lane: str) -> int:
         i = S.LANES.index(lane) if lane in S.LANES else 1
-        return int(S.SWIM_BOX[1] + (i + 0.5) * self.lane_h)
+        return int(self.swim_box[1] + (i + 0.5) * self.lane_h)
 
     def x_of(self, t: float, real: float) -> float:
-        x0, x1 = S.SWIM_BOX[0] + S.LANE_LABEL_W, S.SWIM_BOX[2] - 8
+        x0, x1 = self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[2] - 8
         lo = real - S.SWIM_WINDOW_S / 2
         return x0 + (t - lo) / S.SWIM_WINDOW_S * (x1 - x0)
 
@@ -142,28 +144,25 @@ class Compositor:
         for box, title, color in ((S.EXEC_PANEL, "Executor", S.EXECUTOR_BLUE), (S.WD_PANEL, "WatchDog", S.WATCHDOG_GREEN)):
             d.rounded_rectangle(box, radius=10, fill=_rgb(S.PANEL_BG), outline=_rgb(color), width=3)
             d.text((box[0] + 16, box[1] + 10), title, font=f_title, fill=_rgb(color))
-        d.rectangle(S.SWIM_BOX, fill=_rgb(S.CANVAS_BG), outline=_rgb(S.GRID))
+        d.rectangle(self.swim_box, fill=_rgb(S.CANVAS_BG), outline=_rgb(S.GRID))
         for i, lane in enumerate(S.LANES):
-            y0 = int(S.SWIM_BOX[1] + i * self.lane_h)
-            y1 = int(S.SWIM_BOX[1] + (i + 1) * self.lane_h)
+            y0 = int(self.swim_box[1] + i * self.lane_h)
+            y1 = int(self.swim_box[1] + (i + 1) * self.lane_h)
             if i % 2 == 0:
-                d.rectangle((S.SWIM_BOX[0] + 1, y0, S.SWIM_BOX[2] - 1, y1), fill=(250, 251, 252))
-            d.line([(S.SWIM_BOX[0], y1), (S.SWIM_BOX[2], y1)], fill=_rgb(S.GRID))
+                d.rectangle((self.swim_box[0] + 1, y0, self.swim_box[2] - 1, y1), fill=(250, 251, 252))
+            d.line([(self.swim_box[0], y1), (self.swim_box[2], y1)], fill=_rgb(S.GRID))
             title = S.LANE_TITLES[lane]
             col = _rgb(S.LANE_COLOR[lane])
-            d.rectangle((S.SWIM_BOX[0], y0, S.SWIM_BOX[0] + 6, y1), fill=col)
+            d.rectangle((self.swim_box[0], y0, self.swim_box[0] + 6, y1), fill=col)
             lines = _wrap(d, title, f_lane, S.LANE_LABEL_W - 26, 2)
             ty = (y0 + y1) / 2 - len(lines) * 12
             for ln in lines:
-                d.text((S.SWIM_BOX[0] + 16, ty), ln, font=f_lane, fill=col)
+                d.text((self.swim_box[0] + 16, ty), ln, font=f_lane, fill=col)
                 ty += 24
-        d.line([(S.SWIM_BOX[0] + S.LANE_LABEL_W, S.SWIM_BOX[1]), (S.SWIM_BOX[0] + S.LANE_LABEL_W, S.SWIM_BOX[3])],
+        d.line([(self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[1]), (self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[3])],
                fill=_rgb(S.GRID), width=2)
-        d.rectangle(S.SIGNAL_BOX, outline=_rgb(S.GRID))
-        if not self.signal_rows:
-            d.text((S.SIGNAL_BOX[0] + 16, S.SIGNAL_BOX[1] + 10), "No signals selected in the story.", font=f_small,
-                   fill=_rgb(S.MUTED))
-        else:
+        if self.signal_rows:
+            d.rectangle(S.SIGNAL_BOX, outline=_rgb(S.GRID))
             rh = (S.SIGNAL_BOX[3] - S.SIGNAL_BOX[1]) / len(self.signal_rows)
             for i, sig in enumerate(self.signal_rows):
                 y = S.SIGNAL_BOX[1] + i * rh
@@ -226,11 +225,13 @@ class Compositor:
         w = box[2] - box[0] - 80
         lines = _wrap(d, e.detail, f_b, w - 32, 2)
         h = 46 + 26 * len(lines)
-        x0, y1 = box[0] + 40, box[3] - 120
-        d.rounded_rectangle((x0, y1 - h, x0 + w, y1), radius=10, fill=(255, 255, 255), outline=_rgb(S.FAIL_RED), width=4)
-        d.text((x0 + 16, y1 - h + 10), f"{e.label}   at {e.t:.1f} s", font=f_h, fill=_rgb(S.FAIL_RED))
+        # Top of the frame, under the title and speed badge: the cell camera looks down on
+        # the bench, so the rail at the top is the part a card can cover.
+        x0, y0 = box[0] + 40, box[1] + 104
+        d.rounded_rectangle((x0, y0, x0 + w, y0 + h), radius=10, fill=(255, 255, 255), outline=_rgb(S.FAIL_RED), width=4)
+        d.text((x0 + 16, y0 + 10), f"{e.label}   at {e.t:.1f} s", font=f_h, fill=_rgb(S.FAIL_RED))
         for i, ln in enumerate(lines):
-            d.text((x0 + 16, y1 - h + 42 + 26 * i), ln, font=f_b, fill=_rgb(S.INK))
+            d.text((x0 + 16, y0 + 42 + 26 * i), ln, font=f_b, fill=_rgb(S.INK))
 
     def _panel(self, d, lane: str, box, color: str, m: Moment, v: float) -> None:
         f_line = S.pil_font(18)
@@ -261,14 +262,14 @@ class Compositor:
     def _swimlanes(self, img, d, m: Moment, v: float) -> None:
         real = m.real
         lo, hi = real - S.SWIM_WINDOW_S / 2, real + S.SWIM_WINDOW_S / 2
-        x_left, x_right = S.SWIM_BOX[0] + S.LANE_LABEL_W, S.SWIM_BOX[2] - 8
+        x_left, x_right = self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[2] - 8
         f_tick = S.pil_font(15)
         f_lab = S.pil_font(15)
         for tick in range(int(math.ceil(lo / 5.0)) * 5, int(hi) + 1, 5):
             x = self.x_of(tick, real)
             if x_left <= x <= x_right:
-                d.line([(x, S.SWIM_BOX[1]), (x, S.SWIM_BOX[3])], fill=(236, 239, 242))
-                d.text((x + 3, S.SWIM_BOX[3] - 20), f"{tick} s", font=f_tick, fill=_rgb(S.MUTED))
+                d.line([(x, self.swim_box[1]), (x, self.swim_box[3])], fill=(236, 239, 242))
+                d.text((x + 3, self.swim_box[3] - 20), f"{tick} s", font=f_tick, fill=_rgb(S.MUTED))
         for a in self.p.arrows:
             if (lo <= a.src.t <= hi) or (lo <= a.dst.t <= hi):
                 p0 = (min(max(self.x_of(a.src.t, real), x_left), x_right), self.lane_y(a.src.lane))
@@ -295,7 +296,7 @@ class Compositor:
                     d.text((x + 9, y - 26), txt, font=f_lab, fill=col if e.kind != "tool_call" else _rgb(S.INK))
                     last_label_end[e.lane] = x + 9 + _text_w(d, txt, f_lab)
         xp = self.x_of(real, real)
-        d.line([(xp, S.SWIM_BOX[1]), (xp, S.SWIM_BOX[3])], fill=_rgb(S.INK), width=3)
+        d.line([(xp, self.swim_box[1]), (xp, self.swim_box[3])], fill=_rgb(S.INK), width=3)
         # look() popups
         for vt, e in self.look_frames:
             if 0 <= v - vt <= S.LOOK_POPUP_VIDEO_S:
@@ -378,7 +379,7 @@ def render_video(prep: Prepared, out: Path, progress: bool = True) -> Path:
     writer = imageio_ffmpeg.write_frames(
         str(out), (S.VIDEO_W, S.VIDEO_H), fps=S.FPS, codec="libx264", pix_fmt_in="rgb24",
         pix_fmt_out="yuv420p", quality=None, macro_block_size=1,
-        output_params=["-preset", "veryfast", "-crf", "20", "-movflags", "+faststart"],
+        output_params=["-preset", "slow", "-crf", "16", "-movflags", "+faststart"],
     )
     writer.send(None)
     try:

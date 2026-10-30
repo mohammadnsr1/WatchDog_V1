@@ -31,7 +31,7 @@ part_map:
   hex_red: /World/hex_red
   base2: /World/base2
 
-part_physics: kinematic        # kinematic (rigid bodies made kinematic) | disable (rigid bodies disabled)
+part_physics: disable          # kinematic (rigid bodies made kinematic) | disable (rigid bodies disabled)
 
 # Prims made inactive for the replay: the ROS bridge graphs (TF publisher,
 # joint state publisher, /joint_command subscriber, camera publisher).

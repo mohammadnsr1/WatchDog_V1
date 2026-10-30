@@ -1,0 +1,46 @@
+# TEMPLATE: conformance monitoring of one pick and place. Copy to
+# <UTC date>_<scenario>_<class>_<step>.yaml, set media_id to the same name, and
+# replace every PLACEHOLDER from the session's `summary` output.
+
+session_dir: ../../agents/transcripts/sessions/PLACEHOLDER_SESSION_ID
+
+media_id: PLACEHOLDER                  # = the file name without .yaml
+kind: conformance_monitoring
+tags: [PLACEHOLDER_SCENARIO, conformance, pick_and_place, PLACEHOLDER_PART, arming, gates, wake, end_step_check, unscored]
+notes: ""
+
+run_id: PLACEHOLDER                    # web file name: letters, digits, _ . -
+scenario: PLACEHOLDER                  # S1 | S2 | S3 | S4
+fault_class: PLACEHOLDER               # 1 | 2 | 3 | 4
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Conformance monitoring of one pick and place"
+subtitle: "WatchDog arms monitors, gates each step, wakes on the bus and checks the seated part"
+
+camera: recorder                       # frames/recorder/ (1280 x 720 from /recorder_rgb)
+window: [PLACEHOLDER_START, PLACEHOLDER_END]   # session s: begin_step of the pick to the WatchDog's boundary check
+
+speed: {idle: 6.0, event: 1.0, event_pad_s: 1.0, hold_s: 1.0}
+key_events: [step_start, gate_open, end_step, look_frame, fire]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+# Video only (figures carry no text overlays). Text must be copied from the task file.
+prompt_excerpts:
+  - lane: executor
+    at_t: PLACEHOLDER
+    heading: "Executor instruction"
+    text: "Grasp clamp effort on each part never exceeds that part's registry max_clamp_effort."
+captions: []
+
+signals: [effort_finger]
+thresholds:
+  - signal: effort_finger
+    value_from: armed_monitor          # the threshold the WatchDog bound when it armed this monitor
+    monitor_id: PLACEHOLDER            # e.g. clamp_u_brown; check the summary for the exact id
+    label: "PLACEHOLDER limit"
+
+# Key frames, session seconds. Suggested: begin_step, gate open, grasped, lift,
+# place approach, release, end_step, the WatchDog's boundary look().
+figure_frames_at: [PLACEHOLDER]
+figure_frame_cameras: [recorder]

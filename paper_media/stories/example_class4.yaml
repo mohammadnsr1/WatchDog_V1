@@ -47,7 +47,7 @@ captions:
   - at_t: 0.0
     text: "Two agents, disjoint tools, separate observation channels."
 
-signals: [effort_finger, gripper_width_true]
+signals: [effort_finger]
 
 thresholds:
   - signal: effort_finger
