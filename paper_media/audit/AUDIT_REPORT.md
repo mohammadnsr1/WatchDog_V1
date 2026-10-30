@@ -9,6 +9,30 @@ Evidence labels:
 - **per code read**: cited by a read-only search pass over the file; not re-read line by line.
 - **inferred**: a conclusion the code or data supports but does not prove. Each one names what would confirm it.
 
+## Results of the first audit run (2026-10-29, all 112 session directories)
+
+Run with `session_audit` over `agents/transcripts/sessions`, bag checks on. Full output is in `paper_media/audit/out/report.json`.
+
+| Check | ok | warn | corrupt |
+|---|---|---|---|
+| foreign_mcp_records | 98 | 0 | 14 |
+| role_separation | 112 | 0 | 0 |
+| guard_mode, json_parse, time_format, time_out_of_order, look_paths, bag | 112 | 0 | 0 |
+| registry_provenance | 100 | 12 | 0 |
+| late_file_writes, time_outside_span | 102 | 10 | 0 |
+| fires | 71 | 41 | 0 |
+
+- **Foreign records, 14 sessions.**
+  - 12 are scored S1 or S2 runs. One is the voided S1 run 20261007T205057Z. One more, 20261016T030548Z, was not in the earlier list.
+  - Every WatchDog-server block was written after its run ended, in blocks of exactly 71 calls: the test-run signature.
+  - Two single records are stale `begin_step` calls from executor `scene` servers that outlived an earlier attempt. Each blocked about 125 s on a gate, then logged into the next session once the pointer had moved: 20261008T025202Z and 20261016T030548Z. This confirms mechanism 2 in Q2 with data.
+  - No foreign call falls inside any run, so `role_separation` is clean in all 112 sessions.
+- **Bag checks pass everywhere.** All 112 bags open, carry `/tf`, and carry `finger_joint` effort on `/joint_states`.
+- **The 12 provenance warnings are the 12 Class 4 sessions.** None can establish both roles' `max_clamp_effort` from the session alone, as predicted in Q5.
+- **Fires.** In all 82 sessions that contain fires, every fire has `action_taken: flag`. Two are never delivered: both S2 `20261015T030950Z`, fired after the WatchDog's last wait. The remaining fire warnings are deliveries slower than 10 s. These are latency, not loss.
+- **Expected non-findings.** The two REF sessions have no label or WatchDog config by design. The voided S3_opus_medium session has no `run_ended`.
+- **Scores.** None of these change a reported score. The WatchDog scorer ignores call logs. The S4 scorer, which does not filter, never reads these sessions. The analysis pipeline filters by server and process id.
+
 ## Bottom line
 
 1. **The cross-session contamination has a confirmed mechanism.** The call log re-reads `~/.watchdog/current_session` on every write. Any process that has a task-path environment variable set appends into whatever session the pointer last named. The foreign records in 12 sessions have the signature of a test suite run, not a live agent.

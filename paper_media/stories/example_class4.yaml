@@ -1,11 +1,11 @@
 # Example story. Every value marked PLACEHOLDER must be checked before use.
 #
-# The session below is a real one: S1, Class 4 run 01 (executor registry
-# override: u_brown max_clamp_effort 100 for the executor, 10 for the WatchDog).
-# Run `summary` on it first and adjust window, excerpts and captions to what
-# the summary shows.
+# Paper media use dedicated, unscored sessions only. Never point a story at a
+# session that belongs to a scored batch.
+# Run `summary` on the session first and adjust window, excerpts and captions to
+# what the summary shows.
 
-session_dir: ../../agents/transcripts/sessions/20261010T020201Z   # relative to this file, or absolute
+session_dir: ../../agents/transcripts/sessions/PLACEHOLDER_UNSCORED_SESSION   # relative to this file, or absolute
 
 run_id: s1_c4_run01                     # web file name: letters, digits, _ . - only
 scenario: S1                            # no session manifest exists in this campaign, so these four
@@ -53,14 +53,14 @@ thresholds:
   - signal: effort_finger
     value_from: watchdog_registry
     object: u_brown
-    field: limits.max_clamp_effort
+    field: spec.limits.max_clamp_effort
     fallback_value: 10.0      # PLACEHOLDER: batch.yaml records 10 for the install registry during S1 Class 4.
                               # Used because no session manifest records the WatchDog's registry.
     label: "WatchDog limit"
   - signal: effort_finger
     value_from: executor_registry      # read from registry_provenance_executor.json if the file is unchanged
     object: u_brown
-    field: limits.max_clamp_effort
+    field: spec.limits.max_clamp_effort
     fallback_value: 100.0     # PLACEHOLDER: the executor's override value
     label: "Executor limit (stale)"
 

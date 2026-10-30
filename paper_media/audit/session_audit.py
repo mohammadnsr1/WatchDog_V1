@@ -303,6 +303,9 @@ def audit_session(sd: Path, pid_index: dict[int, list[dict]], args) -> dict:
         if e:
             ends.append(e)
     span = (min(starts) - args.span_pad_s, max(ends) + args.span_pad_s) if starts and ends else None
+    # The run itself, unpadded: first launch or orchestrator start, to the executor's run_ended.
+    _re = [parse_iso(r.get("wall_time_iso"))[0] for r in run_ended]
+    run_window = (min(starts), max(e for e in _re if e is not None)) if starts and any(e is not None for e in _re) else None
 
     # ---- time sanity ------------------------------------------------------
     bad_time, outside, disorder, gaps = [], [], [], []
@@ -367,12 +370,18 @@ def audit_session(sd: Path, pid_index: dict[int, list[dict]], args) -> dict:
                      "n_records": len(lines), "first_line": lines[0], "last_line": lines[-1],
                      "first_wall_time_iso": first.get("wall_time_iso"), "last_wall_time_iso": last.get("wall_time_iso"),
                      "matches_dominant_pid_of": matches}
+            # Where the foreign calls sit relative to this run. Calls made DURING the run by the
+            # other role's server are a role separation violation; calls made after it ended
+            # are contamination from a process outside the run (see foreign_mcp_records).
+            starts_in = [parse_iso(r.get("wall_time_iso"))[0] for ln, r in recs if ln in set(lines)]
+            in_run = [t for t in starts_in if t is not None and run_window and run_window[0] <= t <= run_window[1]]
+            entry["n_during_run"] = len(in_run)
+            entry["n_after_run"] = sum(1 for t in starts_in if t is not None and run_window and t > run_window[1])
+            entry["n_before_run"] = sum(1 for t in starts_in if t is not None and run_window and t < run_window[0])
             foreign.append(entry)
-            # A record from the other role's server in this file is a role separation violation
-            # unless it is explained as contamination from another session's process.
-            if why == "foreign_server" and not matches:
-                role_viol.append(f"mcp_calls_{role}.jsonl lines {lines[0]}..{lines[-1]}: {len(lines)} calls to "
-                                 f"server {server} (pid {pid}) not matching any other session's process")
+            if why == "foreign_server" and in_run:
+                role_viol.append(f"mcp_calls_{role}.jsonl: {len(in_run)} calls to server {server} (pid {pid}) "
+                                 f"made during the run")
     rep.add("foreign_mcp_records", "corrupt" if foreign else "ok", foreign)
     rep.add("role_separation", "corrupt" if role_viol else "ok", role_viol)
 
@@ -463,6 +472,7 @@ def audit_session(sd: Path, pid_index: dict[int, list[dict]], args) -> dict:
     # ---- arming -------------------------------------------------------------
     arms = env_of(mon_file, "monitor_armed")
     arm_issues = []
+    pre_wake = 0
     wake_times = sorted(wake_ends)
     for r in arms:
         p = r.get("payload") or {}
@@ -478,9 +488,10 @@ def audit_session(sd: Path, pid_index: dict[int, list[dict]], args) -> dict:
             if e is not None and wake_times:
                 prior = [w for w in wake_times if w <= e]
                 if not prior:
-                    arm_issues.append(f"{p.get('monitor_id')} armed at {r.get('wall_time_iso')} before any WatchDog wake "
-                                      f"(expected for run-start bystander arming)")
-    rep.add("arming", "warn" if arm_issues else "ok", arm_issues, n_arms=len(arms))
+                    pre_wake += 1
+    rep.add("arming", "warn" if arm_issues else "ok", arm_issues, n_arms=len(arms),
+            n_armed_before_first_wake=pre_wake,
+            note="arming before the first wake is normal run-start bystander arming; counted, not flagged")
 
     # ---- S4 / guard mode ----------------------------------------------------
     gate_types = Counter(r.get("type") for r in orch if str(r.get("type", "")).startswith("gate_"))

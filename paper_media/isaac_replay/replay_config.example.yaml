@@ -1,0 +1,75 @@
+# Isaac replay config. Copy to replay_config.yaml and edit. Values marked
+# CONFIRM were read from repo files but not verified against the live stage or a bag.
+
+# The run stage. Opened, then locked against saving; every edit goes to the
+# in-memory session layer. For an exact replay of an older session, export the
+# stage from that session's git commit (batch.yaml git_sha) to a copy and point here.
+stage: /home/mohammad/watchdog/WatchDog_V1/assets/usd/assembly_room.usd   # README.md Prerequisites
+
+robot_prim: /World/ur5e                       # CONFIRM: parent of ARTICULATION_ROOT in scripts/tune_physics.py:96
+articulation_root: /World/ur5e/root_joint     # scripts/tune_physics.py:96
+
+# TF root frame for the robot (model_registry.yaml cell.base_frame). The object TF
+# publisher (/Graph/Objects_TF, parentPrim /World) may use "World" as the parent
+# frame id; any root listed here is treated as the world origin. Run
+# `extract_bag --check` and read the parent column before trusting this.
+world_frame: world
+world_aliases: [World]   # confirmed on 20261010T020201Z: World is a static child of world, so every part resolves to world
+
+# TF frame -> USD prim. Every entry follows the registry comment
+# "matches the scene prim name (/World/<name>) that Isaac publishes into TF"
+# (model_registry.yaml), and scripts/tune_physics.py:211 addresses parts as /World/<name>.
+part_map:
+  u_brown: /World/u_brown
+  u_orange: /World/u_orange
+  line_green: /World/line_green
+  inverted_u_yellow: /World/inverted_u_yellow
+  base1: /World/base1
+  u_green: /World/u_green
+  inverted_u_brown: /World/inverted_u_brown
+  hex_blue: /World/hex_blue
+  hex_red: /World/hex_red
+  base2: /World/base2
+
+part_physics: kinematic        # kinematic (rigid bodies made kinematic) | disable (rigid bodies disabled)
+
+# Prims made inactive for the replay: the ROS bridge graphs (TF publisher,
+# joint state publisher, /joint_command subscriber, camera publisher).
+deactivate_prims: [/Graph]     # CONFIRM: inject_intruder.py names /Graph/Objects_TF/PublisherTF; other graphs may live elsewhere
+
+# RG2: finger_joint is driven; five joints mimic it through PhysxMimicJointAPI:rotX
+# (scripts/tune_physics.py:111-153). Confirmed on 20261010T020201Z: /joint_states
+# carries all six RG2 joints, so bag values are used and this block only feeds
+# the renderer's self-check printout, which settles `convention` from data.
+mimic:
+  source: usd                  # usd (PhysxMimicJointAPI attributes) | urdf (<mimic> tags)
+  convention: physx            # CONFIRM: physx means q + gearing*q_ref + offset = 0; "direct" means q = gearing*q_ref + offset
+  offset_units: deg            # CONFIRM: units of physxMimicJoint:<axis>:offset for revolute joints
+  urdf_path: /home/mohammad/watchdog/WatchDog_V1/ros2_ws/src/robot_description/urdf/ur5e_ros.urdf   # used only when source: urdf
+
+resolution: [1920, 1080]
+render_mode: rtx_realtime      # or path_traced
+path_traced_spp: 64
+warmup_subframes: 4
+check: false
+output_prefix: replay_         # frames/<prefix><camera>/
+
+cameras:
+  main:
+    position: [1.6, -1.2, 1.1]
+    look_at: [0.5, 0.0, 0.2]
+    focal_length: 24
+  closeup:
+    keyframes:
+      - {t: 0.0,  position: [0.9, -0.5, 0.5], look_at: [0.5, 0.0, 0.1], focal_length: 35}
+      - {t: 20.0, position: [0.7, -0.3, 0.4], look_at: [0.5, 0.0, 0.1], focal_length: 50}
+  # The cell's own RGB camera, for checking alignment against look() frames.
+  # Pose from isaac/script_editor/inject_intruder.py CAMERA_EXTRINSICS (optical
+  # frame at (0.25, -0.2, 1.7), xyzw (0, 0.99863, -0.05234, 0)): view direction
+  # (0, -0.1045, -0.9945), image up (0, -0.9945, 0.1045). Focal length from
+  # fx 554.26 at 640 px wide: 60 deg horizontal FOV, 18.15 mm on a 20.955 mm aperture.
+  cell:
+    position: [0.25, -0.2, 1.7]
+    look_at: [0.25, -0.3787, 0.0]
+    up: [0.0, -0.9945, 0.1045]
+    focal_length: 18.15
