@@ -13,7 +13,7 @@ session_dir: ../../agents/transcripts/sessions/20261102T195738Z
 
 media_id: 20261102_S3_c1_observation
 kind: observation_monitoring
-tags: [S3, observation, foreign_object, transient_visitor, unscored]
+tags: [S3, observation, foreign_object, transient_visitor, ground_truth, unscored]
 notes: "Earlier obs_workspace_border fire at 272.0 s (pick_u_brown) has no injection behind it; outside this window."
 
 run_id: s3_c1_observation
@@ -42,6 +42,10 @@ captions:
   - {at_t: 411.6, text: "The WatchDog records it as an unlisted object with no effect on any requirement."}
   - {at_t: 635.5, text: "A long flat object passes over the work area; the border monitor fires."}
   - {at_t: 677.8, text: "The WatchDog records it as an unlisted panel and notes when it is gone."}
+
+ground_truth:
+  - {name: foreign_8c55f7, label: "Foreign cube on the bench", outcome: detected, detected_at: 411.6}
+  - {name: visitor_hand_74bcd5, label: "Box passing over the work area", outcome: detected, detected_at: 677.8}
 
 signals: []
 

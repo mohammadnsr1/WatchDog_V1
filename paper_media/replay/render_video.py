@@ -108,6 +108,11 @@ class Compositor:
             "watchdog": [e for e in self.events if e.lane == "watchdog" and e.kind in WD_PANEL_KINDS],
         }
         self.panel_t = {k: [e.t for e in v] for k, v in self.panel_events.items()}
+        # A tag stays until the object leaves or, if later, until the WatchDog records it.
+        self.gt = [dict(g, v_start=tm.real_to_video(g["t_start"]),
+                        v_end=None if g["t_end"] is None else tm.real_to_video(max(g["t_end"], g["detected_at"] or 0.0)))
+                   for g in prep.ground_truth]
+        self.lanes = S.LANES + (("truth",) if self.gt else ())
         self.signal_rows = list(prep.signals.values())[:3]
         # With no signals the swimlanes take the signal strip's space.
         self.swim_box = S.SWIM_BOX if self.signal_rows else (S.SWIM_BOX[0], S.SWIM_BOX[1], S.SWIM_BOX[2], S.SIGNAL_BOX[3])
@@ -122,10 +127,10 @@ class Compositor:
     # ---- geometry ---------------------------------------------------------
     @property
     def lane_h(self) -> float:
-        return (self.swim_box[3] - self.swim_box[1]) / len(S.LANES)
+        return (self.swim_box[3] - self.swim_box[1]) / len(self.lanes)
 
     def lane_y(self, lane: str) -> int:
-        i = S.LANES.index(lane) if lane in S.LANES else 1
+        i = self.lanes.index(lane) if lane in self.lanes else 1
         return int(self.swim_box[1] + (i + 0.5) * self.lane_h)
 
     def x_of(self, t: float, real: float) -> float:
@@ -145,7 +150,7 @@ class Compositor:
             d.rounded_rectangle(box, radius=10, fill=_rgb(S.PANEL_BG), outline=_rgb(color), width=3)
             d.text((box[0] + 16, box[1] + 10), title, font=f_title, fill=_rgb(color))
         d.rectangle(self.swim_box, fill=_rgb(S.CANVAS_BG), outline=_rgb(S.GRID))
-        for i, lane in enumerate(S.LANES):
+        for i, lane in enumerate(self.lanes):
             y0 = int(self.swim_box[1] + i * self.lane_h)
             y1 = int(self.swim_box[1] + (i + 1) * self.lane_h)
             if i % 2 == 0:
@@ -217,6 +222,40 @@ class Compositor:
                 d.rectangle(box, outline=_rgb(S.FAIL_RED), width=10)
             if v - vt <= S.CARD_VIDEO_S:
                 self._card(d, e)
+        self._gt_tags(d, m, v)
+
+    def _gt_status(self, g: dict, real: float) -> str:
+        if g["outcome"] == "missed":
+            return "WatchDog: not detected"
+        det = g["detected_at"]
+        if det is None:
+            return "WatchDog: detected"
+        if real < det:
+            return f"WatchDog: not yet detected ({real - g['t_start']:.0f} s)"
+        lag = det - g["t_start"]
+        return f"WatchDog: recorded at {det:.1f} s" + (f" (+{lag:.0f} s)" if g["outcome"] == "late" else "")
+
+    def _gt_tags(self, d, m: Moment, v: float) -> None:
+        """Ground truth tags, stacked up from the bottom left of the camera frame, above the caption band."""
+        box = S.FRAME_BOX
+        f_h = S.pil_font(17, bold=True)
+        f_b = S.pil_font(20)
+        y = box[3] - 112
+        for g in self.gt:
+            if v < g["v_start"] or (g["v_end"] is not None and v > g["v_end"] + S.GT_LINGER_VIDEO_S):
+                continue
+            gone = g["t_end"] is not None and m.real >= g["t_end"]
+            head = "GROUND TRUTH" + (f"  ·  left view at {g['t_end']:.1f} s" if gone else f"  ·  since {g['t_start']:.1f} s")
+            status = self._gt_status(g, m.real)
+            col = _rgb(S.GT_OUTCOME_COLOR[g["outcome"]]) if g["outcome"] == "missed" or "recorded" in status else _rgb(S.GT_AMBER)
+            w = max(_text_w(d, head, f_h), _text_w(d, g["label"], f_b), _text_w(d, status, f_b)) + 32
+            h = 92
+            d.rounded_rectangle((box[0] + 12, y - h, box[0] + 12 + w, y), radius=8, fill=(255, 255, 255),
+                                outline=_rgb(S.GT_AMBER), width=4)
+            d.text((box[0] + 28, y - h + 8), head, font=f_h, fill=_rgb(S.GT_AMBER))
+            d.text((box[0] + 28, y - h + 32), g["label"], font=f_b, fill=_rgb(S.INK))
+            d.text((box[0] + 28, y - h + 60), status, font=f_b, fill=col)
+            y -= h + 10
 
     def _card(self, d, e: Event) -> None:
         box = S.FRAME_BOX
@@ -275,6 +314,31 @@ class Compositor:
                 p0 = (min(max(self.x_of(a.src.t, real), x_left), x_right), self.lane_y(a.src.lane))
                 p1 = (min(max(self.x_of(a.dst.t, real), x_left), x_right), self.lane_y(a.dst.lane))
                 _arrow(d, p0, p1, _rgb(a.color))
+        if self.gt:
+            # one sub-row per injection, bar colored by the outcome label
+            n = len(self.gt)
+            row = min(26.0, (self.lane_h - 12) / n)
+            y_top = self.lane_y("truth") - row * n / 2
+            for i, g in enumerate(self.gt):
+                y = int(y_top + row * (i + 0.5))
+                col = _rgb(S.GT_OUTCOME_COLOR[g["outcome"]])
+                end = g["t_end"] if g["t_end"] is not None else self.p.timemap.r_end
+                if end >= lo and g["t_start"] <= hi:
+                    xs = self.x_of(g["t_start"], real)
+                    xa, xb = max(xs, x_left), min(self.x_of(end, real), x_right)
+                    d.rectangle((xa, y - 3, xb, y + 3), fill=col)
+                    if x_left <= xs <= x_right:
+                        d.ellipse((xs - 6, y - 6, xs + 6, y + 6), fill=col)
+                    lab = f"{g['label']}  ·  {g['outcome']}"
+                    d.text((xa + 9, y - 22), _truncate(d, lab, f_lab, 420), font=f_lab, fill=col)
+                det = g["detected_at"]
+                if det is not None and lo <= det <= hi:
+                    xd = self.x_of(det, real)
+                    yw = self.lane_y("watchdog")
+                    for yy in range(int(yw) + 8, y - 6, 12):   # dashed link to the WatchDog's record
+                        d.line([(xd, yy), (xd, min(yy + 6, y - 6))], fill=col, width=2)
+                    d.ellipse((xd - 6, y - 6, xd + 6, y + 6), outline=col, fill=(255, 255, 255), width=3)
+                    d.text((xd + 9, y - 22), f"recorded (+{det - g['t_start']:.0f} s)", font=f_lab, fill=col)
         i0 = bisect.bisect_left(self.ev_t, lo)
         i1 = bisect.bisect_right(self.ev_t, hi)
         last_label_end: dict[str, float] = {}

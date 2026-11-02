@@ -95,7 +95,20 @@ See `stories/example_class4.yaml`. Keys: `session_dir`, `run_id`, `scenario`,
 `fault_class`, `assembly`, `trial`, `title`, `subtitle`, `camera`, `window`,
 `speed`, `key_events`, `executor_tools_hide`, `prompt_excerpts`, `captions`,
 `signals`, `thresholds` (`value_from`, `object`, `field`, `fallback_value`,
-`label`), `registry_paths`, `figure_frames_at`.
+`label`), `registry_paths`, `figure_frames_at`, `ground_truth`.
+
+### Ground truth overlay (video only)
+
+`ground_truth` is a list of `{name, label, outcome, detected_at}`. `name` is an
+injection in `ground_truth_injections.jsonl`; its presence runs from the first
+`place` or `in_view` record to the first later `out_of_view` or `removed`
+(or the end). `outcome` is `detected`, `late` or `missed` and `detected_at` is
+the session second of the WatchDog record. Both are the author's labels, read
+off the session; the compositor does not decide detection. With the key set,
+the video gets a fifth swimlane ("Ground truth (hidden from agents)") and a
+GROUND TRUTH tag on the camera frame while the object is present. Arrivals and
+detections hold like key events, and a transient visit plays at `speed.event`
+for its whole duration. Figures and the web JSON are unchanged.
 
 ### Time compression is always visible
 

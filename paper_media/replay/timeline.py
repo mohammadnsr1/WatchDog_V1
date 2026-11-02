@@ -9,7 +9,7 @@ state the true speed and elapsed time.
 from __future__ import annotations
 
 import bisect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 
@@ -41,7 +41,8 @@ class Moment:
 
 class TimeMap:
     def __init__(self, r_start: float, r_end: float, key_times: Iterable[float],
-                 idle: float = 8.0, event: float = 1.0, event_pad_s: float = 1.5, hold_s: float = 2.0) -> None:
+                 idle: float = 8.0, event: float = 1.0, event_pad_s: float = 1.5, hold_s: float = 2.0,
+                 slow_spans: Iterable[tuple[float, float]] = ()) -> None:
         if r_end <= r_start:
             raise ValueError(f"empty window [{r_start}, {r_end}]")
         if idle <= 0 or event <= 0:
@@ -49,10 +50,13 @@ class TimeMap:
         self.r_start, self.r_end = float(r_start), float(r_end)
         keys = sorted({round(float(k), 3) for k in key_times if r_start <= k <= r_end})
         self.key_times = keys
-        # merged slow intervals
+        # merged slow intervals: event_pad_s around each key, plus any extra spans
+        spans = [(k - event_pad_s, k + event_pad_s) for k in keys] + [tuple(map(float, s)) for s in slow_spans]
         slow: list[list[float]] = []
-        for k in keys:
-            a, b = max(r_start, k - event_pad_s), min(r_end, k + event_pad_s)
+        for lo, hi in sorted(spans):
+            a, b = max(r_start, lo), min(r_end, hi)
+            if b <= a:
+                continue
             if slow and a <= slow[-1][1]:
                 slow[-1][1] = max(slow[-1][1], b)
             else:
@@ -143,6 +147,7 @@ class Prepared:
     captions: list                  # [{t, text}]
     arrows: list
     warnings: list
+    ground_truth: list = field(default_factory=list)   # ls.load_ground_truth items
 
 
 def _pair_wakes(events: list, src_kinds: set[str], reason: str, max_gap: float = 15.0) -> list[tuple[Any, Any]]:
@@ -175,9 +180,14 @@ def prepare(story: "ls.Story", need_signals: bool = True) -> Prepared:
     r_end = float(w[1]) if w else max(e.end_t or e.t for e in events) + 1.0
     kinds = set(story.key_events or [])
     key_events = [e for e in events if e.kind in kinds]
+    # Ground truth: hold at each arrival and each detection, and play a transient
+    # visit (one with an end) at event speed for its whole duration.
+    gt = ls.load_ground_truth(session, story, warn=warn)
+    gt_keys = [g["t_start"] for g in gt] + [g["detected_at"] for g in gt if g["detected_at"] is not None]
+    gt_spans = [(g["t_start"], g["t_end"]) for g in gt if g["t_end"] is not None]
     sp = story.speed
-    tm = TimeMap(r_start, r_end, [e.t for e in key_events], idle=float(sp["idle"]), event=float(sp["event"]),
-                 event_pad_s=float(sp["event_pad_s"]), hold_s=float(sp["hold_s"]))
+    tm = TimeMap(r_start, r_end, [e.t for e in key_events] + gt_keys, idle=float(sp["idle"]), event=float(sp["event"]),
+                 event_pad_s=float(sp["event_pad_s"]), hold_s=float(sp["hold_s"]), slow_spans=gt_spans)
 
     frames = ls.load_recorder_frames(session.dir, str(story.camera or "main"))
     evidence = False
@@ -211,4 +221,4 @@ def prepare(story: "ls.Story", need_signals: bool = True) -> Prepared:
             if h is not None:
                 arrows.append(Arrow(v, h, style.FAIL_RED))
     return Prepared(story, session, events, key_events, tm, frames, evidence, signals, thresholds,
-                    excerpts, captions, arrows, warnings)
+                    excerpts, captions, arrows, warnings, gt)

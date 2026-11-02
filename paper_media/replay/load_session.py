@@ -700,6 +700,8 @@ STORY_DEFAULTS: dict[str, Any] = {
     # packaging (paper_media/outputs/<media_id>/)
     "media_id": None, "kind": None, "tags": [], "notes": "",
     "figure_frame_cameras": [], "video_camera": None,
+    # ground truth overlay: [{name, label, outcome: detected|late|missed, detected_at}]
+    "ground_truth": [],
 }
 _KNOWN_STORY_KEYS = set(STORY_DEFAULTS) | {"session_dir"}
 
@@ -746,6 +748,49 @@ def visible_events(session: Session, story: Story) -> list[Event]:
         if w and not (float(w[0]) <= e.t <= float(w[1])):
             continue
         out.append(e)
+    return out
+
+
+GT_OUTCOMES = ("detected", "late", "missed")
+GT_START_ACTIONS = ("place", "in_view")
+GT_END_ACTIONS = ("out_of_view", "removed")
+
+
+def load_ground_truth(session: Session, story: Story, warn=lambda m: print(f"warning: {m}", file=sys.stderr)) -> list[dict]:
+    """The story's ground_truth entries, timed from ground_truth_injections.jsonl.
+
+    Presence runs from the first place or in_view record of that name to the
+    first later out_of_view or removed record (None: still present at the end).
+    The outcome and detected_at are the story author's labels; nothing here
+    decides whether the WatchDog saw the object.
+    """
+    entries = story.ground_truth or []
+    if not entries:
+        return []
+    by_name: dict[str, list[tuple[float, str]]] = {}
+    for _, r in read_jsonl(session.dir / "ground_truth_injections.jsonl", []):
+        if r.get("scenario") == "tracker" or not r.get("wall_time_iso"):
+            continue
+        by_name.setdefault(r.get("name"), []).append((session.t(iso_to_epoch(r["wall_time_iso"])), r.get("action")))
+    out = []
+    for g in entries:
+        name = g.get("name")
+        recs = sorted(by_name.get(name, []))
+        if not recs:
+            warn(f"ground_truth {name!r}: no record in ground_truth_injections.jsonl, skipped")
+            continue
+        outcome = g.get("outcome")
+        if outcome not in GT_OUTCOMES:
+            warn(f"ground_truth {name!r}: outcome {outcome!r} is not one of {GT_OUTCOMES}, skipped")
+            continue
+        t_start = next((t for t, a in recs if a in GT_START_ACTIONS), recs[0][0])
+        t_end = next((t for t, a in recs if a in GT_END_ACTIONS and t > t_start), None)
+        detected_at = g.get("detected_at")
+        if outcome != "missed" and detected_at is None:
+            warn(f"ground_truth {name!r}: outcome {outcome!r} without detected_at")
+        out.append({"name": name, "label": g.get("label") or name, "outcome": outcome,
+                    "detected_at": None if detected_at is None else float(detected_at),
+                    "t_start": t_start, "t_end": t_end})
     return out
 
 

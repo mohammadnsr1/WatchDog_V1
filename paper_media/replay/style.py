@@ -12,6 +12,7 @@ LANE_TITLES = {
     "bus": "ROS 2 Event Bus (/watchdog/events)",
     "monitors": "Deterministic Monitors",
     "watchdog": "WatchDog Agent",
+    "truth": "Ground truth (hidden from agents)",
 }
 LANE_SHORT = {"executor": "Executor", "bus": "Bus", "monitors": "Monitor", "watchdog": "WatchDog"}
 
@@ -31,13 +32,17 @@ CANVAS_BG = "#ffffff"
 GRID = "#d0d7de"
 HIGHLIGHT_BG = "#fff4cc"
 PASS_GREEN = WATCHDOG_GREEN
+GT_AMBER = "#b8730a"       # ground truth lane and on-camera tags
 
 LANE_COLOR = {
     "executor": EXECUTOR_BLUE,
     "bus": BUS_GRAY,
     "monitors": MONITOR_GREEN,
     "watchdog": WATCHDOG_GREEN,
+    "truth": GT_AMBER,
 }
+# Ground truth status color, by the story's outcome label.
+GT_OUTCOME_COLOR = {"detected": PASS_GREEN, "late": GT_AMBER, "missed": FAIL_RED}
 
 
 def event_color(lane: str, kind: str, label: str = "") -> str:
@@ -146,6 +151,7 @@ EXCERPT_VIDEO_S = 5.0      # how long a prompt excerpt card stays, video seconds
 LOOK_POPUP_VIDEO_S = 3.0
 FLASH_VIDEO_S = 1.2
 CAPTION_VIDEO_S = 5.0
+GT_LINGER_VIDEO_S = 4.0    # a ground truth tag stays this long after the object leaves
 
 # Figure widths, inches (IEEE two column page).
 FIG_WIDTH_IN = {"double": 7.16, "single": 3.5}

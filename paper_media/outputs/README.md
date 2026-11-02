@@ -55,7 +55,9 @@ pose and timing; see `paper_media/isaac_replay/README.md`.
 
 | media_id | session | kind | window [s] | content |
 |---|---|---|---|---|
-| (none yet) | | | | |
+| 20261102_S3_c1_observation | 20261102T195738Z | observation_monitoring | 330-690 | foreign cube and visitor box, both recorded; ground truth overlay |
+| 20261102_S3_natural_place_inverted_u_yellow | 20261102T195738Z | conformance_monitoring | 740-952 | natural collision on place_inverted_u_yellow, five fires, non_conformant |
+| 20261102_S3_c1_conformant_run | 20261102T204534Z | observation_monitoring | 210-856 | conformant run; cube recorded 430 s late, visitor box missed; ground truth overlay |
 
 Templates: `paper_media/stories/template_conformance.yaml` and `template_observation.yaml`.
 
