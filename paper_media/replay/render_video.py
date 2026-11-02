@@ -14,7 +14,7 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from . import style as S
-from .load_session import Event
+from .load_session import Event, agents_text
 from .timeline import Moment, Prepared
 
 EXEC_PANEL_KINDS = {"step_start", "step_claim", "tool_call", "look", "run_end", "verdict", "run_verdict", "observation"}
@@ -113,6 +113,7 @@ class Compositor:
                         v_end=None if g["t_end"] is None else tm.real_to_video(max(g["t_end"], g["detected_at"] or 0.0)))
                    for g in prep.ground_truth]
         self.lanes = S.LANES + (("truth",) if self.gt else ())
+        self.agents = agents_text(prep.session)
         self.signal_rows = list(prep.signals.values())[:3]
         # With no signals the swimlanes take the signal strip's space.
         self.swim_box = S.SWIM_BOX if self.signal_rows else (S.SWIM_BOX[0], S.SWIM_BOX[1], S.SWIM_BOX[2], S.SIGNAL_BOX[3])
@@ -192,17 +193,19 @@ class Compositor:
         else:
             msg = "No camera frame recorded yet at this time"
             d.text((box[0] + (bw - _text_w(d, msg, f_mid)) // 2, box[1] + bh // 2 - 12), msg, font=f_mid, fill=(200, 200, 200))
-        # title
+        # title, subtitle, and the agents line from the session's agent configs
         story = self.p.story
         if story.title:
             f_t = S.pil_font(24, bold=True)
             f_s = S.pil_font(18)
-            w = max(_text_w(d, story.title, f_t), _text_w(d, story.subtitle or "", f_s)) + 28
-            d.rounded_rectangle((box[0] + 12, box[1] + 12, box[0] + 12 + w, box[1] + (70 if story.subtitle else 46)),
+            lines = [x for x in (story.subtitle, self.agents) if x]
+            w = max([_text_w(d, story.title, f_t)] + [_text_w(d, x, f_s) for x in lines]) + 28
+            d.rounded_rectangle((box[0] + 12, box[1] + 12, box[0] + 12 + w, box[1] + 46 + 24 * len(lines)),
                                 radius=8, fill=(0, 0, 0))
             d.text((box[0] + 26, box[1] + 18), story.title, font=f_t, fill=(255, 255, 255))
-            if story.subtitle:
-                d.text((box[0] + 26, box[1] + 46), story.subtitle, font=f_s, fill=(210, 210, 210))
+            for i, x in enumerate(lines):
+                d.text((box[0] + 26, box[1] + 46 + 24 * i), x, font=f_s,
+                       fill=(255, 214, 102) if x is self.agents else (210, 210, 210))
         # speed badge: always visible, honest about compression
         f_b = S.pil_font(30, bold=True)
         f_r = S.pil_font(20)

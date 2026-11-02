@@ -11,7 +11,7 @@ import re
 import sys
 from pathlib import Path
 
-from .load_session import load_story, run_metadata
+from .load_session import agents_text, load_story, run_metadata
 from .render_video import render_poster, render_video
 from .timeline import prepare
 
@@ -57,6 +57,7 @@ def run_json(prep, run_id: str, meta: dict) -> dict:
         "run_id": run_id,
         "title": scrub(prep.story.title or run_id, 120),
         "subtitle": scrub(prep.story.subtitle or "", 200),
+        "agents": agents_text(prep.session),
         "scenario": meta.get("scenario"),
         "fault_class": meta.get("fault_class"),
         "assembly": meta.get("assembly"),
@@ -105,6 +106,7 @@ def export_web(story_paths: list[Path], site: Path) -> None:
             "run_id": run_id,
             "title": data["title"],
             "subtitle": data["subtitle"],
+            "agents": data["agents"],
             "scenario": data["scenario"],
             "fault_class": data["fault_class"],
             "assembly": data["assembly"],

@@ -21,9 +21,9 @@ run_id: s3_c1_conformant_run
 scenario: S3
 fault_class: 1
 assembly: fmb_assembly_2
-trial: 1
+trial: 2
 
-title: "A conformant run, a late find and a miss"
+title: "Unexpected objects: a late find and a miss"
 subtitle: "Ground truth tags show what was injected and whether the WatchDog noticed"
 
 camera: recorder

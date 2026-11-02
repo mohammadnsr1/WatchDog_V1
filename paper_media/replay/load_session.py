@@ -919,6 +919,26 @@ def resolve_thresholds(session: Session, story: Story,
 # run metadata (web export)
 # ---------------------------------------------------------------------------
 
+def model_display_name(model_id: str) -> str:
+    """claude-opus-5-5 -> Claude Opus 5.5, claude-sonnet-5 -> Claude Sonnet 5; anything else unchanged."""
+    parts = str(model_id).split("-")
+    if len(parts) >= 3 and parts[0] == "claude" and all(p.isdigit() for p in parts[2:]):
+        return f"Claude {parts[1].capitalize()} {'.'.join(parts[2:])}"
+    return str(model_id)
+
+
+def agents_text(session: Session) -> str:
+    """One line naming each role's model and effort, from agent_config_<role>.json."""
+    out = []
+    for role, name in (("watchdog", "WatchDog"), ("executor", "Executor")):
+        c = session.agent_config.get(role)
+        if c and c.get("model"):
+            out.append(f"{name}: {model_display_name(c['model'])}, {c.get('effort', '?')} effort")
+        elif role == "watchdog":
+            out.append("No WatchDog")
+    return "  ·  ".join(out)
+
+
 def run_metadata(session: Session, story: Story,
                  warn=lambda m: print(f"warning: {m}", file=sys.stderr)) -> dict:
     """scenario, fault class, assembly, trial: session manifest first, then the story.

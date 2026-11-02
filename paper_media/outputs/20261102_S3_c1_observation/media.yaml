@@ -3,7 +3,7 @@ media_id: 20261102_S3_c1_observation
 kind: observation_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-02T21:12:02+00:00'
+generated_utc: '2026-11-02T21:37:28+00:00'
 tags:
 - S3
 - observation
@@ -83,7 +83,7 @@ video_camera: recorder
 thresholds: []
 signals: {}
 provenance:
-  git_sha: f935a4b863ea123ffb1ebf682eb51400a808ab70
+  git_sha: cbaacfd8c4df4834213ae1d33825986f3e6a8060
   git_dirty: true
   story_sha256: 7af0e8ac8c599e5335c77a45974ba2d2f220fd93583185aee5342191df978113
   stage_sha256: 10d6de20a2ec41514cf13815100df71f1b39058e6a8be8d4244cb874565115ab

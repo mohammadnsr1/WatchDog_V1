@@ -3,7 +3,7 @@ media_id: 20261102_S3_natural_place_inverted_u_yellow
 kind: conformance_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-02T20:28:43+00:00'
+generated_utc: '2026-11-02T21:37:05+00:00'
 tags:
 - S3
 - conformance
@@ -87,10 +87,10 @@ video_camera: recorder
 thresholds: []
 signals: {}
 provenance:
-  git_sha: 1c1497760c059c35ce714e2781100118a3c4a815
+  git_sha: cbaacfd8c4df4834213ae1d33825986f3e6a8060
   git_dirty: true
   story_sha256: ce6a1c711786801af838f299cd01a44c03f9b875fd9f45bef22c519f9219dbc4
-  stage_sha256: 8de0c84fcbaa0ac560b10d57bca930a9e85c068d180a8dd23092ba178f6574b4
+  stage_sha256: 10d6de20a2ec41514cf13815100df71f1b39058e6a8be8d4244cb874565115ab
   replay_state_sha256: null
 files:
 - figure/20261102_S3_natural_place_inverted_u_yellow_double.svg

@@ -1,0 +1,49 @@
+# Conformance monitoring of one pick and place: u_brown, second media session.
+# Session 20261102T204534Z: dedicated unscored media run (S3, fmb_assembly_2,
+# WatchDog claude-opus-5-5/medium, executor claude-sonnet-5/low). Session seconds:
+#   216.3  begin_step pick_u_brown; 239.6 clamp_u_brown, 244.2 inactive_parts_u_brown_span, 286.3 slip_u_brown armed
+#   359.8  end_step place_u_brown, claimed success; no fire in the window (scene_watch fired at 204.7, before it)
+#   361.6  cube injected, just after the window
+
+session_dir: ../../agents/transcripts/sessions/20261102T204534Z
+
+media_id: 20261102_S3_t2_conformance_u_brown
+kind: conformance_monitoring
+tags: [S3, conformance, pick_and_place, u_brown, arming, gates, wake, end_step_check, unscored]
+notes: ""
+
+run_id: s3_t2_conformance_u_brown
+scenario: S3
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 2
+
+title: "Conformance: pick and place of u_brown"
+subtitle: "Monitors armed per step; nothing fires and the part is seated"
+
+camera: recorder
+window: [214.0, 361.0]
+
+speed: {idle: 6.0, event: 1.0, event_pad_s: 1.0, hold_s: 1.0}
+key_events: [step_start, end_step, look_frame, fire, verdict]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+prompt_excerpts:
+  - lane: executor
+    at_t: 216.3
+    heading: "Executor instruction"
+    text: "Grasp clamp effort on each part never exceeds that part's registry max_clamp_effort."
+captions:
+  - {at_t: 216.3, text: "pick_u_brown begins."}
+  - {at_t: 239.6, text: "The WatchDog arms clamp-effort, inactive-part and slip monitors for u_brown."}
+  - {at_t: 359.8, text: "place_u_brown ends with success. No monitor fired."}
+
+signals: [effort_finger]
+thresholds:
+  - signal: effort_finger
+    value_from: armed_monitor
+    monitor_id: clamp_u_brown
+    label: "clamp_u_brown limit"
+
+figure_frames_at: [216.5, 245.0, 280.0, 310.0, 335.0, 359.8]
+figure_frame_cameras: [recorder]

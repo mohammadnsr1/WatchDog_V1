@@ -1,0 +1,110 @@
+# Paper media provenance. See paper_media/outputs/README.md.
+media_id: 20261102_S3_t1_conformance_u_brown
+kind: conformance_monitoring
+purpose: media
+purpose_note: illustration only; unscored session, never feeds a paper number
+generated_utc: '2026-11-02T21:36:40+00:00'
+tags:
+- S3
+- conformance
+- pick_and_place
+- u_brown
+- arming
+- gates
+- wake
+- end_step_check
+- unscored
+notes: ''
+session:
+  session_id: 20261102T195738Z
+  in_scored_batch: false
+  scenario: S3
+  fault_class: 1
+  assembly: fmb_assembly_2
+  guard_mode: guarded
+  gate_timeout_sec: 120.0
+  run_verdict: non_conformant
+  t0_wall_time_iso: '2026-11-02T19:57:38.950821+00:00'
+  t0_source: orchestrator_start
+  agents:
+    executor:
+      model: claude-sonnet-5
+      effort: low
+      claude_cli_version: 2.1.316 (Claude Code)
+      scenario: null
+    watchdog:
+      model: claude-opus-5-5
+      effort: medium
+      claude_cli_version: 2.1.314 (Claude Code)
+      scenario: s3
+  injections:
+  - name: foreign_8c55f7
+    event_kind: foreign_object
+    scenario: place_object
+    label: foreign cube on free bench area
+    expected_impact: benign
+    trigger: at_step:pick_u_orange
+    actions:
+    - action: place
+      wall_time_iso: '2026-11-02T20:03:22.335439+00:00'
+  - name: visitor_hand_74bcd5
+    event_kind: transient_visitor
+    scenario: visit
+    label: forearm over the work area
+    expected_impact: benign
+    trigger: at_step:place_line_green
+    actions:
+    - action: enter_start
+      wall_time_iso: '2026-11-02T20:08:14.490342+00:00'
+    - action: in_view
+      wall_time_iso: '2026-11-02T20:08:15.332601+00:00'
+    - action: dwell_start
+      wall_time_iso: '2026-11-02T20:08:18.731059+00:00'
+    - action: leave_start
+      wall_time_iso: '2026-11-02T20:08:22.756578+00:00'
+    - action: out_of_view
+      wall_time_iso: '2026-11-02T20:08:26.199374+00:00'
+    - action: removed
+      wall_time_iso: '2026-11-02T20:08:26.762640+00:00'
+window_s:
+- 220.0
+- 352.0
+window_wall_time_iso:
+- '2026-11-02T20:01:18.950821+00:00'
+- '2026-11-02T20:03:30.950821+00:00'
+key_frames_s:
+- 222.5
+- 250.0
+- 272.0
+- 300.0
+- 320.0
+- 342.0
+frame_cameras:
+- recorder
+video_camera: recorder
+thresholds:
+- signal: effort_finger
+  value: 100.0
+  label: clamp_u_brown limit
+  source: monitor_armed clamp_u_brown threshold (raw_spec.limits.max_clamp_effort)
+signals:
+  effort_finger: /joint_states finger_joint.effort
+provenance:
+  git_sha: cbaacfd8c4df4834213ae1d33825986f3e6a8060
+  git_dirty: true
+  story_sha256: 8723557d4daeb74883721f6cb37a2759efdc89c5425db5c00f08ab83bd740eab
+  stage_sha256: 10d6de20a2ec41514cf13815100df71f1b39058e6a8be8d4244cb874565115ab
+  replay_state_sha256: null
+files:
+- figure/20261102_S3_t1_conformance_u_brown_double.svg
+- figure/20261102_S3_t1_conformance_u_brown_single.svg
+- frames/frames.csv
+- frames/recorder/01_t0222.50s.jpg
+- frames/recorder/02_t0250.00s.jpg
+- frames/recorder/03_t0272.00s.jpg
+- frames/recorder/04_t0300.00s.jpg
+- frames/recorder/05_t0320.00s.jpg
+- frames/recorder/06_t0342.00s.jpg
+- story.yaml
+- video/20261102_S3_t1_conformance_u_brown.mp4
+- video/20261102_S3_t1_conformance_u_brown_poster.jpg
