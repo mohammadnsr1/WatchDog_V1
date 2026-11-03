@@ -1,0 +1,109 @@
+# Paper media provenance. See paper_media/outputs/README.md.
+media_id: 20261102_S1_natural_place_line_green
+kind: conformance_monitoring
+purpose: media
+purpose_note: illustration only; unscored session, never feeds a paper number
+generated_utc: '2026-11-02T22:49:11+00:00'
+tags:
+- S1
+- conformance
+- pick_and_place
+- line_green
+- slip
+- collision
+- natural_fault
+- library_monitors
+- ground_truth
+- unscored
+notes: 'Natural failure, not an injected fault. Foreign cube (placed 203.2 s) and visitor box labeled missed: the
+  session has no observation record.'
+session:
+  session_id: 20261102T222941Z
+  in_scored_batch: false
+  scenario: S1
+  fault_class: Natural failure
+  assembly: fmb_assembly_2
+  guard_mode: guarded
+  gate_timeout_sec: 120.0
+  run_verdict: non_conformant
+  t0_wall_time_iso: '2026-11-02T22:29:42.410867+00:00'
+  t0_source: orchestrator_start
+  agents:
+    executor:
+      model: claude-sonnet-5
+      effort: low
+      claude_cli_version: 2.1.316 (Claude Code)
+      scenario: null
+    watchdog:
+      model: claude-sonnet-5
+      effort: low
+      claude_cli_version: 2.1.316 (Claude Code)
+      scenario: s1
+  injections:
+  - name: foreign_223ba5
+    event_kind: foreign_object
+    scenario: place_object
+    label: foreign cube on free bench area
+    expected_impact: benign
+    trigger: at_step:pick_u_orange
+    actions:
+    - action: place
+      wall_time_iso: '2026-11-02T22:33:05.629664+00:00'
+  - name: visitor_hand_1f00eb
+    event_kind: transient_visitor
+    scenario: visit
+    label: forearm over the work area
+    expected_impact: benign
+    trigger: at_step:place_line_green
+    actions:
+    - action: enter_start
+      wall_time_iso: '2026-11-02T22:36:34.566253+00:00'
+    - action: in_view
+      wall_time_iso: '2026-11-02T22:36:35.450998+00:00'
+    - action: dwell_start
+      wall_time_iso: '2026-11-02T22:36:38.843619+00:00'
+    - action: leave_start
+      wall_time_iso: '2026-11-02T22:36:42.849511+00:00'
+    - action: out_of_view
+      wall_time_iso: '2026-11-02T22:36:46.291002+00:00'
+    - action: removed
+      wall_time_iso: '2026-11-02T22:36:46.852624+00:00'
+window_s:
+- 388.0
+- 770.0
+window_wall_time_iso:
+- '2026-11-02T22:36:10.410867+00:00'
+- '2026-11-02T22:42:32.410867+00:00'
+key_frames_s:
+- 395.0
+- 408.4
+- 495.8
+- 545.0
+- 551.0
+- 600.0
+- 660.0
+frame_cameras:
+- recorder
+video_camera: recorder
+thresholds: []
+signals: {}
+provenance:
+  git_sha: 290d1031ded9f5e869917b081af007715624c3f5
+  git_dirty: true
+  story_sha256: ddeb1eff552b454a6cc3e456eae8c1a443a17a60504478054f04f0d39b370c51
+  stage_sha256: 10d6de20a2ec41514cf13815100df71f1b39058e6a8be8d4244cb874565115ab
+  replay_state_sha256: null
+files:
+- figure/20261102_S1_natural_place_line_green_double.svg
+- figure/20261102_S1_natural_place_line_green_single.svg
+- frames/frames.csv
+- frames/recorder/01_t0395.00s.jpg
+- frames/recorder/02_t0408.40s.jpg
+- frames/recorder/03_t0495.80s.jpg
+- frames/recorder/04_t0545.00s.jpg
+- frames/recorder/05_t0551.00s.jpg
+- frames/recorder/06_t0600.00s.jpg
+- frames/recorder/07_t0660.00s.jpg
+- story.yaml
+- video/20261102_S1_natural_place_line_green.mp4
+- video/20261102_S1_natural_place_line_green_poster.jpg

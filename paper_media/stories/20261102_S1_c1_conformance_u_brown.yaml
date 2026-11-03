@@ -1,0 +1,51 @@
+# Conformance monitoring with library monitors: u_brown pick and place, S1 media session.
+# Session 20261102T222941Z: dedicated unscored media run (S1, fmb_assembly_2,
+# WatchDog claude-sonnet-5/low, executor claude-sonnet-5/low). Session seconds
+# (t0 = orchestrator_start 2026-11-02T22:29:42.41Z); recorder 9.5 to 777.7 s.
+#   54.7-66.5  ten stationarity monitors armed (one per registered object)
+#   71.8   begin_step pick_u_brown; 85.6 mon_7d535f69c929 effort_event u_brown (finger_joint le 100);
+#          123.4 mon_9ec753afbf5c relative_frame tcp/u_brown (0.02 m)
+#   200.1  end_step place_u_brown, success; no fire in the window (cube injected at 203.2, after it)
+
+session_dir: ../../agents/transcripts/sessions/20261102T222941Z
+
+media_id: 20261102_S1_c1_conformance_u_brown
+kind: conformance_monitoring
+tags: [S1, conformance, pick_and_place, u_brown, library_monitors, arming, gates, wake, end_step_check, unscored]
+notes: ""
+
+run_id: s1_c1_conformance_u_brown
+scenario: S1
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Conformance: pick and place of u_brown"
+subtitle: "Library monitors armed before and during the step; nothing fires and the part is seated"
+
+camera: recorder
+window: [52.0, 202.0]   # ends before the cube injection at 203.2
+
+speed: {idle: 6.0, event: 1.0, event_pad_s: 1.0, hold_s: 1.0}
+key_events: [step_start, end_step, look_frame, fire, verdict]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+prompt_excerpts:
+  - lane: executor
+    at_t: 71.8
+    heading: "Executor instruction"
+    text: "Grasp clamp effort on each part never exceeds that part's registry max_clamp_effort."
+captions:
+  - {at_t: 54.7, text: "Before the first step the WatchDog arms a stationarity monitor on every registered object."}
+  - {at_t: 85.6, text: "During pick_u_brown it adds a clamp-effort monitor, then a slip monitor once the part is held."}
+  - {at_t: 200.1, text: "place_u_brown ends with success. No monitor fired."}
+
+signals: [effort_finger]
+thresholds:
+  - signal: effort_finger
+    value_from: armed_monitor
+    monitor_id: mon_7d535f69c929
+    label: "u_brown clamp limit"
+
+figure_frames_at: [60.0, 72.0, 100.0, 130.0, 170.0, 200.5]
+figure_frame_cameras: [recorder]

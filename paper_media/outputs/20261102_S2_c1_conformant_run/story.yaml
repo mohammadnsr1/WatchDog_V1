@@ -1,0 +1,51 @@
+# A complete conformant run in S2 (library + authored monitors); both benign injections missed.
+# Session 20261102T230701Z: dedicated unscored media run (S2, fmb_assembly_2,
+# WatchDog claude-sonnet-5/low, executor claude-sonnet-5/low, committed task). Session seconds
+# (t0 = orchestrator_start 2026-11-02T23:07:02.38Z); recorder 10.0 to 559.3 s.
+#   50.9-78.6  stationarity monitors armed on all registered objects
+#   72.6   begin_step pick_u_brown; 506.1 end_step place_inverted_u_yellow (12/12 success)
+#   186.1  foreign_7010f9 cube placed (at_step:pick_u_orange); no WatchDog record
+#   397.7-408.5 visitor_hand_c71666 (a rectangular box) in view; no fire, no WatchDog record
+#   WatchDog look() once, at 83.8 (pick_u_brown); no fire in the whole run
+#   551.0  run_verdict conformant
+
+session_dir: ../../agents/transcripts/sessions/20261102T230701Z
+
+media_id: 20261102_S2_c1_conformant_run
+kind: observation_monitoring
+tags: [S2, conformance, observation, foreign_object, transient_visitor, ground_truth, missed_detection, unscored]
+notes: "Detection outcomes are the operator's labels: cube and visitor box both missed (no observation record)."
+
+run_id: s2_c1_conformant_run
+scenario: S2
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 1
+
+title: "A conformant run, two intruders missed"
+subtitle: "All four parts placed cleanly; the WatchDog never records the cube or the passing box"
+
+camera: recorder
+window: [48.0, 555.0]
+
+speed: {idle: 10.0, event: 1.0, event_pad_s: 1.5, hold_s: 2.0}
+key_events: [fire, observation, verdict, run_verdict, look_frame]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+ground_truth:
+  - {name: foreign_7010f9, label: "Foreign cube on the bench", outcome: missed}
+  - {name: visitor_hand_c71666, label: "Box passing over the work area", outcome: missed}
+
+prompt_excerpts: []
+captions:
+  - {at_t: 50.9, text: "S2: the WatchDog arms stationarity monitors on every registered object before the first step."}
+  - {at_t: 118.6, text: "During each pick it adds slip and clamp-effort monitors for the held part."}
+  - {at_t: 186.1, text: "A foreign cube is placed on the bench. The WatchDog takes no further look() for the rest of the run."}
+  - {at_t: 397.7, text: "A box passes over the work area for 11 s. No monitor fires and the WatchDog never records it."}
+  - {at_t: 506.1, text: "place_inverted_u_yellow ends: all four parts are seated."}
+  - {at_t: 551.0, text: "Run verdict: conformant. Neither intruder was recorded."}
+
+signals: []
+
+figure_frames_at: [60.0, 84.0, 190.0, 300.0, 403.0, 506.0, 551.0]
+figure_frame_cameras: [recorder]
