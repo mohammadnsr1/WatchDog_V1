@@ -1,0 +1,55 @@
+# Conformance monitoring with library monitors: every clean step before the line_green failure, S1 media session.
+# Session 20261102T222941Z: dedicated unscored media run (S1, fmb_assembly_2,
+# WatchDog claude-sonnet-5/low, executor claude-sonnet-5/low). Session seconds
+# (t0 = orchestrator_start 2026-11-02T22:29:42.41Z); recorder 9.5 to 777.7 s.
+#   54.7-66.5  ten stationarity monitors armed (one per registered object)
+#   71.8   begin_step pick_u_brown; 85.6 effort_event u_brown (le 100); 123.4 relative_frame tcp/u_brown
+#   200.1  end_step place_u_brown, success
+#   203.1  begin_step pick_u_orange; 203.2 foreign_223ba5 cube placed (no WatchDog record in the session)
+#   323.1  end_step place_u_orange, success
+#   325.4  begin_step pick_line_green; 391.9 end_step place_approach_line_green, success
+#   no fire before 408.4 (the line_green slip, in 20261102_S1_natural_place_line_green)
+
+session_dir: ../../agents/transcripts/sessions/20261102T222941Z
+
+media_id: 20261102_S1_c1_conformance_clean
+kind: conformance_monitoring
+tags: [S1, conformance, pick_and_place, u_brown, u_orange, line_green, library_monitors, arming, gates, wake, end_step_check, ground_truth, unscored]
+notes: "Foreign cube labeled missed (no observation record in the session)."
+
+run_id: s1_c1_conformance_clean
+scenario: S1
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Conformance: the clean steps"
+subtitle: "u_brown and u_orange placed, line_green picked; library monitors armed per step, nothing fires"
+
+camera: recorder
+window: [52.0, 392.0]   # ends as place_line_green begins (392.6)
+
+speed: {idle: 8.0, event: 1.0, event_pad_s: 1.0, hold_s: 1.0}
+key_events: [step_start, end_step, look_frame, fire, verdict]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+ground_truth:
+  - {name: foreign_223ba5, label: "Foreign cube on the bench", outcome: missed}
+
+prompt_excerpts:
+  - lane: executor
+    at_t: 71.8
+    heading: "Executor instruction"
+    text: "Grasp clamp effort on each part never exceeds that part's registry max_clamp_effort."
+captions:
+  - {at_t: 54.7, text: "Before the first step the WatchDog arms a stationarity monitor on every registered object."}
+  - {at_t: 85.6, text: "During each pick it adds a clamp-effort monitor, then a slip monitor once the part is held."}
+  - {at_t: 200.1, text: "u_brown is seated. No monitor fired."}
+  - {at_t: 203.2, text: "A foreign cube is placed on the bench. The WatchDog never records it."}
+  - {at_t: 323.1, text: "u_orange is seated. No monitor fired."}
+  - {at_t: 391.9, text: "line_green is picked and brought to its approach pose; its placement is the next clip."}
+
+signals: [effort_finger]
+
+figure_frames_at: [60.0, 72.0, 130.0, 200.5, 260.0, 323.5, 391.5]
+figure_frame_cameras: [recorder]

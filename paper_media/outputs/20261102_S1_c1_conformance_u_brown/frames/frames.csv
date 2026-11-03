@@ -1,7 +1,0 @@
-key,camera,file,t_requested_s,t_frame_s,gap_s,wall_time_iso,source
-1,recorder,recorder/01_t0060.00s.jpg,60.000,59.994,-0.006,2026-11-02T22:30:42.405257+00:00,frames/recorder/000424.jpg
-2,recorder,recorder/02_t0072.00s.jpg,72.000,72.043,+0.043,2026-11-02T22:30:54.453536+00:00,frames/recorder/000526.jpg
-3,recorder,recorder/03_t0100.00s.jpg,100.000,99.949,-0.051,2026-11-02T22:31:22.360078+00:00,frames/recorder/000768.jpg
-4,recorder,recorder/04_t0130.00s.jpg,130.000,129.969,-0.031,2026-11-02T22:31:52.379503+00:00,frames/recorder/001006.jpg
-5,recorder,recorder/05_t0170.00s.jpg,170.000,170.012,+0.012,2026-11-02T22:32:32.422561+00:00,frames/recorder/001334.jpg
-6,recorder,recorder/06_t0200.50s.jpg,200.500,200.549,+0.049,2026-11-02T22:33:02.960113+00:00,frames/recorder/001586.jpg

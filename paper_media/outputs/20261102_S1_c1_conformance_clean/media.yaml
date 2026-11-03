@@ -1,21 +1,24 @@
 # Paper media provenance. See paper_media/outputs/README.md.
-media_id: 20261102_S1_c1_conformance_u_brown
+media_id: 20261102_S1_c1_conformance_clean
 kind: conformance_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-02T22:47:13+00:00'
+generated_utc: '2026-11-03T00:16:22+00:00'
 tags:
 - S1
 - conformance
 - pick_and_place
 - u_brown
+- u_orange
+- line_green
 - library_monitors
 - arming
 - gates
 - wake
 - end_step_check
+- ground_truth
 - unscored
-notes: ''
+notes: Foreign cube labeled missed (no observation record in the session).
 session:
   session_id: 20261102T222941Z
   in_scored_batch: false
@@ -69,43 +72,41 @@ session:
       wall_time_iso: '2026-11-02T22:36:46.852624+00:00'
 window_s:
 - 52.0
-- 202.0
+- 392.0
 window_wall_time_iso:
 - '2026-11-02T22:30:34.410867+00:00'
-- '2026-11-02T22:33:04.410867+00:00'
+- '2026-11-02T22:36:14.410867+00:00'
 key_frames_s:
 - 60.0
 - 72.0
-- 100.0
 - 130.0
-- 170.0
 - 200.5
+- 260.0
+- 323.5
+- 391.5
 frame_cameras:
 - recorder
 video_camera: recorder
-thresholds:
-- signal: effort_finger
-  value: 100.0
-  label: u_brown clamp limit
-  source: monitor_armed mon_7d535f69c929 threshold (raw_spec.limits.max_clamp_effort)
+thresholds: []
 signals:
   effort_finger: /joint_states finger_joint.effort
 provenance:
-  git_sha: 290d1031ded9f5e869917b081af007715624c3f5
+  git_sha: cb973bbf13fa420f02556d7cf5459d9146f3d06d
   git_dirty: true
-  story_sha256: a366a4e74c268439b8f674f2af11d06ce2780990d480c2c19d45b85a0646ecf1
-  stage_sha256: 10d6de20a2ec41514cf13815100df71f1b39058e6a8be8d4244cb874565115ab
+  story_sha256: 211b8e4651f167a704ca1cbf4e947dfb660466ecf507366c34c138563bb26795
+  stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77
   replay_state_sha256: null
 files:
-- figure/20261102_S1_c1_conformance_u_brown_double.svg
-- figure/20261102_S1_c1_conformance_u_brown_single.svg
+- figure/20261102_S1_c1_conformance_clean_double.svg
+- figure/20261102_S1_c1_conformance_clean_single.svg
 - frames/frames.csv
 - frames/recorder/01_t0060.00s.jpg
 - frames/recorder/02_t0072.00s.jpg
-- frames/recorder/03_t0100.00s.jpg
-- frames/recorder/04_t0130.00s.jpg
-- frames/recorder/05_t0170.00s.jpg
-- frames/recorder/06_t0200.50s.jpg
+- frames/recorder/03_t0130.00s.jpg
+- frames/recorder/04_t0200.50s.jpg
+- frames/recorder/05_t0260.00s.jpg
+- frames/recorder/06_t0323.50s.jpg
+- frames/recorder/07_t0391.50s.jpg
 - story.yaml
-- video/20261102_S1_c1_conformance_u_brown.mp4
-- video/20261102_S1_c1_conformance_u_brown_poster.jpg
+- video/20261102_S1_c1_conformance_clean.mp4
+- video/20261102_S1_c1_conformance_clean_poster.jpg

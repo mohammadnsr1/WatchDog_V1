@@ -1,0 +1,53 @@
+# A complete conformant S4 run (executor self monitoring, no WatchDog); cube recorded late, visitor missed.
+# Session 20261103T001459Z: dedicated unscored media run (S4, fmb_assembly_2, guard_mode unguarded,
+# executor claude-opus-5-5/medium, committed task). Session seconds
+# (t0 = orchestrator_start 2026-11-03T00:15:00.03Z); recorder 18.4 to 795.6 s.
+#   164.2-215.9 executor arms its own monitors: depth watch, stationarity, fixtures, clamp effort per part
+#   231.7  begin_step pick_u_brown; 715.8 end_step place_inverted_u_yellow (12/12 success)
+#   243.3  obs_scene_depth_1 fires: depth change at world (1.129, -0.432), off the work area; nothing recorded for it
+#   360.5  observation: base1 shifted ~2.4 mm during place_u_brown
+#   366.5  foreign_df5731 cube placed (at_step:pick_u_orange)
+#   554.7-565.5 visitor_hand_0adcd9 (a rectangular box) in view; no fire, no record
+#   705.6  observation: unlisted red cube (+339.1 s after placement)
+#   745.4  run_verdict conformant
+
+session_dir: ../../agents/transcripts/sessions/20261103T001459Z
+
+media_id: 20261103_S4_c1_conformant_run
+kind: observation_monitoring
+tags: [S4, self_monitoring, conformance, observation, foreign_object, transient_visitor, ground_truth, late_detection, missed_detection, unscored]
+notes: "Detection outcomes are the operator's labels: cube late (recorded 705.6 s), visitor box missed."
+
+run_id: s4_c1_conformant_run
+scenario: S4
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Self monitoring: a late find and a miss"
+subtitle: "No WatchDog: the executor arms its own monitors, records the cube at the end and misses the box"
+
+camera: recorder
+window: [160.0, 750.0]
+
+speed: {idle: 10.0, event: 1.0, event_pad_s: 1.5, hold_s: 2.0}
+key_events: [fire, observation, run_verdict, look_frame]
+executor_tools_hide: [get_object_pose, get_object_spec]
+
+ground_truth:
+  - {name: foreign_df5731, label: "Foreign cube on the bench", outcome: late, detected_at: 705.6}
+  - {name: visitor_hand_0adcd9, label: "Box passing over the work area", outcome: missed}
+
+prompt_excerpts: []
+captions:
+  - {at_t: 164.2, text: "S4 has no WatchDog. Before its first step the executor arms its own monitors."}
+  - {at_t: 243.3, text: "Its depth watch fires on a change at the bench edge, away from the work area; nothing is recorded."}
+  - {at_t: 366.5, text: "A foreign cube is placed on the bench."}
+  - {at_t: 554.7, text: "A box passes over the work area for 11 s. No monitor fires and the executor never records it."}
+  - {at_t: 705.6, text: "After the last placement the executor looks again and records the cube, 339 s after it appeared."}
+  - {at_t: 745.4, text: "Self-reported run verdict: conformant."}
+
+signals: []
+
+figure_frames_at: [165.0, 232.0, 370.0, 560.0, 666.0, 706.0, 745.0]
+figure_frame_cameras: [recorder]

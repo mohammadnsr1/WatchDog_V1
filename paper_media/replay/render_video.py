@@ -114,6 +114,8 @@ class Compositor:
                    for g in prep.ground_truth]
         self.lanes = S.LANES + (("truth",) if self.gt else ())
         self.agents = agents_text(prep.session)
+        # who records observations: the WatchDog, or in S4 (no WatchDog session) the executor
+        self.monitor_role = "WatchDog" if "watchdog" in prep.session.agent_config else "Executor"
         self.signal_rows = list(prep.signals.values())[:3]
         # With no signals the swimlanes take the signal strip's space.
         self.swim_box = S.SWIM_BOX if self.signal_rows else (S.SWIM_BOX[0], S.SWIM_BOX[1], S.SWIM_BOX[2], S.SIGNAL_BOX[3])
@@ -150,6 +152,11 @@ class Compositor:
         for box, title, color in ((S.EXEC_PANEL, "Executor", S.EXECUTOR_BLUE), (S.WD_PANEL, "WatchDog", S.WATCHDOG_GREEN)):
             d.rounded_rectangle(box, radius=10, fill=_rgb(S.PANEL_BG), outline=_rgb(color), width=3)
             d.text((box[0] + 16, box[1] + 10), title, font=f_title, fill=_rgb(color))
+        if self.monitor_role != "WatchDog":
+            msg = "No WatchDog in this scenario"
+            box = S.WD_PANEL
+            d.text(((box[0] + box[2] - _text_w(d, msg, S.pil_font(22))) // 2, (box[1] + box[3]) // 2 - 12), msg,
+                   font=S.pil_font(22), fill=_rgb(S.MUTED))
         d.rectangle(self.swim_box, fill=_rgb(S.CANVAS_BG), outline=_rgb(S.GRID))
         for i, lane in enumerate(self.lanes):
             y0 = int(self.swim_box[1] + i * self.lane_h)
@@ -228,15 +235,16 @@ class Compositor:
         self._gt_tags(d, m, v)
 
     def _gt_status(self, g: dict, real: float) -> str:
+        who = self.monitor_role
         if g["outcome"] == "missed":
-            return "WatchDog: not detected"
+            return f"{who}: not detected"
         det = g["detected_at"]
         if det is None:
-            return "WatchDog: detected"
+            return f"{who}: detected"
         if real < det:
-            return f"WatchDog: not yet detected ({real - g['t_start']:.0f} s)"
+            return f"{who}: not yet detected ({real - g['t_start']:.0f} s)"
         lag = det - g["t_start"]
-        return f"WatchDog: recorded at {det:.1f} s" + (f" (+{lag:.0f} s)" if g["outcome"] == "late" else "")
+        return f"{who}: recorded at {det:.1f} s" + (f" (+{lag:.0f} s)" if g["outcome"] == "late" else "")
 
     def _gt_tags(self, d, m: Moment, v: float) -> None:
         """Ground truth tags, stacked up from the bottom left of the camera frame, above the caption band."""
@@ -337,7 +345,7 @@ class Compositor:
                 det = g["detected_at"]
                 if det is not None and lo <= det <= hi:
                     xd = self.x_of(det, real)
-                    yw = self.lane_y("watchdog")
+                    yw = self.lane_y(self.monitor_role.lower())
                     for yy in range(int(yw) + 8, y - 6, 12):   # dashed link to the WatchDog's record
                         d.line([(xd, yy), (xd, min(yy + 6, y - 6))], fill=col, width=2)
                     d.ellipse((xd - 6, y - 6, xd + 6, y + 6), outline=col, fill=(255, 255, 255), width=3)

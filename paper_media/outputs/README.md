@@ -60,9 +60,10 @@ pose and timing; see `paper_media/isaac_replay/README.md`.
 | 20261102_S3_c1_conformant_run | 20261102T204534Z | observation_monitoring | 210-856 | conformant run; cube recorded 430 s late, visitor box missed; ground truth overlay |
 | 20261102_S3_t1_conformance_u_brown | 20261102T195738Z | conformance_monitoring | 220-352 | pick and place of u_brown; one border watch fire, checked by look() |
 | 20261102_S3_t2_conformance_u_brown | 20261102T204534Z | conformance_monitoring | 214-361 | pick and place of u_brown; no fire |
-| 20261102_S1_c1_conformance_u_brown | 20261102T222941Z | conformance_monitoring | 52-202 | S1 library monitors; pick and place of u_brown; no fire |
+| 20261102_S1_c1_conformance_clean | 20261102T222941Z | conformance_monitoring | 52-392 | S1 library monitors; u_brown and u_orange placed, line_green picked; no fire; cube missed |
 | 20261102_S1_natural_place_line_green | 20261102T222941Z | conformance_monitoring | 388-770 | line_green slip, failed retry knocks the assembly, non_conformant; cube and visitor box missed |
 | 20261102_S2_c1_conformant_run | 20261102T230701Z | observation_monitoring | 48-555 | conformant S2 run; cube and visitor box missed |
+| 20261103_S4_c1_conformant_run | 20261103T001459Z | observation_monitoring | 160-750 | S4, executor Opus 5.5 medium, no WatchDog; cube recorded 339 s late, visitor box missed |
 
 Templates: `paper_media/stories/template_conformance.yaml` and `template_observation.yaml`.
 
