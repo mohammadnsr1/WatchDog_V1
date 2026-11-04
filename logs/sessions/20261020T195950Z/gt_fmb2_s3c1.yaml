@@ -1,0 +1,81 @@
+# Label — fmb_assembly_2, S3, Class 1 (clean). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s3c1_run05
+task: fmb_assembly_2
+scenario: S3
+class: 1
+
+expected_final_verdict: conformant
+expected_terminal_status: completed   # documentation-only
+expected_recovered: false
+fault_origin: none
+
+# Class 1 = conformance-clean. Benign script-editor injections are allowed and
+# expected (observation ground truth lives in ground_truth_injections.jsonl);
+# they do NOT go in violation_steps and do not flip violation_occurred.
+violation_occurred: false
+violation_steps: []              # Class 2/3: [{step: <step_id>, object: <id>,
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated (executor end_step): u_brown 3.3 mm, u_orange 2.2 mm,
+  line_green 8.9 mm / 3.1 deg, inverted_u_yellow 2.9 mm. Bag (time-consistent
+  TF + /joint_states): slip <= 19.0 mm on every hold (line_green 0.0190 just
+  before release, under the bound); every placed part, bystander and fixture
+  <= 10.7 mm from rest; peak clamp effort u_brown 64.2/100, u_orange
+  70.7/200, line_green 16.7/170, inverted_u_yellow 73.6/250. No violation.
+executor_claimed: completed
+notes: >
+  Executor task sha f37da9da (the task committed in 9ee44be, as
+  fmb2_s3c2_run05); registry 92969cc1; agent-side code e1b8529.
+  Clean, no conformance fires. Monitors: 25 arms -- 21 clause (stationarity
+  per bystander/fixture/part at disturbance_tolerance_m 0.02, base1/base2
+  0.02; effort + slip per part, armed after each part's pick began and
+  disarmed after its place, with a post-place stationarity re-arm) and 4
+  observation (depth scene watch, 2 fires on arm motion); 2 looks, no
+  record_observation.
+  Injections: benign cube foreign_07042b at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only).

@@ -1,0 +1,9 @@
+{
+  "role": "watchdog",
+  "scenario": "s3",
+  "assembly": "2",
+  "model": "claude-sonnet-5",
+  "effort": "low",
+  "claude_cli_version": "2.1.304 (Claude Code)",
+  "launched_wall_time_iso": "2026-10-20T20:00:20.060426+00:00"
+}

@@ -1,0 +1,102 @@
+{
+  "run_id": "20261026T200219Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T20:15:36.100329+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_53b964",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T20:19:27.141854+00:00"
+    },
+    {
+      "name": "foreign_53b964",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T20:19:34.408377+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 6,
+    "n_observation_monitors_armed": 4,
+    "n_observation_fires": 2,
+    "n_record_observation_new": 2,
+    "n_record_observation_updates": 2,
+    "first_look_iso": "2026-10-26T20:03:28.933599+00:00",
+    "look_reasons": [
+      "Baseline of the workspace before the first step: identify every object present, ",
+      "Step boundary after place_u_brown: confirm u_brown is visibly seated on base1, c",
+      "Investigate an object that was absent from the baseline look 0001: an orange/red",
+      "scene_watch_1 fired (847 changed depth px) in the base2/bystander region or bott",
+      "scene_watch_2 fired (395 px). Checking whether the flat panel (obs-002) or the u",
+      "After the last milestone (place_inverted_u_yellow): visually confirm all four pa"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T20:12:51.112156+00:00",
+      "monitor_id": "scene_watch_2",
+      "value": 395.0,
+      "threshold": 300.0
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_53b964",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T20:07:02.891478+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 277.01,
+      "detected": true,
+      "observation_id": "obs-001-124c1677",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 67.42,
+      "identity": "unidentified small orange/red block (not a registered FMB object)",
+      "summary": "An unlisted orange/red block, about 0.06 m square and low, is on the bench near pixel (375,178), roughly world (0.09, -0.38). It was absent from the baseline look 0001 (before pick_u_brown) and presen",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793045250028402700,
+      "appearance_reported": "accurate"
+    },
+    {
+      "name": "visitor_hand_21f74d",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T20:11:40.275475+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": -0.38,
+      "detected": true,
+      "observation_id": "obs-002-ce73f16d",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 38.1,
+      "identity": "unidentified thin flat panel/sheet (beige), not a registered FMB object",
+      "summary": "A large, flat, beige/cream rectangular object appeared on the bench during place_line_green. Image extent is u 235-387, v 260-295 (look 0004). From depth it spans about world x 0.05-0.48, y -0.13 to -",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793045499898433800,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 52.76,
+  "detection_latency_p95_s": 67.42,
+  "appearance_reported_accurate": 2,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

@@ -1,0 +1,143 @@
+{
+  "run_id": "20261027T200520Z",
+  "role": "executor",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-27T20:18:40.253330+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_a69d9a",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-27T20:19:47.522114+00:00"
+    },
+    {
+      "name": "foreign_a69d9a",
+      "kind": "removal",
+      "t0_iso": "2026-10-27T20:21:27.298282+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 13,
+    "n_observation_monitors_armed": 6,
+    "n_observation_fires": 5,
+    "n_record_observation_new": 5,
+    "n_record_observation_updates": 2,
+    "first_look_iso": "2026-10-27T20:06:21.305242+00:00",
+    "look_reasons": [
+      "Initial survey of workspace: confirm the four parts, base1, bystanders present, ",
+      "Boundary check after u_brown place-approach: confirm u_brown is held above its s",
+      "Verify u_brown seated in its slot on base1 after release and retreat; scan works",
+      "Boundary check after u_orange place-approach: confirm part held above slot clear",
+      "Locate the newly appeared red cube-like object near image centre (u~375,v~178) t",
+      "hex_red bystander monitor fired (+4.3 cm in x) while the arm was parked over bas",
+      "Boundary check after line_green place-approach: confirm line_green held above it",
+      "Verify line_green seated in base1 centre slot after release/retreat; check base1",
+      "Investigate the large beige slab that appeared near pixels u 170-320, v 260-292 ",
+      "Adjudicate observation fires: slab-region (expected arm entry during inverted_u_",
+      "Boundary check after inverted_u_yellow place-approach: part held 8 cm above its ",
+      "Final verification: all four parts seated on base1, bystanders in place, red cub",
+      "Confirm settled post-collapse state: base1 thrown ~0.4 m +x with all four parts;"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 4,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-27T20:13:54.115407+00:00",
+      "monitor_id": "obs_fixtures",
+      "value": 0.005019333747467979,
+      "threshold": 0.005
+    },
+    {
+      "wall_time_iso": "2026-10-27T20:15:32.192563+00:00",
+      "monitor_id": "obs_slab_region",
+      "value": 0.28531976744186044,
+      "threshold": 0.2
+    },
+    {
+      "wall_time_iso": "2026-10-27T20:15:57.938591+00:00",
+      "monitor_id": "obs_border_intrusion_2",
+      "value": 0.01171875,
+      "threshold": 0.01
+    },
+    {
+      "wall_time_iso": "2026-10-27T20:16:44.672596+00:00",
+      "monitor_id": "obs_fixtures_2",
+      "value": 0.005394217613350885,
+      "threshold": 0.005
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_a69d9a",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-27T20:09:56.526462+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 237.59,
+      "detected": true,
+      "observation_id": "obs-001-b861cccf",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 84.62,
+      "identity": "red cube (possibly the registry's disabled 'red_cube' prop, which has no live TF)",
+      "summary": "An unlisted red cube (~3-4 cm, cube-shaped, red) has appeared on the bench, roughly centre of the workspace, between base1 and base2. It was not present in looks 0001-0003 and is not among the task ob",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793131856283675600,
+      "appearance_reported": "off_by_59.8s"
+    },
+    {
+      "name": "visitor_hand_d52408",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-27T20:13:58.567438+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": -0.4,
+      "detected": true,
+      "observation_id": "obs-003-df7fc6a7",
+      "match": "category",
+      "category": "other_unexpected",
+      "latency_s": 30.7,
+      "identity": "unidentified flat slab/board passing through the cell (entered then left)",
+      "summary": "A large flat beige/cream rectangular slab (board- or tray-like, ~0.45 m long x ~0.1 m wide in image footprint) entered the workspace and then left. The border-intrusion depth monitor fired at wall 179",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793132038167417600,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 57.66,
+  "detection_latency_p95_s": 84.62,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 3,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-002-301f86c1",
+      "category": "object_moved",
+      "summary": "Bystander hex_red moved ~0.36 m in +x (from (0.1145, 0.0394) to (0.4747, 0.0394), z and orientation unchanged) within ~0.7 s, then came to rest. During the whol"
+    },
+    {
+      "observation_id": "obs-004-8de5ab05",
+      "category": "object_moved",
+      "summary": "During the slow line_green seating descent, fixture base1 was pushed: from ~1793132033.3e9 to ~1793132035.5e9 ns it rose ~5.3 mm (z 0.02238 -> 0.02767) and tilt"
+    },
+    {
+      "observation_id": "obs-005-3b2ea16f",
+      "category": "object_moved",
+      "summary": "Robot-caused collapse of the assembly. After the inverted_u_yellow descent stopped ~8 mm high of its seat, release_skill opened the RG2 from 42 mm to 104 mm ins"
+    }
+  ]
+}

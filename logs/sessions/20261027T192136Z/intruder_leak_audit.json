@@ -1,0 +1,47 @@
+{
+  "leak": false,
+  "hits": [],
+  "checked": [
+    {
+      "source": "bag:bag",
+      "status": "scanned",
+      "tf_topics": [
+        "/tf",
+        "/tf_static"
+      ],
+      "distinct_frames": 41
+    },
+    {
+      "source": "mcp_calls_executor.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_executor_monitor.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_gripper.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_motion.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_scene.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "authored_monitors/*.py",
+      "status": "scanned",
+      "files": 30
+    }
+  ],
+  "intruder_names": [
+    "foreign_6baa7e",
+    "visitor_hand_783986"
+  ],
+  "expected_visible": [],
+  "ground_truth_records": 9,
+  "session_dir": "agents/transcripts/sessions/20261027T192136Z"
+}

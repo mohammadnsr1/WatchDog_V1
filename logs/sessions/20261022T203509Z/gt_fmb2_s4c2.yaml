@@ -1,0 +1,108 @@
+# Label — fmb_assembly_2, S4, Class 2 (r2 missed grasp, injected; cascade of natural faults). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c2_run06
+task: fmb_assembly_2
+scenario: S4
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only (operator-requested abort)
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: place_approach_u_orange, object: u_orange, kind: dropped,
+     note: "r2 (S4 variant sha 04b4e7ce): weak off-centre grasp; u_orange slid out of the fingers on the transit -- tcp-relative > 0.02 from 20:39:36.9, 120 mm (bag); executor's slip monitor fired 0.0237. Its finding was recorded one step later (place_u_orange)."}
+  - {step: place_approach_u_orange, object: line_green, kind: disturbed,
+     note: "the falling u_orange struck line_green (still waiting for its pick): 25.8 mm and rotated 90 deg, never restored (19.1 mm / 90 deg from its start at run end); no line_green monitor."}
+  - {step: place_u_orange, object: u_orange, kind: not_seated,
+     note: "u_orange 103.7 mm off u_orange_placement at step close; executor recorded non_conformant here."}
+  - {step: pick_u_orange_retry, object: u_brown, kind: disturbed,
+     note: "the recovery re-grasp jammed the gripper against base1 (START_STATE_IN_COLLISION): seated u_brown moved 47.5 mm / 30.6 deg; executor recorded it here (non_conformant). Reseated later in reseat_u_brown (1.9 mm)."}
+  - {step: pick_u_orange_retry, object: base1, kind: fixture_disturbed,
+     note: "same jam: base1 41.1 mm / 31.5 deg, with a fire (base1 watch 0.0056 at 20:43:11, flagged observation but reads base1's pose -> clause) -> violation under the batch fixture rule; standing (31.1 mm at run end)."}
+  - {step: pick_u_orange_attempt2, object: u_orange, kind: missed_grasp,
+     note: "second grip held nothing: the fingers closed but u_orange stayed behind (tcp-relative 200 mm from 20:53:44.4, part rose 2.8 mm); fired 0.0213. Executor's finding came at place_u_orange_attempt2."}
+  - {step: place_u_orange_attempt2, object: u_orange, kind: not_seated,
+     note: "u_orange 121 mm off its placement at step close (it never left the bench); executor recorded non_conformant here."}
+  - {step: pick_u_orange_attempt3, object: u_orange, kind: slip,
+     note: "third grip slipped 51.3 mm (tcp-relative > 0.02 from 20:55:41.0, part rose 6.1 mm); fired 0.0237, recorded non_conformant here."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  At abort: u_brown seated (1.9 mm after its reseat); u_orange never seated
+  (~0.12 m off, on the bench); line_green knocked over by the dropped u_orange
+  (90 deg, never picked); inverted_u_yellow never picked; base1 31.1 mm /
+  31 deg off its start (standing). base2 and bystanders 0. Not labelled
+  (bag): base1's further 12.2 mm in reseat_u_brown (unfired, fixture rule);
+  u_brown 11.5 mm / line_green 10.9 mm / base1 9.4 mm in
+  pick_u_orange_attempt2 (under bound / unfired); u_brown reseat holds 17.2 /
+  16.6 mm (under bound); the 0.0214 'slip' fire at 20:43:10.9 came before the
+  retry grasp closed (that hold: 2.4 mm, the part never lifted) -- the jam,
+  not an in-hand slip. Clamp effort under every limit (u_brown 86.6/100).
+executor_claimed: aborted
+notes: >
+  Fault: r2 missed grasp (EXECUTOR_VARIANT=r2, S4 variant
+  runs/fmb_assembly_2_s4.r2, sha 04b4e7ce = the S2/S3 r2 steps + S4 blocks).
+  S4, unguarded; registry 92969cc1; git 5641a46. Run aborted at the
+  operator's request after attempt 3. The executor recorded findings at
+  place_u_orange, pick_u_orange_retry (u_brown; object named only in text),
+  reseat_u_brown (base1 cumulative, by check), place_u_orange_attempt2 and
+  pick_u_orange_attempt3; final non_conformant, not recovered (correct).
+  OPERATOR DECISION (2026-10-22): the two faults whose fires came in-step but
+  whose findings landed in the NEXT step (place_approach_u_orange:u_orange,
+  49 s; pick_u_orange_attempt2:u_orange, 64 s -- the S4 serialization cost)
+  stay FN under the step pairing; the delay is reported by the latency
+  columns (fire_to_adjudication, fire_to_next_verdict). Bag: in the retry jam
+  the gripper struck u_brown first and u_brown dragged base1 0.75 s later
+  (0.4 mm relative at step end); attempt 3 moved nothing (0.0 mm).
+  Injections: benign cube foreign_b12e2f at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only). 3 looks.

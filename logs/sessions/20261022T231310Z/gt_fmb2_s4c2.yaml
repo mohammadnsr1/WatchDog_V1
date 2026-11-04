@@ -1,0 +1,99 @@
+# Label — fmb_assembly_2, S4, Class 2 (nudge hex_red, injected; + natural faults). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c2_run07
+task: fmb_assembly_2
+scenario: S4
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only (operator-requested abort)
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: pick_line_green, object: hex_red, kind: nudged,
+     note: "INJECTED bystander nudge hex_red (-0.05, 0, 0) at pick_line_green (23:18:45, s1_c2_nudge.py): moved 50.0 mm and stayed (standing); executor's stationarity fired 0.05 (TP)."}
+  - {step: place_line_green, object: line_green, kind: slip_effort_misseated,
+     note: "NATURAL: two in-hand slips (30.8 mm from 23:20:10.6, first insertion; 30.0 mm from 23:21:39.8, re-grasp) and an over-clamp on the re-grasp (202.7 vs 170, 8 samples 23:21:39.3-39.7); step closed 30.7 mm / 44 deg off (tol 15 mm / 10 deg). No slip or effort monitor armed; executor caught the seating at end_step (non_conformant)."}
+  - {step: recover_clear_line_green_obstruction, object: inverted_u_yellow, kind: dropped,
+     note: "NATURAL: holding inverted_u_yellow, the executor called grasp_skill on line_green; the gripper opened and inverted_u_yellow fell out (tcp-relative > 20 mm at 23:25:56.9), 259 mm."}
+  - {step: recover_clear_line_green_obstruction, object: line_green, kind: slip,
+     note: "the recovery grasp of line_green slipped 299 mm (tcp-relative > 0.02 from 23:26:22.6)."}
+  - {step: recover_clear_line_green_obstruction, object: u_brown, kind: disturbed,
+     note: "same commotion: seated u_brown peak 26.5 mm, settled 21.8 mm; executor fired 0.0218 (TP)."}
+  - {step: recover_clear_line_green_obstruction, object: u_orange, kind: disturbed,
+     note: "same commotion: seated u_orange peak 22.2 mm, settled 19.8 mm; no u_orange monitor fired."}
+  - {step: recover_clear_line_green_obstruction, object: base1, kind: fixture_disturbed,
+     note: "same commotion: base1 peak 20.9 mm, settled 19.4 mm (15.0 mm from run start at the end), with a fire (base1 watch 0.0057, flagged observation but reads its pose) -> violation under the batch fixture rule."}
+  - {step: place_inverted_u_yellow, object: inverted_u_yellow, kind: not_seated,
+     note: "step closed with inverted_u_yellow ~0.2 m off its placement (dropped during the recovery); executor recorded non_conformant here."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  At abort: u_brown and u_orange seated but knocked (21.8 / 19.8 mm settled);
+  line_green and inverted_u_yellow not seated; hex_red 50 mm off its rest
+  (nudge, standing); base1 15.0 mm off its start. base2 and the other
+  bystanders 0. Bag (time-consistent TF + /joint_states): as listed;
+  u_brown / u_orange holds clean (<= 5.7 mm, effort under limits).
+executor_claimed: aborted
+notes: >
+  Fault: nudge_object hex_red (-0.05, 0, 0) at_step=pick_line_green (as S1/S3
+  run10); committed S4 task 8f80454e; registry 92969cc1; git 5641a46. The
+  seated parts were knocked during recover_clear_line_green_obstruction --
+  grasping line_green while still holding inverted_u_yellow -- not by
+  inverted_u_yellow's placement itself. Monitors: stationarity at
+  disturbance_tolerance_m (bystanders, seated parts), base1/base2 watches
+  flagged observation; NO slip or effort monitor. Executor findings at
+  pick_line_green (hex_red), place_line_green (seating), the recovery step
+  (base1 + u_brown) and place_inverted_u_yellow (seating); final
+  non_conformant, not recovered (correct). Run aborted at the operator's request.
+  Injections: benign cube foreign_7ca134 at (0.08, -0.38), at_step=pick_u_orange
+  (place_object, observation ground truth) + the nudge (nudge_object). 3 looks.

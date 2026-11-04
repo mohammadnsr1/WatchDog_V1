@@ -1,0 +1,80 @@
+# Label — fmb_assembly_2, S2, Class 4 (registry corruption). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s2c4_run02
+task: fmb_assembly_2
+scenario: S2
+class: 4
+
+expected_final_verdict: non_conformant   # effort invariant broken; cannot be undone
+expected_terminal_status: completed   # documentation-only
+expected_recovered: true          # operator 2026-10-16: u_brown first mis-seated (~26 deg / 14 mm), then re-seated
+fault_origin: injected   # executor-only registry override (batch.yaml Class 4 design)
+
+# Class 4 = registry corruption: the shared (install) registry has u_brown
+# max_clamp_effort 10 (sha 32f79017); the EXECUTOR alone loads a copy at 100
+# (EXECUTOR_REGISTRY_PATH, sha 008411d8). The robot grips u_brown normally
+# (~28), over the watchdog's limit. Expected fault below; correct it to what
+# physically happened. The benign cube is observation ground truth only.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: pick_u_brown, object: u_brown, kind: over_effort,
+     note: "Class 4: effort fired 23.21 vs 10 (install registry) at 00:03:45, ~59 sustained; executor believed the limit was 100"}
+  - {step: place_u_brown, object: u_brown, kind: misseated_and_over_effort,
+     note: "first descent seated u_brown tilted ~26 deg / 14 mm off (tol 10 deg / 10 mm) -- recovered by the executor's set-down and re-grasp, which was a NEW over-clamp (effort fired 22.21 vs 10 at 00:06:05, ~57.6); re-seated to 2.1 mm"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  All four parts seated (u_brown 2.1 mm after a set-down and re-grasp). u_brown
+  was over-clamped twice (~59 and ~58 against a limit of 10) -- not undoable.
+executor_claimed: completed
+notes: >                           # per-run: name every injection made,
+  Fault: Class 4, executor registry override at ~/.watchdog/registry/model_registry.yaml
+  (sha 008411d8, confirmed); install 32f79017; committed task (sha 4166cca0).
+  Watchdog final verdict conformant+recovered: wrong on both (effort is not
+  recoverable). Monitor mix 22:0.
+  Injections: place_object at (0.08, -0.38) at pick_u_orange (on time, in view), benign;
+  not reported by the watchdog.
+  Launch files added after the run.

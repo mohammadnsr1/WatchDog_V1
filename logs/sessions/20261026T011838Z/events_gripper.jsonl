@@ -1,0 +1,2 @@
+{"event_id":"46395812-c5f1-4b85-817f-b62180cfe392","event_type":"skill_start","timestamp_ns":1398995628757257,"wall_time_iso":"2026-10-26T01:22:57.929069+00:00","payload":{"skill_name":"grasp_skill","params":{"object_id":"u_brown","expected_width_m":0.02}},"subscriber_count":2,"seq":1}
+{"event_id":"eb3c98b9-c4c3-4438-8b98-a082294d885f","event_type":"skill_end","timestamp_ns":1399005147923871,"wall_time_iso":"2026-10-26T01:23:07.448238+00:00","payload":{"skill_name":"grasp_skill","duration_ns":9519150377,"ok":true,"error":null},"subscriber_count":2,"seq":2}

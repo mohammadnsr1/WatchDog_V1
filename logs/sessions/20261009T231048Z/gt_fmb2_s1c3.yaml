@@ -1,0 +1,79 @@
+# Label — fmb_assembly_2, S1, Class 3 (plan deviation r5; a natural fault occurred during it). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s1c3_run02
+task: fmb_assembly_2
+scenario: S1
+class: 3
+
+expected_final_verdict: conformant   # slip was transient; every part seated at run end
+expected_terminal_status: completed   # documentation-only
+expected_recovered: true          # in-hand slip occurred, end state conformant
+fault_origin: plan_deviation   # r5 benign deviation; the slip arose naturally during it
+
+# Class 3 benign deviation (r5) during which a natural fault occurred. The
+# benign cube is observation ground truth only -- never here. base1's seating
+# shifts (7.3 / 5.1 / 5.9 mm at place_u_brown / place_u_orange /
+# place_inverted_u_yellow, 4.4 mm net at run end, from the rosbag /tf) are
+# NOT violations under the revised fixture rule (seating-contact exemption,
+# batch.yaml notes, operator decision 2026-10-09).
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: place_u_orange, object: u_orange, kind: in_hand_slip,
+     note: "relative_frame tcp->u_orange fired 0.020114 m vs 0.02 at 23:18:50 during the first place descent (repeated CONTROL_FAILED; part left mis-seated ~37 mm / 59 deg); executor re-grasped and re-seated at 0.02 scaling -> 2.24 mm / 1.4 deg at step close"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  All four parts seated (watchdog run-end query_snapshot): u_brown 2.1 mm /
+  3.97 deg, u_orange 2.14 mm / 1.4 deg, line_green 6.9 mm, inverted_u_yellow
+  1.2 mm. base1 4.4 mm from its start (seating contact; exempt).
+executor_claimed: completed
+notes: >                           # per-run: name every injection made,
+  Deviation: r5 (task sha a27cd17c), registry 92969cc1. The u_orange fault was
+  NATURAL (controller faults on the first place descent), recovered by the
+  executor.
+  Injections: place_object foreign_4a91b9 at (0.08, -0.38) at pick_u_orange (on
+  time, in view), benign -- the watchdog never reported it.
+  Launch files added after the run.

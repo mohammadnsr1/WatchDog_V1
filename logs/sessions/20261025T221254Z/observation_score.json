@@ -1,0 +1,72 @@
+{
+  "run_id": "20261025T221254Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-25T22:21:54.677074+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_42aae4",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-25T22:23:24.149533+00:00"
+    },
+    {
+      "name": "foreign_42aae4",
+      "kind": "removal",
+      "t0_iso": "2026-10-25T22:23:32.964399+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 2,
+    "n_observation_monitors_armed": 0,
+    "n_observation_fires": 0,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-25T22:14:52.173696+00:00",
+    "look_reasons": [
+      "Baseline of the working area at run start: check for unlisted objects or people ",
+      "End-of-run check of the working area: confirm the four parts are on base1 and th"
+    ]
+  },
+  "strategy": "other",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_42aae4",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-25T22:16:37.105697+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": true,
+      "observation_id": "obs-001-d5af404a",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 335.31,
+      "identity": "unknown small red/orange block",
+      "summary": "In the end-of-run RGB look there is a small red/orange square object on the bench, upper centre of the image, roughly to the right of the arm base. It was not visible in the run-start baseline look. A",
+      "confidence": "low",
+      "first_seen_wall_ns": 1792966920623608800,
+      "appearance_reported": "off_by_323.5s"
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 1,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 335.31,
+  "detection_latency_p95_s": 335.31,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 1,
+  "obs_FN": 0,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

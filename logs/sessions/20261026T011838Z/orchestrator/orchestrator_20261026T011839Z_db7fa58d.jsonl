@@ -1,0 +1,3 @@
+{"type": "orchestrator_start", "wall_ns": 1792977519251842417, "guard_mode": "guarded", "gate_timeout_sec": 120.0}
+{"type": "run_ready", "wall_ns": 1792977563546433558}
+{"type": "gate_timeout", "wall_ns": 1792977762909174156, "step_id": "pick_u_brown", "phase": "", "waited_sec": 120.00009630713612, "guard_mode": "guarded"}

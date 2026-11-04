@@ -1,0 +1,89 @@
+{
+  "run_id": "20261026T233132Z",
+  "role": "executor",
+  "n_ground_truth_records": 4,
+  "run_ended_iso": "2026-10-26T23:40:02.935299+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_539cd5",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T23:41:44.452307+00:00"
+    },
+    {
+      "name": "foreign_539cd5",
+      "kind": "removal",
+      "t0_iso": "2026-10-27T00:23:32.509681+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 6,
+    "n_observation_monitors_armed": 5,
+    "n_observation_fires": 1,
+    "n_record_observation_new": 2,
+    "n_record_observation_updates": 1,
+    "first_look_iso": "2026-10-26T23:32:19.977926+00:00",
+    "look_reasons": [
+      "Baseline view of workspace at run start: confirm all ten listed objects present ",
+      "Depth monitor fired at pixel u=181 v=82 (418 px closer than reference, outside a",
+      "Verify u_brown visually seated in base1 slot after release; check scene for unex",
+      "Slip/missed-grasp monitor fired on u_orange: pose shows it still on the bench af",
+      "Unlisted orange-red square object visible near pixel u=376 v=178 (approx world x",
+      "End-of-run check: confirm u_brown still seated, u_orange back on bench, bystande"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T23:35:16.506078+00:00",
+      "monitor_id": "obs_workspace_depth",
+      "value": 418.0,
+      "threshold": 400.0
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_539cd5",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T23:36:50.848598+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": true,
+      "observation_id": "obs-002-93f54d8a",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 92.03,
+      "identity": "small red/orange cube-like block, unidentified (possibly red_cube)",
+      "summary": "Unlisted small orange-red square object (~6 cm, raised above bench in depth) appeared on the bench in the open area right of base1 in the image, not present in baseline look 0001 or look 0003. Not amo",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793057860153110000,
+      "appearance_reported": "off_by_49.3s"
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 1,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 92.03,
+  "detection_latency_p95_s": 92.03,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 1,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-8d4e6201",
+      "category": "object_moved",
+      "summary": "Fixture base1 shifted slightly during place_u_brown seating contact: position +0.76 mm x, -0.60 mm y (~0.97 mm total) and yaw ~0.74 deg (qz 0.0064) relative to "
+    }
+  ]
+}

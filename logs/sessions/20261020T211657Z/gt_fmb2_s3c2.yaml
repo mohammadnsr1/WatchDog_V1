@@ -1,0 +1,93 @@
+# Label — fmb_assembly_2, S3, Class 2 (r4 wrong object, injected). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s3c2_run08
+task: fmb_assembly_2
+scenario: S3
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: pick_u_brown, object: u_orange, kind: wrong_object,
+     note: "r4 (sha 188a3acc): gripper aimed at u_orange; lifted 200 mm, carried and seated into u_brown_placement (0.403, -0.144, 0.043), 0.34 m from its start, left there. Watchdog's all-object stationarity fired 0.0247 on u_orange at 21:19:18.9."}
+  - {step: pick_u_brown, object: u_brown, kind: not_held,
+     note: "declared part never coupled: u_brown never moved (bag 0.0 mm). No slip monitor on u_brown; the watchdog's pick_u_brown verdict names the wrong-object grasp in text (clause object_id null)."}
+  - {step: place_u_brown, object: u_brown, kind: not_seated,
+     note: "u_brown 0.251 m from u_brown_placement (tol 0.01) at step close, still at its start pose; second grasp attempt failed; never corrected, run aborted"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  u_orange seated in u_brown's slot (u_brown_placement); u_brown untouched at
+  its start pose (0.251 m from its placement); u_orange's own slot, line_green
+  and inverted_u_yellow never worked. Bag (time-consistent TF +
+  /joint_states): u_orange held rigidly through the wrong hold (<= 1.9 mm
+  tcp-relative), clamp effort <= 61.6 (u_orange limit 200); base1 6.1 mm
+  settled after u_orange went into the slot, its monitor never fired -> not
+  labelled (batch fixture rule); bystanders ~0.
+executor_claimed: aborted
+notes: >
+  Fault: r4 wrong object (executor_2_r4.mcp.json, task sha 188a3acc, unchanged
+  from S2) with the operator ACM companion r4_allow_finger_contact.py
+  (operator_acm_override.jsonl). Registry 92969cc1; agent-side code e1b8529.
+  Watchdog monitored stationarity with ONE authored monitor over all ten
+  objects (armed object_id base1), skipping the held part and re-baselining a
+  part on its release; after diagnosing the wrong object it re-armed a
+  corrected copy mapping reported-held u_brown -> physically-held u_orange.
+  Scored under the 2026-10-20 multi-object fire attribution (subject read
+  from the fire detail). The second fire on u_orange (21:20:43, during
+  place_approach_u_brown, active part u_brown) restates the wrong-object
+  carry and is counted as a monitor false alarm. No slip or effort monitor.
+  Final non_conformant, recovered false (correct).
+  NO INJECTION: the benign cube was not placed this run (no
+  ground_truth_injections.jsonl) -> no observation scoring.

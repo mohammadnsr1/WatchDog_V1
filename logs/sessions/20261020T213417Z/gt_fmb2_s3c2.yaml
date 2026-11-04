@@ -1,0 +1,96 @@
+# Label — fmb_assembly_2, S3, Class 2 (nudge u_brown, injected; + natural slip). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s3c2_run09
+task: fmb_assembly_2
+scenario: S3
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: place_approach_u_orange, object: u_orange, kind: slip,
+     note: "NATURAL: in-hand slip tcp->u_orange > 0.02 from 21:42:11.8 (peak 33.3 mm before release; bag, time-consistent TF); watchdog slip monitor fired 0.0211 (TP). The resulting first-placement mis-seat (28.5 mm / 20.6 deg) was reseated inside place_u_orange (2.05 mm at close) -> not a violation."}
+  - {step: pick_line_green, object: u_brown, kind: nudged,
+     note: "INJECTED nudge_object u_brown (0.03, 0, 0) at pick_line_green, 21:45:08.25 (s1_c2_nudge.py): the teleport into base1 ejected seated u_brown ~5.1 m to (0.558, 4.911, -0.188), below the floor; never recovered. Watchdog stationarity fired 0.1049."}
+  - {step: pick_line_green, object: base1, kind: disturbed,
+     note: "nudge collision: base1 peak 22.9 mm, settled 12.7 mm (> 2 mm fixture floor) with a fire (0.0263) -> violation under the batch fixture rule."}
+  - {step: pick_line_green, object: u_orange, kind: disturbed,
+     note: "nudge collision: seated u_orange peak 20.4 mm vs 0.02 (3 samples over), settled 9.9 mm; no u_orange monitor fired -> unmonitored."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  u_brown ejected off the bench (~5.1 m, below the floor) by the nudge; u_orange
+  seated 9.9 mm from its pre-nudge rest; line_green seated; inverted_u_yellow
+  never picked; base1 settled 12.7 mm off after the nudge (7.0 mm already
+  before it, from u_orange's rework, unfired). Bag (time-consistent TF +
+  /joint_states): slip <= 5.3 mm on every other hold; clamp effort under every
+  limit (u_orange 80.4/200); bystanders ~0.
+executor_claimed: aborted
+notes: >
+  Fault: nudge_object u_brown (0.03, 0, 0) at_step=pick_line_green
+  (s1_c2_nudge.py, as S1 C2 run09); committed task f37da9da; registry
+  92969cc1; agent-side code e1b8529. NATURAL slip on u_orange in the same run.
+  Watchdog: u_orange slip caught by fire (TP); the nudge caught by the u_brown
+  and base1 stationarity fires at pick_line_green (TP x2); u_orange's nudge
+  displacement missed (FN). slip_u_orange_2 fired 0.0302 at 21:44:16.2, the
+  instant u_orange's re-grasp started (before the grasp closed; that hold
+  peaked 5.3 mm) -> mis-armed; it lands in place_u_orange, inside u_orange's
+  labelled slip span, so the scorer counts it as a continuation, not a false
+  alarm (no finding was recorded on it). Final non_conformant,
+  recovered false (correct). Record_observation reported u_brown's
+  non-physical displacement (the nudge episode; nudges are conformance-only
+  for the observation scorer).
+  Bag read while the bringup was still running (streaming parser).
+  Injections: benign cube foreign_4b76a5 at (0.08, -0.38), at_step=pick_u_orange
+  (place_object, observation ground truth) + the nudge (nudge_object).

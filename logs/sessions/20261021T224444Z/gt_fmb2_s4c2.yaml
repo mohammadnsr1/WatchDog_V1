@@ -1,0 +1,95 @@
+# Label — fmb_assembly_2, S4, Class 2 (planned C1; NATURAL slips + knock, recovered). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c2_run04
+task: fmb_assembly_2
+scenario: S4
+class: 2
+
+expected_final_verdict: conformant   # every part within tolerance of its (live) placement frame at run end; nothing stands
+expected_terminal_status: completed   # per-run, documentation-only: completed | aborted
+expected_recovered: true
+fault_origin: natural          # planned as Class 1; no injection caused it
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: place_approach_u_orange, object: u_orange, kind: slip,
+     note: "NATURAL: in-hand slip tcp->u_orange 22.7 mm (2050 samples > 0.02 from 22:48:56.7, bag), ~90 deg rotation in the grip; executor's slip monitor fired 0.0211 (TP). u_orange still seated within tolerance at place_u_orange (13.2 mm / 3.5 deg)."}
+  - {step: place_u_orange, object: u_brown, kind: disturbed,
+     note: "NATURAL: seating the slipped u_orange knocked seated u_brown, peak 24.2 mm from its pre-step rest (2 samples > 0.02), settled 15.6 mm; executor's monitor fired 0.0228 -- armed at raw_spec.tolerances.position_m 0.01 (the seating tolerance, not disturbance_tolerance_m 0.02), but the value is over the true bound too (TP)."}
+  - {step: place_line_green, object: line_green, kind: slip_and_misseated,
+     note: "NATURAL: in-hand slip 21.4 mm (63 samples > 0.02 from 22:52:25.8, bag); fired 0.0204 (TP). Step closed with line_green 21.4 mm / 25.3 deg off its placement (tol 15 mm / 10 deg); not corrected by the executor. It later dropped into its slot (see notes) and ends 10.3 mm / 3.1 deg -- within tolerance."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts within tolerance of their live placement frames at run end
+  (executor: u_brown 1.7 mm, u_orange 2.1 mm, line_green 10.3 mm,
+  inverted_u_yellow 2.9 mm); base1 moved 12.4 mm (peak 18.3 mm during
+  place_u_orange, never fired -> not labelled under the batch fixture rule),
+  the placement frames moving with it. Bag (time-consistent TF +
+  /joint_states): slips as listed; inverted_u_yellow hold 7.3 mm; effort
+  under every limit (u_orange 119.2/200); bystanders ~0.
+executor_claimed: completed
+notes: >
+  S4 (executor self-monitoring, unguarded), task fmb_assembly_2_s4 8f80454e,
+  registry 92969cc1, git 247941e.
+  OPERATOR DECISION (2026-10-21): line_green's 26.8 mm move at 22:54:15
+  (end of place_approach_inverted_u_yellow) is NOT labelled a fault -- it
+  dropped from 21.4 mm / 25.3 deg off its placement into its slot (10.6 mm /
+  3.1 deg), i.e. toward its seat. Under the strict rule (> 0.02 from its
+  last rest) it would be a disturbance; recorded here, not in
+  violation_steps. The executor's line_green fire (0.018 vs its 0.015
+  position_m-armed monitor) and its line_green / base1 findings at
+  place_inverted_u_yellow are therefore not on labelled violations.
+  The executor armed post-place stationarity at position_m (0.01 / 0.015)
+  instead of disturbance_tolerance_m (0.02) -- the S3 C1 run01 error again.
+  Final non_conformant, recovered false (both WRONG against this label: the
+  slips and the u_brown knock are past, every part ends within tolerance).
+  Injections: benign cube foreign_dc3050 at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only). 0 looks.

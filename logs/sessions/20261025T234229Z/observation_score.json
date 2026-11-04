@@ -1,0 +1,82 @@
+{
+  "run_id": "20261025T234229Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 12,
+  "run_ended_iso": "2026-10-25T23:51:32.784638+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_21a790",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-25T23:52:50.384577+00:00"
+    },
+    {
+      "name": "foreign_21a790",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T00:32:04.883903+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 2,
+    "n_observation_monitors_armed": 0,
+    "n_observation_fires": 0,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-25T23:43:30.001147+00:00",
+    "look_reasons": [
+      "Baseline of the workspace before the first step: checking for unlisted objects o",
+      "End-of-assembly workspace check: confirm all four parts on base1, bystanders in "
+    ]
+  },
+  "strategy": "other",
+  "obs_monitor_false_fires": 0,
+  "obs_monitor_false_fire_detail": null,
+  "episodes": [
+    {
+      "name": "foreign_21a790",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-25T23:45:40.766779+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": true,
+      "observation_id": "obs-001-4783ad0e",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 360.2,
+      "identity": "Unidentified small orange-red block; it could be a scene object not registered with the cell, or a rendering artefact. The evidence doesn't settle which.",
+      "summary": "A small orange-red square object appears in the final RGB look at roughly pixel (187,89) in the downscaled 320x180 image (about (374,178) at full resolution). That spot was empty in the baseline look ",
+      "confidence": "low",
+      "first_seen_wall_ns": 1792972287319820300,
+      "appearance_reported": "off_by_346.6s"
+    },
+    {
+      "name": "visitor_hand_da1bff",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-25T23:49:14.415211+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": false
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 1,
+  "detection_rate": 0.5,
+  "detection_latency_median_s": 360.2,
+  "detection_latency_p95_s": 360.2,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 1,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

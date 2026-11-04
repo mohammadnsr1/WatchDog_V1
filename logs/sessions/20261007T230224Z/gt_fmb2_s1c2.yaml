@@ -1,0 +1,81 @@
+# Label — fmb_assembly_2, S1, Class 2 (NATURAL fault; built from the C1 template). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s1c2_run02
+task: fmb_assembly_2
+scenario: S1
+class: 2
+
+expected_final_verdict: non_conformant
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false
+fault_origin: natural          # not injected: the robot produced the faults itself (batch.yaml notes)
+
+# Natural faults: no injection caused them. The pinned benign C1 injection
+# (place_object at_step=pick_u_orange) DID fire and is observation ground
+# truth only (ground_truth_injections.jsonl) -- not in violation_steps.
+violation_occurred: true
+violation_steps:
+  - {step: place_line_green, object: line_green, kind: in_hand_slip,
+     note: "relative_frame tcp->line_green 0.020154 m vs 0.02 m bound (~26 deg in-hand rotation during the carry); 0.15 mm over -> fault under the strictly-greater rule"}
+  - {step: place_inverted_u_yellow, object: u_brown, kind: knocked_off,
+     note: "struck by the descent toward inverted_u_yellow_placement; stationarity fire 0.0377 m vs 0.02, ended ~0.285 m from u_brown_placement, tipped on its side; never recovered"}
+  - {step: place_inverted_u_yellow, object: line_green, kind: knocked,
+     note: "same contact; stationarity fire 0.0217 m vs 0.02, ~90 deg rotation; final seat 0.0211 m vs 0.015 m position_m"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  u_orange seated (2.3 mm / 20 mm) and inverted_u_yellow seated (2.7 mm / 12 mm);
+  u_brown knocked off base1, ~285 mm from its placement, tipped on its side;
+  line_green knocked, 21.1 mm from its placement (tolerance 15 mm), ~90 deg
+  rotated; base1, base2 and the four bystanders undisturbed.
+  FROM THE WATCHDOG'S END-STATE MEASUREMENTS -- operator confirmed u_brown and
+  line_green faults are real (2026-10-07).
+executor_claimed: aborted
+notes: >                           # per-run: name every injection made,
+  Injections: place_object foreign_ca0f91 at (-0.45, -0.05) (at_step:pick_u_orange),
+  benign. Intended as a Class 1 run; reclassed Class 2 natural fault by the
+  operator. After the knock the executor ran an unplanned recover_pick_u_brown
+  (no motion plan: u_brown on its side) and aborted.

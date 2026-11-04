@@ -1,0 +1,101 @@
+{
+  "run_id": "20261026T231007Z",
+  "role": "executor",
+  "n_ground_truth_records": 9,
+  "run_ended_iso": "2026-10-26T23:22:14.537722+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_e8f531",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T23:23:11.996491+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 4,
+    "n_observation_monitors_armed": 5,
+    "n_observation_fires": 2,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 3,
+    "first_look_iso": "2026-10-26T23:10:44.994610+00:00",
+    "look_reasons": [
+      "Baseline view of workspace before run: confirm the 10 listed objects and check f",
+      "Adjudicate obs_workspace_depth fire (centroid x=0.355 y=-0.503, max z=0.68): is ",
+      "Adjudicate obs_workspace_depth_v2 fire: 252 px depth change near world x=-0.405 ",
+      "End-of-assembly check: all four parts seated on base1; check whether the unliste"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T23:13:19.234357+00:00",
+      "monitor_id": "obs_workspace_depth",
+      "value": 43.0,
+      "threshold": 25.0
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_e8f531",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T23:15:30.328518+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 191.16,
+      "detected": true,
+      "observation_id": "obs-002-a47b1dda",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 228.05,
+      "identity": "unidentified elongated pale object entering from the bench edge (beam or human forearm; evidence does not settle it)",
+      "summary": "Unlisted elongated pale/cream object (beam-like; possibly a person's forearm) entered the workspace from the bench's far -x edge and lies across/over bystander inverted_u_brown, ~0.2 m above the bench",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793056721492422700,
+      "appearance_reported": "off_by_191.2s"
+    },
+    {
+      "name": "visitor_hand_32f75b",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T23:18:41.227373+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.27,
+      "detected": true,
+      "observation_id": "obs-003-206128de",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 40.34,
+      "identity": "red cube (likely the registry's disabled red_cube prop)",
+      "summary": "Unlisted small red cube appeared on the bench at about world (0.10, -0.38), between look 0002 (absent) and look 0003 (present). Not among this task's objects or bystanders (a registry entry 'red_cube'",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793056732187578400,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 134.19,
+  "detection_latency_p95_s": 228.05,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-a0ec1c4a",
+      "category": "object_moved",
+      "summary": "base1 (fixture) shifted ~2.2 mm in the bench plane (x +1.3 mm, y +1.8 mm) and yawed ~0.07 deg during place_u_brown, coincident with u_brown's seating contact. P"
+    }
+  ]
+}

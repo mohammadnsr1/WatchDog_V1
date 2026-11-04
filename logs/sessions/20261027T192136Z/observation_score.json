@@ -1,0 +1,147 @@
+{
+  "run_id": "20261027T192136Z",
+  "role": "executor",
+  "n_ground_truth_records": 9,
+  "run_ended_iso": "2026-10-27T19:40:23.295167+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_6baa7e",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-27T19:40:54.789311+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 14,
+    "n_observation_monitors_armed": 10,
+    "n_observation_fires": 8,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 3,
+    "first_look_iso": "2026-10-27T19:22:57.399856+00:00",
+    "look_reasons": [
+      "Baseline view of workspace before run: confirm listed parts present and check fo",
+      "scene_watch_1 fired (depth change near pixel u=196 v=128) during move to ready p",
+      "scene_watch_2 fired at pixel u=280 v=120 during pick_u_brown approach; check whe",
+      "u_brown appears jammed above u_brown_placement (15 mm high, tilted) and base1 sh",
+      "Check how u_brown settled after set-down for re-pick, and scan for unexpected ob",
+      "Verify u_brown seated in base1 after release; scan workspace for unexpected obje",
+      "After u_orange jam at place_approach (no standoff in steps block): check u_orang",
+      "Confirm with depth the unlisted red/orange block near pixel (375,178), world ~(0",
+      "scene_watch_4 fired at pixel u=400 v=74 (likely the elbow leaving its baseline p",
+      "scene_watch_5 fired at pixel u=300 v=126 during transit to u_orange staging; che",
+      "Verify u_orange seated after release; check u_brown still seated; re-check unlis",
+      "Verify line_green seated after release; check u_brown/u_orange still seated; re-",
+      "Unlisted large beige slab appeared over inverted_u_yellow's area (~u 170-320, v ",
+      "Final verification: all four parts seated in base1; bystanders in place; check u"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 7,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-27T19:24:34.968200+00:00",
+      "monitor_id": "scene_watch_1",
+      "value": 197.0,
+      "threshold": 40.0
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:25:47.231415+00:00",
+      "monitor_id": "scene_watch_2",
+      "value": 63.0,
+      "threshold": 40.0
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:27:23.187716+00:00",
+      "monitor_id": "fixtures_watch",
+      "value": 0.005249412600306596,
+      "threshold": 0.005
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:32:45.925217+00:00",
+      "monitor_id": "scene_watch_4",
+      "value": 110.0,
+      "threshold": 6.0
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:33:35.224456+00:00",
+      "monitor_id": "scene_watch_5",
+      "value": 16.0,
+      "threshold": 6.0
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:34:54.537714+00:00",
+      "monitor_id": "fixtures_watch_2",
+      "value": 0.003079246317311902,
+      "threshold": 0.003
+    },
+    {
+      "wall_time_iso": "2026-10-27T19:39:05.287989+00:00",
+      "monitor_id": "fixtures_watch_3",
+      "value": 0.003029034512665193,
+      "threshold": 0.003
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_6baa7e",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-27T19:30:28.034296+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 137.89,
+      "detected": true,
+      "observation_id": "obs-002-9ad6cf1a",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 94.81,
+      "identity": "unknown cube-like block; possibly the registry's disabled 'red_cube' entry, unconfirmed",
+      "summary": "Unlisted small red/orange block (~4 cm cube) appeared on the bench, clear of all listed parts and fixtures. Absent in look 0006, present in looks 0007 and 0008 (depth confirms raised geometry). Not an",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793129496519327000,
+      "appearance_reported": "off_by_68.5s"
+    },
+    {
+      "name": "visitor_hand_783986",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-27T19:36:55.569013+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.04,
+      "detected": true,
+      "observation_id": "obs-003-103420e5",
+      "match": "category",
+      "category": "other_unexpected",
+      "latency_s": 34.14,
+      "identity": "unknown elongated beige object (board or person's arm), entered and left",
+      "summary": "Transient unlisted object entered and left the workspace: a long beige slab/board-like shape (~0.45 m x ~6 cm in image) passed across the bench along world y ~ -0.09. First flagged by scene_watch_6 ne",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793129815607232300,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 64.47,
+  "detection_latency_p95_s": 94.81,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-001-4011fddc",
+      "category": "object_moved",
+      "summary": "base1 (fixture) was pushed ~5-6 mm and yawed ~1.2-1.5 deg when u_brown jammed during the first slow descent of place_u_brown; u_brown was rotated ~22 deg in the"
+    }
+  ]
+}

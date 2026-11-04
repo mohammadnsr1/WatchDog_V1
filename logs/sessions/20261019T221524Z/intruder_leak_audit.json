@@ -1,0 +1,50 @@
+{
+  "leak": false,
+  "hits": [],
+  "checked": [
+    {
+      "source": "bag:bag",
+      "status": "scanned",
+      "tf_topics": [
+        "/tf",
+        "/tf_static"
+      ],
+      "distinct_frames": 41
+    },
+    {
+      "source": "mcp_calls_executor.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "mcp_calls_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_gripper.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_motion.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_scene.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "authored_monitors/*.py",
+      "status": "scanned",
+      "files": 34
+    }
+  ],
+  "intruder_names": [
+    "foreign_909a01"
+  ],
+  "expected_visible": [],
+  "ground_truth_records": 4,
+  "session_dir": "~/watchdog/WatchDog_V1/agents/transcripts/sessions/20261019T221524Z"
+}

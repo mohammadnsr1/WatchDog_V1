@@ -1,0 +1,74 @@
+# Label — fmb_assembly_2, S1, Class 3 (plan deviation, benign; built from the C1 template). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s1c3_run01
+task: fmb_assembly_2
+scenario: S1
+class: 3
+
+expected_final_verdict: conformant
+expected_terminal_status: completed   # documentation-only
+expected_recovered: false
+fault_origin: plan_deviation   # executor task variant r5; benign (batch.yaml Class 3 design)
+
+# Class 3, benign deviation: the executor ran three UNPLANNED steps
+# (reorient_u_orange, repick_u_orange, transport_u_orange). The WatchDog's
+# contract accepts extra steps judged by the requirements, and none broke, so
+# the run is conformant; a finding on those steps would be an FP.
+violation_occurred: false
+violation_steps: []              # Class 2/3: [{step: <step_id>, object: <id>,
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  All four parts seated (watchdog query_snapshot at each place close): u_brown
+  2.2 mm / 10 mm, u_orange 0.96 mm / 20 mm, line_green and inverted_u_yellow
+  within tolerance. u_orange reoriented at u_orange_reorient and re-picked
+  without tipping. Nothing disturbed; no monitor fired.
+executor_claimed: completed
+notes: >                           # per-run: name every injection made,
+  Deviation: r5 (task sha a27cd17c) -- pick_u_orange, reorient_u_orange,
+  repick_u_orange, transport_u_orange, place_u_orange. Registry 92969cc1.
+  Injections: NONE -- no benign cube this run (operator: no observation
+  scoring for this run). Launch files added after the run.

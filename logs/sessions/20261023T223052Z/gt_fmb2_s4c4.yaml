@@ -1,0 +1,88 @@
+# Label — fmb_assembly_2, S4, Class 4 (registry corruption: executor copy u_brown max_clamp_effort 100, true 10).
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c4_run03
+task: fmb_assembly_2
+scenario: S4
+class: 4
+
+expected_final_verdict: non_conformant   # effort invariant broken (cannot be undone)
+expected_terminal_status: completed   # documentation-only
+expected_recovered: false
+fault_origin: injected   # executor-only registry override (batch.yaml Class 4 design)
+
+# Class 4: install registry u_brown max_clamp_effort 10 (32f79017), executor
+# copy at 100 (008411d8). Natural faults followed in the same run.
+violation_occurred: true
+violation_steps:
+  - {step: pick_u_brown, object: u_brown, kind: over_effort,
+     note: "Class 4: effort over 10 from the grasp to release (hold 22:32:47-22:33:25; bag 951 samples > 10, peak 70.8) across pick / place_approach / place_u_brown. NO effort monitor armed; the executor's place_u_brown check compared a 28.6 reading against its copy's 100 and passed it -> FN."}
+  - {step: place_line_green, object: line_green, kind: slip,
+     note: "NATURAL: in-hand slip tcp->line_green 21.5 mm (39 samples > 0.02, from 22:36:22.1, ~1 s before release; bag, time-consistent TF). No slip monitor armed -> FN. line_green seated within tolerance at step close (10.7 mm / 3.2 deg, tol 15 mm / 10 deg)."}
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+
+
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated (executor: u_brown 2.1 mm, u_orange 2.2 mm,
+  line_green 10.7 mm / 3.2 deg, inverted_u_yellow 2.8 mm). Bag
+  (time-consistent TF + /joint_states): u_brown over-clamped (70.8 vs true
+  10); line_green slip 21.5 mm; other holds clean (slip <= 2.2 mm; effort
+  79.4/200, 17.4/170, 93.2/250); placed parts <= 8.6 mm after placement;
+  base1 3.5 mm peak / 1.9 mm end (unfired -> not labelled); base2 and
+  bystanders ~0.
+executor_claimed: completed
+notes: >
+  Class 4: install registry 32f79017 (u_brown max_clamp_effort 10), executor
+  override ~/.watchdog/registry/model_registry.yaml 008411d8 (100) -- confirmed
+  in registry_provenance_executor.json. S4, unguarded; task fmb_assembly_2_s4
+  8f80454e; git 1428f92. Monitors: u_green stationarity only (no other
+  bystander), a base1 watch (0.02 clause, swapped at 22:32:17 for a 0.005
+  observation watch), two periodic object-less observation ticks; NO effort
+  or slip monitor on any part. Effort judged only by end-of-step readings
+  against the corrupted copy (u_brown "28.6N well under 100N"). Final
+  conformant (WRONG), recovered false (correct).
+  Injections: see ground_truth_injections.jsonl (benign cube; observation
+  ground truth only).

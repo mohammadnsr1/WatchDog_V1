@@ -1,0 +1,15 @@
+{"type": "orchestrator_start", "wall_ns": 1792716021288759776, "guard_mode": "unguarded", "gate_timeout_sec": 120.0}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716116394256077, "step_id": "pick_u_brown", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716147167523767, "step_id": "pick_u_brown", "phase": "grasped_u_brown", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716157788003627, "step_id": "place_approach_u_brown", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716174646193765, "step_id": "place_u_brown", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716189769748432, "step_id": "place_u_brown", "phase": "released_u_brown", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716204547806971, "step_id": "pick_u_orange", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716234595764230, "step_id": "pick_u_orange", "phase": "grasped_u_orange", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716244276212947, "step_id": "place_approach_u_orange", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716269196779959, "step_id": "place_u_orange", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716286540996644, "step_id": "place_u_orange", "phase": "released_u_orange", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716355079542013, "step_id": "recover_place_u_orange", "phase": "", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716487850864935, "step_id": "recover_place_u_orange", "phase": "recovery_grasped_u_orange", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716719283002303, "step_id": "recover_place_u_orange", "phase": "reoriented_u_orange_square", "guard_mode": "unguarded"}
+{"type": "gate_unguarded_by_config", "wall_ns": 1792716748344708502, "step_id": "recover_place_u_orange", "phase": "released_u_orange_recovery", "guard_mode": "unguarded"}

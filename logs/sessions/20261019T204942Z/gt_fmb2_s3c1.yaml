@@ -1,0 +1,83 @@
+# Label — fmb_assembly_2, S3, Class 1 (clean). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s3c1_run02
+task: fmb_assembly_2
+scenario: S3
+class: 1
+
+expected_final_verdict: conformant
+expected_terminal_status: completed   # documentation-only
+expected_recovered: false
+fault_origin: none
+
+# Class 1 = conformance-clean. Benign script-editor injections are allowed and
+# expected (observation ground truth lives in ground_truth_injections.jsonl);
+# they do NOT go in violation_steps and do not flip violation_occurred.
+violation_occurred: false
+violation_steps: []              # Class 2/3: [{step: <step_id>, object: <id>,
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated (executor end_step): u_brown 2.1 mm, u_orange 2.5 mm,
+  line_green 6.7 mm, inverted_u_yellow 3.7 mm / 2.6 deg. Bag (time-consistent
+  TF): every placed part, bystander and fixture <= 2.8 mm from rest after
+  its own placement. No violation. One lift retry inside
+  pick_inverted_u_yellow (stale octomap; the part never moved).
+executor_claimed: completed
+notes: >
+  EXECUTOR TASK NOT THE COMMITTED ONE: executor_task_sha256 103ee800 (the
+  working-tree fmb_assembly_2.executor.yaml, edited 20:48 UTC just before the
+  run: place_u_brown target_offset x -0.0005 un-commented); committed task is
+  4166cca0. Registry 92969cc1, agent-side code as e1b8529.
+  Monitors: 27 arms. 22 clause (stationarity at disturbance_tolerance_m 0.02
+  for bystanders and parts, base1/base2 0.02, effort + slip per part from the
+  registry) + 5 observation: a depth scene_watch re-armed after each fire with
+  its threshold raised 3% -> 8% -> 15% -> 20% of changed depth pixels; 4 fires
+  (arm motion), 3 looks, no record_observation. Cube placed 20:54:28 after
+  the threshold was at 15% (a 5 cm cube is far below that), still in view at
+  the 21:00:16 look -> missed. No conformance fires.
+  Injections: benign cube foreign_b62eed at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only).

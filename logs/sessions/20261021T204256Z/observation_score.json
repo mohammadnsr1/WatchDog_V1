@@ -1,0 +1,81 @@
+{
+  "run_id": "20261021T204256Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 6,
+  "run_ended_iso": "2026-10-21T20:52:06.356765+00:00",
+  "n_episodes": 1,
+  "post_run_episodes": [
+    {
+      "name": "foreign_ca24cf",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-21T20:53:54.118082+00:00"
+    },
+    {
+      "name": "foreign_ca24cf",
+      "kind": "removal",
+      "t0_iso": "2026-10-21T20:53:56.940525+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 1,
+    "n_observation_monitors_armed": 4,
+    "n_observation_fires": 3,
+    "n_record_observation_new": 0,
+    "n_record_observation_updates": 0,
+    "first_look_iso": "2026-10-21T20:44:30.053040+00:00",
+    "look_reasons": [
+      "Scene-depth observation monitor fired (frac=0.070) during pick_u_brown; check wh"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 3,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-21T20:44:26.638914+00:00",
+      "monitor_id": "mon_44154a6b56ac",
+      "value": 0.07037326388888888,
+      "threshold": 0.05
+    },
+    {
+      "wall_time_iso": "2026-10-21T20:45:29.505483+00:00",
+      "monitor_id": "mon_afa5c1320b44",
+      "value": 0.09919270833333334,
+      "threshold": 0.08
+    },
+    {
+      "wall_time_iso": "2026-10-21T20:45:55.832337+00:00",
+      "monitor_id": "mon_e67eaad78b36",
+      "value": 0.12235243055555556,
+      "threshold": 0.12
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_ca24cf",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-21T20:46:41.883037+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": null,
+      "detected": false
+    }
+  ],
+  "n_detectable": 1,
+  "n_undetectable": 0,
+  "n_detected": 0,
+  "detection_rate": 0.0,
+  "detection_latency_median_s": null,
+  "detection_latency_p95_s": null,
+  "appearance_reported_accurate": 0,
+  "obs_TP": 0,
+  "obs_FN": 1,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

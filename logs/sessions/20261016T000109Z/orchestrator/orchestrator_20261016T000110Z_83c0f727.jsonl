@@ -1,0 +1,18 @@
+{"type": "orchestrator_start", "wall_ns": 1792108870175461604, "guard_mode": "guarded", "gate_timeout_sec": 120.0}
+{"type": "run_ready", "wall_ns": 1792108958385089601}
+{"type": "gate_open", "wall_ns": 1792109000310376759, "step_id": "pick_u_brown", "phase": "", "waited_sec": 8.02200322796125, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109062416275840, "step_id": "pick_u_brown", "phase": "grasped", "waited_sec": 34.462571430020034, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109085206500014, "step_id": "place_approach_u_brown", "phase": "", "waited_sec": 11.035065736970864, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109102209358809, "step_id": "place_u_brown", "phase": "", "waited_sec": 2.934143431019038, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109301173580256, "step_id": "pick_u_orange", "phase": "", "waited_sec": 73.05160052597057, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109329414789995, "step_id": "pick_u_orange", "phase": "grasped", "waited_sec": 4.819079683045857, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109344996177400, "step_id": "place_approach_u_orange", "phase": "", "waited_sec": 3.8912062210729346, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109365613014643, "step_id": "place_u_orange", "phase": "", "waited_sec": 1.8061646919231862, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109413079544235, "step_id": "pick_line_green", "phase": "", "waited_sec": 13.198423820082098, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109439281500547, "step_id": "pick_line_green", "phase": "grasped", "waited_sec": 3.8544231720734388, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109452886029660, "step_id": "place_approach_line_green", "phase": "", "waited_sec": 2.0331754779908806, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109471187306509, "step_id": "place_line_green", "phase": "", "waited_sec": 1.845425320090726, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109515600700878, "step_id": "pick_inverted_u_yellow", "phase": "", "waited_sec": 13.524583343998529, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109542705161584, "step_id": "pick_inverted_u_yellow", "phase": "grasped", "waited_sec": 3.6848690540064126, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109557066825865, "step_id": "place_approach_inverted_u_yellow", "phase": "", "waited_sec": 2.1734475860139355, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792109576207364390, "step_id": "place_inverted_u_yellow", "phase": "", "waited_sec": 1.7561511159874499, "guard_mode": "guarded"}

@@ -1,0 +1,87 @@
+# Label — fmb_assembly_2, S4, Class 3 (r5 benign deviation + NATURAL faults). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c3_run01
+task: fmb_assembly_2
+scenario: S4
+class: 3
+
+expected_final_verdict: non_conformant   # base1 displaced (fired, > 2 mm) and standing at run end
+expected_terminal_status: completed   # per-run, documentation-only: completed | aborted
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: plan_deviation   # r5 (benign); the violations below are natural (as fmb2_s2c3_run03)
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: place_u_brown, object: base1, kind: fixture_disturbed,
+     note: "NATURAL: u_brown's first placement (mis-seated 47.7 mm / 27.5 deg, reseated in-step to 2.5 mm -- not itself a violation) moved base1 13.0 mm, with a fire (watch_base1 0.007 vs an agent-chosen 0.005, flagged observation but reads its pose) -> violation under the batch fixture rule; 10.5 mm at run end, standing."}
+  - {step: place_line_green, object: line_green, kind: slip,
+     note: "NATURAL: in-hand slip 21.8 mm (63 samples > 0.02 from 02:02:35.0, bag) on the first insertion; no slip monitor armed. The resulting mis-seat (21.6 mm / 24.4 deg) was caught by the executor's end check (non_conformant at place_line_green) and reseated in-step (6.8 mm at close)."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated against their (live) placement frames (u_brown 2.5 mm,
+  u_orange 2.3 mm, line_green 6.8 mm, inverted_u_yellow 0.8 mm / 4.8 deg);
+  base1 10.5 mm from its start (standing). Bag (time-consistent TF +
+  /joint_states): u_brown's first hold peaked 17.2 mm tcp-relative (under the
+  bound -- no u_brown slip); line_green slip 21.8 mm; other holds <= 9.0 mm;
+  placed parts <= 7.0 mm after placement; base2 and bystanders ~0; clamp
+  effort under every limit.
+executor_claimed: completed
+notes: >
+  Deviation: r5 (EXECUTOR_VARIANT=r5, S4 variant 993e8931): unplanned
+  transport_and_approach_place_u_orange / reorient_and_place_approach_line_green
+  ran; no finding on them (correct). S4, unguarded; registry 92969cc1; git
+  4f42c81. Monitors: bystander stationarity at disturbance_tolerance_m plus
+  observation-flagged watches (base1 among them); NO slip or effort monitor.
+  Executor findings at place_u_brown (u_brown mis-seat; the step's base1 fire
+  attributes it to base1) and place_line_green (mis-seat); final
+  non_conformant citing base1 (correct), recovered false (correct).
+  Injections: benign cube at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only).

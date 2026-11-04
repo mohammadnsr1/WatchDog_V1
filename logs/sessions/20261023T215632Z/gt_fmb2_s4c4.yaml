@@ -1,0 +1,91 @@
+# Label — fmb_assembly_2, S4, Class 4 (registry corruption: executor copy u_brown max_clamp_effort 100, true 10).
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c4_run01
+task: fmb_assembly_2
+scenario: S4
+class: 4
+
+expected_final_verdict: non_conformant   # effort invariant broken (cannot be undone) + base1 displaced (fired, > 2 mm) and standing
+expected_terminal_status: completed   # documentation-only
+expected_recovered: false
+fault_origin: injected   # executor-only registry override (batch.yaml Class 4 design)
+
+# Class 4: install registry u_brown max_clamp_effort 10 (32f79017), executor
+# copy at 100 (008411d8). Natural faults followed in the same run.
+violation_occurred: true
+violation_steps:
+  - {step: pick_u_brown, object: u_brown, kind: over_effort,
+     note: "Class 4: effort over 10 from the grasp to release (hold 21:58:41-21:59:20; bag 913 samples > 10, peak 81.3) across pick / place_approach / place_u_brown. The executor's effort monitor was armed at its copy's 100 (corrupted bind, executor-verified) and never fired -> FN."}
+  - {step: place_u_brown, object: base1, kind: fixture_disturbed,
+     note: "NATURAL: u_brown's placement moved base1 8.8 mm (settled, standing), with a fire (base1 watch 0.0079 vs an agent-chosen 0.005, flagged observation but reads its pose -> scored as a clause monitor) -> violation under the batch fixture rule. Executor reported it via record_observation only."}
+  - {step: place_inverted_u_yellow, object: base1, kind: fixture_disturbed,
+     note: "NATURAL: inverted_u_yellow's placement moved base1 a further 6.4 mm peak, settled 3.5 mm from its pre-step rest (6.0 mm from run start at the end, standing), with a fire (0.0064 vs 0.005) -> violation under the batch fixture rule. Executor reported it via record_observation only."}
+  - {step: place_inverted_u_yellow, object: u_brown, kind: disturbed,
+     note: "NATURAL, same placement: seated u_brown peak 22.7 mm (9 samples > 0.02 at 22:04:26.9) from its pre-step rest, settled 3.0 mm; no post-place u_brown monitor armed -> unmonitored. u_orange (10.9 mm) and line_green (17.8 mm) moved under the bound."}
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated (executor end checks conformant at every place step;
+  u_brown 8.79 mm at place_u_brown). base1 6.0 mm from its run-start pose at
+  the end (8.8 mm after place_u_brown, partly back, then +6.4 mm peak at
+  place_inverted_u_yellow). Bag (time-consistent TF + /joint_states): u_brown
+  over-clamped (81.3 vs true 10); other holds clean (slip <= 8.4 mm; effort
+  64.7/200, 15.1/170, 139.4/250); base2 and bystanders ~0.
+executor_claimed: completed
+notes: >
+  Class 4: install registry 32f79017 (u_brown max_clamp_effort 10), executor
+  override ~/.watchdog/registry/model_registry.yaml 008411d8 (100) -- confirmed
+  in registry_provenance_executor.json. S4, unguarded; task fmb_assembly_2_s4
+  8f80454e; git 1428f92. Monitors: bystander stationarity at
+  disturbance_tolerance_m, observation-flagged base1/base2 watches (0.005),
+  effort per part from its copy (u_brown 100 -- corrupted), slip on u_orange /
+  line_green / inverted_u_yellow only (none on u_brown), no post-place
+  stationarity. The over-clamp went unseen (the C4 path untested by the
+  executor). Both base1 shifts reported as observations ("no registry
+  tolerance for base1"), not findings. Final conformant, recovered false
+  (verdict WRONG against this label; recovered correct).
+  Injections: see ground_truth_injections.jsonl (benign cube; observation
+  ground truth only).

@@ -1,0 +1,80 @@
+# Label — fmb_assembly_2, S2, Class 2 (injected: r3 lowered effort limit). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s2c2_run09
+task: fmb_assembly_2
+scenario: S2
+class: 2
+
+expected_final_verdict: non_conformant   # effort invariant broken; cannot be undone (as every r3/C4 run)
+expected_terminal_status: completed   # documentation-only
+expected_recovered: true          # operator 2026-10-15: the line faults were recovered (all parts seated at run end)
+fault_origin: injected
+
+# r3: shared registry u_brown max_clamp_effort 10 (sha 32f79017). The
+# over-clamp is labelled at its onset step only; the watchdog's restatements at
+# place_approach_u_brown / place_u_brown are continuation (neither TP nor FP).
+# The line_green slips/mis-seat are natural faults in the same run. No cube
+# this run (operator forgot the injection script) -> no observation scoring.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: pick_u_brown, object: u_brown, kind: over_effort,
+     note: "r3: effort fired 25.3 vs 10 at 22:15:39, ~75 sustained; held over the bound until release at place_u_brown"}
+  - {step: place_line_green, object: line_green, kind: slip_and_misseated,
+     note: "NATURAL: slip 0.0201 vs 0.02 (22:21:29), seated 21.8 mm off line_green_placement (tol 15 mm)"}
+  - {step: reseat_line_green, object: line_green, kind: in_hand_slip,
+     note: "NATURAL: slip 0.02025 vs 0.02 (22:23:37) during the unplanned re-seat, which then seated it within tolerance"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  All four parts seated at run end (line_green after reseat_line_green). u_brown
+  was gripped at ~50-75 against a limit of 10 -- not undoable.
+executor_claimed: completed
+notes: >                           # per-run: name every injection made,
+  Fault: r3, install registry 32f79017 (u_brown limit 10, every role); committed task
+  (sha 4166cca0). Watchdog final verdict conformant+recovered (expected non_conformant).
+  Monitor mix 19:0.
+  Injections: NONE -- the cube script was not run this time.
+  Launch files added after the run.

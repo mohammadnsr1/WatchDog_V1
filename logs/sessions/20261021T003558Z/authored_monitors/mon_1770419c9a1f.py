@@ -1,0 +1,12 @@
+def check(ctx):
+    obj = "base1"
+    p = ctx.object_pose(obj)
+    if p is None:
+        return None
+    if "ref" not in ctx.state:
+        ctx.state["ref"] = p["pose"]["position"]
+        return None
+    d = ctx.dist(ctx.state["ref"], p["pose"]["position"])
+    if d > ctx.value("tol"):
+        return {"value": d, "detail": obj + " displaced from rest pose by " + str(d) + " m"}
+    return None

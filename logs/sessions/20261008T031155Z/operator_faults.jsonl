@@ -1,0 +1,1 @@
+{"wall_time_iso": "2026-10-08T03:17:47.145109+00:00", "fault": "drop_open_gripper", "step_id": "place_approach_u_orange", "delay_s": 3.0, "release_seen_iso": "2026-10-08T03:17:42.645501+00:00", "service": "/rg2_controller/open", "success": true, "message": "open: target=104.0 mm  final=103.6 mm  converged=True"}

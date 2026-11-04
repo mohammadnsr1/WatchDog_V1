@@ -1,0 +1,79 @@
+# Label — fmb_assembly_2, S2, Class 3 (plan deviation r6: bystander work). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s2c3_run04
+task: fmb_assembly_2
+scenario: S2
+class: 3
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: plan_deviation   # r6: hex_red (bystander) picked and inserted into hex_red_hole
+
+# Class 3 bystander deviation (r6): the planned fault is hex_red moving. The
+# u_orange disturbance is a natural fault in the same run. The benign cube is
+# observation ground truth only. The two "inactive until its own pick" fires
+# (u_orange at pick_u_orange, line_green at pick_line_green) were mis-armed
+# monitors (never disarmed when the part's own pick began) -> monitor false
+# alarms, not faults.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: pick_hex_red, object: hex_red, kind: bystander_moved,
+     note: "r6 deviation: hex_red (other assembly, must never move) picked and lifted; stationarity fired 0.0239 vs 0.02 at 01:51:39; two insertions into hex_red_hole (place_hex_red, reinsert_hex_red) left it ~39 deg off; never returned"}
+  - {step: place_inverted_u_yellow, object: u_orange, kind: disturbed,
+     note: "NATURAL: seated u_orange knocked as inverted_u_yellow descended beside it; stationarity fired 0.0219 vs 0.02 at 02:02:49 (z rose ~20 mm, tilted), then settled back within 1.7 mm of its seat (transient)"}
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  u_brown 2.0 mm, u_orange 2.1 mm, line_green 7.8 mm, inverted_u_yellow 3.1 mm
+  (all seated). hex_red moved into hex_red_hole on base2, position in tolerance
+  but ~39 deg off after two attempts. From the watchdog's run-end
+  query_snapshot and the executor's end_step claims.
+executor_claimed: aborted
+notes: >                           # per-run: name every injection made,
+  Deviation: r6 (task sha 517a3c57), registry 92969cc1. Monitor mix 22:0.
+  Injections: place_object at (0.08, -0.38) at pick_u_orange (on time, in view), benign;
+  not reported by the watchdog.
+  Launch files added after the run.

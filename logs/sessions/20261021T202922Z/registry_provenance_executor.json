@@ -1,0 +1,6 @@
+{
+  "role": "executor",
+  "registry_path": "~/.watchdog/registry/model_registry.yaml",
+  "registry_sha256": "008411d86ff9faf1421918bf02e2a7e8d402cbaefe4509bc33e97ea96bbdd116",
+  "override_env": "EXECUTOR_REGISTRY_PATH"
+}

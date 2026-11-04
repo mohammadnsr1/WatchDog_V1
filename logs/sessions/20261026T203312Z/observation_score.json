@@ -1,0 +1,109 @@
+{
+  "run_id": "20261026T203312Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T20:45:00.803097+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_5af3da",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T20:46:17.964653+00:00"
+    },
+    {
+      "name": "foreign_5af3da",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T20:46:46.208297+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 7,
+    "n_observation_monitors_armed": 4,
+    "n_observation_fires": 2,
+    "n_record_observation_new": 3,
+    "n_record_observation_updates": 4,
+    "first_look_iso": "2026-10-26T20:34:11.332560+00:00",
+    "look_reasons": [
+      "Baseline view of the workspace before the first step: identify all objects prese",
+      "Workspace depth-watch fired on the right half of the bench during approach to u_",
+      "Step boundary after place_u_orange: confirm u_brown and u_orange seated on base1",
+      "Investigating a small red/orange square block near pixel (375,178), about world ",
+      "The bystander-area depth watch fired (7% of the ROI changed) while the arm is pl",
+      "After the inverted_u_yellow pick: check that the yellow part is in the gripper, ",
+      "Final workspace check at run end: confirm all four parts are seated on base1, th"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 1,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T20:35:29.932416+00:00",
+      "monitor_id": "ws_depth_watch_r0",
+      "value": 0.010241935483870968,
+      "threshold": 0.01
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_5af3da",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T20:37:06.157037+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 292.77,
+      "detected": true,
+      "observation_id": "obs-001-15996ff4",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 206.11,
+      "identity": "Unidentified small red/orange block, not one of the ten registered FMB objects. The pixel-to-world position is approximate, estimated from camera intrinsics and the pixel positions of known objects.",
+      "summary": "A small red/orange cube-like block, roughly 2-3 cm across, is on the bench near pixel (375,178), about world (0.08, -0.39). It is not in the baseline look 0001 or in look 0002, and it is in looks 0003",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793047188910585000,
+      "appearance_reported": "off_by_162.8s"
+    },
+    {
+      "name": "visitor_hand_9261a0",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T20:41:58.654572+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.27,
+      "detected": true,
+      "observation_id": "obs-002-88d74be2",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 43.19,
+      "identity": "Unidentified thin flat beige sheet or board, not a registered object. RGB and depth disagree over the yellow part (hidden in RGB, still present in depth and TF). Possibly a visual-only prim or an object lying over the part; the evidence does not settle which.",
+      "summary": "A large, flat, beige rectangular sheet or slab has appeared on the bench, spanning about pixels u 170-320, v 260-292 in look 0005. In world terms that is roughly x 0.28-0.67, y -0.11 to -0.06, deproje",
+      "confidence": "medium",
+      "first_seen_wall_ns": 1793047323243647500,
+      "appearance_reported": "accurate"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 124.65,
+  "detection_latency_p95_s": 206.11,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 1,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": [
+    {
+      "observation_id": "obs-003-eba3b22e",
+      "category": "other_unexpected",
+      "summary": "Transient depth change in the bystander area (pixels u 400-640, v 150-360, covering base2, u_green and inverted_u_brown). ws_depth_watch_r1 fired at 17930473189"
+    }
+  ]
+}

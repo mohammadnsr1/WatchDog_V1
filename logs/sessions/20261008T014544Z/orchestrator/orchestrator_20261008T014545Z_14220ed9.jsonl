@@ -1,0 +1,7 @@
+{"type": "orchestrator_start", "wall_ns": 1791423945427257170, "guard_mode": "guarded", "gate_timeout_sec": 120.0}
+{"type": "run_ready", "wall_ns": 1791424144362257542}
+{"type": "gate_open", "wall_ns": 1791424195807677623, "step_id": "pick_u_brown", "phase": "", "waited_sec": 7.049633319955319, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1791424224536521834, "step_id": "pick_u_brown", "phase": "grasped", "waited_sec": 5.195540730841458, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1791424294218606016, "step_id": "place_approach_u_brown", "phase": "", "waited_sec": 59.06698146928102, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1791424311212416438, "step_id": "place_u_brown", "phase": "", "waited_sec": 2.5619649258442223, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1791424413075709989, "step_id": "pick_u_brown_retry1", "phase": "", "waited_sec": 15.41078501706943, "guard_mode": "guarded"}

@@ -1,0 +1,81 @@
+# Label — fmb_assembly_2, S4, Class 2 (planned C1; NATURAL slip, dismissed by the executor). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s4c2_run02
+task: fmb_assembly_2
+scenario: S4
+class: 2
+
+expected_final_verdict: conformant   # all parts seated within tolerance at run end; the slip is past
+expected_terminal_status: completed   # per-run, documentation-only: completed | aborted
+expected_recovered: true
+fault_origin: natural          # planned as Class 1; no injection caused it
+
+# Class 2 = injected fault (task variant r1/r2, registry edit r3, or
+# nudge_object). violation_steps = the row fixed in agents/tasks/runs/README.md
+# (or the nudge's STEP/OBJECT_ID) BEFORE the run, corrected to what physically
+# happened. The benign cube is observation ground truth only -- never here.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:                 # per-run
+  - {step: place_line_green, object: line_green, kind: slip,
+     note: "NATURAL: in-hand slip tcp->line_green 21.9 mm (58 samples > 0.02 from 22:08:35.1) during the insertion (bag, time-consistent TF); the executor's own slip monitor fired 0.0205, and the executor adjudicated it valid_variation ('seating contact') -- strictly greater than the bound is a fault (batch rule), so not a finding -> FN. line_green closed the step seated (10.45 mm / 3.1 deg)."}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >
+  All four parts seated (executor end_step): u_brown 2.1 mm, u_orange 2.1 mm,
+  line_green 10.45 mm / 3.1 deg, inverted_u_yellow 2.7 mm. Bag (time-consistent
+  TF + /joint_states): line_green slip 21.9 mm; every other hold <= 4.0 mm;
+  placed parts <= 2.9 mm after placement; base1 1.5 mm, base2 and bystanders
+  ~0; clamp effort under every limit (inverted_u_yellow 87.6/250).
+executor_claimed: completed
+notes: >
+  S4 (executor self-monitoring, unguarded), task fmb_assembly_2_s4 8f80454e,
+  registry 92969cc1, git 969afa0. 14 clause arms (stationarity on bystanders,
+  effort + slip per part) + base1/base2 observation watches. The slip fired
+  and was EXPLAINED AWAY: record_verdict valid_variation at place_line_green
+  (evidence read as seating contact, the part's descent arrested while the
+  TCP continued). Final conformant (correct), recovered false (wrong).
+  Injections: benign cube foreign_c4e792 at (0.08, -0.38), at_step=pick_u_orange
+  (place_object; observation ground truth only). 0 looks.

@@ -1,0 +1,78 @@
+# Label — fmb_assembly_2, S2, Class 2 (injected: r4 wrong object). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s2c2_run06
+task: fmb_assembly_2
+scenario: S2
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# r4 wrong object, labelled like S1's r4 runs (fmb2_s1c2_run03/04) so the
+# batches compare directly.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: pick_u_brown, object: u_orange, kind: wrong_object,
+     note: "r4: gripper aimed at u_orange; it was lifted (stationarity fired 0.0247 at 20:13:56); 0.345 m from its start at run end"}
+  - {step: pick_u_brown, object: u_brown, kind: not_held,
+     note: "declared part never coupled: relative_frame tcp->u_brown fired 0.0251 vs 0.02 at 20:13:56; u_brown stayed at its start pose"}
+  - {step: place_u_brown, object: u_brown, kind: not_seated,
+     note: "u_brown 0.246 m from u_brown_placement at step close (tol 0.01); never corrected"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  u_brown never moved (0.246 m from its placement); u_orange carried off its
+  start (0.345 m at run end); no other part attempted.
+executor_claimed: aborted
+notes: >                           # per-run: name every injection made,
+  Fault: r4 (task sha 188a3acc, offset re-aimed for this layout) + ACM companion
+  (1 apply). Registry 92969cc1. Monitor mix 13:0. The executor's blind re-grasp
+  (pick_u_brown_retry1) closed on nothing; the run then ended on the OPERATOR's
+  instruction to abort (after the fault and its detection -- ground truth unaffected).
+  Injections: none fired (run ended before pick_u_orange).
+  Launch files added after the run.

@@ -1,0 +1,14 @@
+{"type": "orchestrator_start", "wall_ns": 1792969630643893828, "guard_mode": "guarded", "gate_timeout_sec": 120.0}
+{"type": "run_ready", "wall_ns": 1792969689917368062}
+{"type": "gate_open", "wall_ns": 1792969736060003275, "step_id": "pick_u_brown", "phase": "", "waited_sec": 15.408953452017158, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969773717298101, "step_id": "pick_u_brown", "phase": "grasped_u_brown", "waited_sec": 11.624044936848804, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969795129280428, "step_id": "place_approach_u_brown", "phase": "", "waited_sec": 8.068750460864976, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969814117663900, "step_id": "place_u_brown", "phase": "", "waited_sec": 2.9844367830082774, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969868620744301, "step_id": "pick_u_orange", "phase": "", "waited_sec": 24.824290059972554, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969900792867047, "step_id": "pick_u_orange", "phase": "grasped_u_orange", "waited_sec": 9.092040312010795, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969919230138335, "step_id": "place_approach_u_orange", "phase": "", "waited_sec": 9.195315388031304, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792969954603700421, "step_id": "place_u_orange", "phase": "", "waited_sec": 9.39390572020784, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792970002593955556, "step_id": "pick_line_green", "phase": "", "waited_sec": 19.50198843399994, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792970036012917603, "step_id": "pick_line_green", "phase": "grasped_line_green", "waited_sec": 10.233329352922738, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792970053307423930, "step_id": "place_approach_line_green", "phase": "", "waited_sec": 8.304055551998317, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792970072625797031, "step_id": "place_line_green", "phase": "", "waited_sec": 2.2372811241075397, "guard_mode": "guarded"}

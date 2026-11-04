@@ -1,0 +1,75 @@
+# Label — fmb_assembly_2, S2, Class 2 (injected: r2 grasp offset -> missed grasp). Copy into the session dir and
+# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+#
+# WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
+#   run_id, task, scenario, class
+#   expected_final_verdict      (legacy alias expected_verdict still accepted;
+#                                use expected_final_verdict)
+#   expected_recovered          (recovered_correct check)
+#   violation_occurred          (TN/false-alarm cells; label-consistency check)
+#   violation_steps             (fault_* pairing — only `step` and `object` are
+#                                read per entry; add kind/note for the reviewer)
+#   fault_origin                (label-consistency check for Class 1)
+#   boundary_grace_s            (arming/fault window grace, default 3.0)
+#   expected_monitors           (THIS scorer reads only `object`, to build the
+#                                stationarity object universe; `kind`/`window`
+#                                are read by s4_scorer's coverage and kept here
+#                                so one duty list serves both scorers)
+#
+# DOCUMENTATION-ONLY KEYS — recorded for the reviewer, ignored by the scorer:
+#   expected_terminal_status, physical_outcome, executor_claimed, notes.
+#   They are the operator's record of what actually happened; hand corrections
+#   in corrected/*.csv lean on them.
+run_id: fmb2_s2c2_run08
+task: fmb_assembly_2
+scenario: S2
+class: 2
+
+expected_final_verdict: non_conformant   # per-run: what SHOULD the end state be judged
+expected_terminal_status: aborted      # documentation-only
+expected_recovered: false         # per-run: true only if the violation was corrected by run end
+fault_origin: injected
+
+# r2 missed grasp; labelled like S1's drop run (fmb2_s1c2_run06): the drop at
+# the step it happened, plus the never-seated part at its place step. The
+# benign cube is observation ground truth only.
+violation_occurred: true          # per-run: false if the fault did not physically happen
+violation_steps:
+  - {step: pick_u_orange, object: u_orange, kind: dropped,
+     note: "r2: missed grasp -- after the lift u_orange slipped out between the fingers and fell (relative_frame 0.0314 vs 0.02 at 21:25:39)"}
+  - {step: place_u_orange, object: u_orange, kind: not_seated,
+     note: "u_orange ~0.27-0.30 m from u_orange_placement (tol 0.02) at step close, in an unreachable pose; never recovered, aborted"}
+                                 #              kind: <what>, note: <detail>}]
+
+boundary_grace_s: 3.0
+
+expected_monitors:
+  - {object: u_green,           kind: position_static,    window: whole_run}
+  - {object: inverted_u_brown,  kind: position_static,    window: whole_run}
+  - {object: hex_blue,          kind: position_static,    window: whole_run}
+  - {object: hex_red,           kind: position_static,    window: whole_run}
+  - {object: base1,             kind: position_static,    window: whole_run}
+  - {object: base2,             kind: position_static,    window: whole_run}
+  - {object: u_brown,           kind: position_static,    window: while_inactive}
+  - {object: u_orange,          kind: position_static,    window: while_inactive}
+  - {object: line_green,        kind: position_static,    window: while_inactive}
+  - {object: inverted_u_yellow, kind: position_static,    window: while_inactive}
+  - {object: u_brown,           kind: grip_relative_pose, window: held_span}
+  - {object: u_orange,          kind: grip_relative_pose, window: held_span}
+  - {object: line_green,        kind: grip_relative_pose, window: held_span}
+  - {object: inverted_u_yellow, kind: grip_relative_pose, window: held_span}
+  - {object: u_brown,           kind: clamp_effort,       window: held_span}
+  - {object: u_orange,          kind: clamp_effort,       window: held_span}
+  - {object: line_green,        kind: clamp_effort,       window: held_span}
+  - {object: inverted_u_yellow, kind: clamp_effort,       window: held_span}
+
+# ---- per-run below (documentation-only; the reviewer's record) --------------
+physical_outcome: >                # per-run: final measured offsets vs tolerance
+  u_brown seated; u_orange dropped during its lift and came to rest ~0.3 m
+  away at (0.577,-0.456); line_green and inverted_u_yellow never attempted.
+executor_claimed: aborted
+notes: >                           # per-run: name every injection made,
+  Fault: r2 at task sha 0d7ec902 (operator re-tuned), registry 92969cc1. Monitor mix 16:0.
+  Injections: place_object at (0.08, -0.38) at pick_u_orange (on time, in view), benign;
+  the watchdog never reported it.
+  Launch files added after the run.

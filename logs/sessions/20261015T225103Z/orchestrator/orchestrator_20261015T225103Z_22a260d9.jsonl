@@ -1,0 +1,26 @@
+{"type": "orchestrator_start", "wall_ns": 1792104663997866400, "guard_mode": "guarded", "gate_timeout_sec": 120.0}
+{"type": "run_ready", "wall_ns": 1792104697095489041}
+{"type": "gate_open", "wall_ns": 1792104758028095225, "step_id": "pick_u_brown", "phase": "", "waited_sec": 5.862171086948365, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104815754935238, "step_id": "pick_u_brown", "phase": "grasped", "waited_sec": 28.767943972023204, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104846477500608, "step_id": "place_approach_u_brown", "phase": "", "waited_sec": 19.452580098994076, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104865191441973, "step_id": "place_u_brown", "phase": "", "waited_sec": 4.903003504034132, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104938211232636, "step_id": "pick_u_orange", "phase": "", "waited_sec": 47.302046610973775, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104966579011630, "step_id": "pick_u_orange", "phase": "grasped", "waited_sec": 4.648469727020711, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792104980063940740, "step_id": "place_approach_u_orange", "phase": "", "waited_sec": 3.1113218020182103, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105004588516485, "step_id": "place_u_orange", "phase": "", "waited_sec": 4.7638074739370495, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105045251528909, "step_id": "pick_line_green", "phase": "", "waited_sec": 12.369900794001296, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105072982223697, "step_id": "pick_line_green", "phase": "grasped", "waited_sec": 4.316046258085407, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105086197323547, "step_id": "place_approach_line_green", "phase": "", "waited_sec": 1.961800987017341, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105104812618342, "step_id": "place_line_green", "phase": "", "waited_sec": 2.296010404941626, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105224800655452, "step_id": "reseat_line_green_pick", "phase": "", "waited_sec": 62.6019877520157, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105260144745387, "step_id": "reseat_line_green_pick", "phase": "grasped", "waited_sec": 3.8737650129478425, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105275075387536, "step_id": "reseat_line_green_place_approach", "phase": "", "waited_sec": 2.540335901081562, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105293826911151, "step_id": "reseat_line_green_place", "phase": "", "waited_sec": 3.067396078025922, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105385948438783, "step_id": "reseat2_line_green_pick", "phase": "", "waited_sec": 18.242961805080995, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105417614867828, "step_id": "reseat2_line_green_pick", "phase": "grasped", "waited_sec": 3.9732250089291483, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105429621253143, "step_id": "reseat2_line_green_place_approach", "phase": "", "waited_sec": 3.1707857770379633, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105447145216046, "step_id": "reseat2_line_green_place", "phase": "", "waited_sec": 3.026653783977963, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105495317791206, "step_id": "pick_inverted_u_yellow", "phase": "", "waited_sec": 11.720738591975532, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105522469227340, "step_id": "pick_inverted_u_yellow", "phase": "grasped", "waited_sec": 3.8252673629904166, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105533790804259, "step_id": "place_approach_inverted_u_yellow", "phase": "", "waited_sec": 2.792778346920386, "guard_mode": "guarded"}
+{"type": "gate_open", "wall_ns": 1792105560964258540, "step_id": "place_inverted_u_yellow", "phase": "", "waited_sec": 2.5734347800025716, "guard_mode": "guarded"}

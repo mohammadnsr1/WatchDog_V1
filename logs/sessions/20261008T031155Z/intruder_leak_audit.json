@@ -1,0 +1,47 @@
+{
+  "leak": false,
+  "hits": [],
+  "checked": [
+    {
+      "source": "bag",
+      "status": "unavailable: rosbag2_py/tf2_msgs not importable (No module named 'rosbag2_py'); falling back to the file-based channels (b-d)",
+      "bag_dirs": [
+        "~/watchdog/WatchDog_V1/agents/transcripts/sessions/20261008T031155Z/bag"
+      ]
+    },
+    {
+      "source": "mcp_calls_executor.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "mcp_calls_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_gripper.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_motion.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_scene.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "authored_monitors/*.py",
+      "status": "no directory"
+    }
+  ],
+  "intruder_names": [
+    "foreign_bd5283"
+  ],
+  "expected_visible": [],
+  "ground_truth_records": 6,
+  "session_dir": "~/watchdog/WatchDog_V1/agents/transcripts/sessions/20261008T031155Z"
+}

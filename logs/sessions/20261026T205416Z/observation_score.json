@@ -1,0 +1,113 @@
+{
+  "run_id": "20261026T205416Z",
+  "role": "watchdog",
+  "n_ground_truth_records": 10,
+  "run_ended_iso": "2026-10-26T21:09:06.543336+00:00",
+  "n_episodes": 2,
+  "post_run_episodes": [
+    {
+      "name": "foreign_238300",
+      "kind": "tracked_move",
+      "t0_iso": "2026-10-26T21:11:13.515847+00:00"
+    },
+    {
+      "name": "foreign_238300",
+      "kind": "removal",
+      "t0_iso": "2026-10-26T21:11:17.082636+00:00"
+    }
+  ],
+  "conformance_episodes": [],
+  "leak_audited": true,
+  "leak": false,
+  "excluded": false,
+  "engagement": {
+    "n_looks": 5,
+    "n_observation_monitors_armed": 4,
+    "n_observation_fires": 4,
+    "n_record_observation_new": 1,
+    "n_record_observation_updates": 1,
+    "first_look_iso": "2026-10-26T20:55:23.299321+00:00",
+    "look_reasons": [
+      "Baseline of workspace before the run: identify all objects present, check for an",
+      "Workspace monitor fired: scattered bench-level depth change along y -0.44..-0.61",
+      "workspace_watch_2 fired with change centred on base1 (x 0.35-0.44, y -0.26..-0.1",
+      "workspace_watch_3 fired on a compact ~5x5 cm bench-level change at world x=0.078",
+      "workspace_watch_4 fired on changes over base1 and toward inverted_u_yellow's for"
+    ]
+  },
+  "strategy": "continuous_depth_monitor",
+  "obs_monitor_false_fires": 3,
+  "obs_monitor_false_fire_detail": [
+    {
+      "wall_time_iso": "2026-10-26T20:57:41.861500+00:00",
+      "monitor_id": "workspace_watch_1",
+      "value": 47.0,
+      "threshold": 40.0
+    },
+    {
+      "wall_time_iso": "2026-10-26T21:01:14.357843+00:00",
+      "monitor_id": "workspace_watch_2",
+      "value": 83.0,
+      "threshold": 40.0
+    },
+    {
+      "wall_time_iso": "2026-10-26T21:08:59.228075+00:00",
+      "monitor_id": "workspace_watch_4",
+      "value": 117.0,
+      "threshold": 40.0
+    }
+  ],
+  "episodes": [
+    {
+      "name": "foreign_238300",
+      "kind": "foreign_object",
+      "t0_iso": "2026-10-26T21:02:03.775241+00:00",
+      "detectable": true,
+      "label": "foreign cube on free bench area",
+      "expected_impact": "benign",
+      "fire_latency_s": 0.69,
+      "detected": true,
+      "observation_id": "obs-001-1dc1ec33",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 29.9,
+      "identity": "unidentified small orange/red cube-shaped object, not a registered FMB part",
+      "summary": "A small orange-red cube (~4-5 cm footprint) appeared on the bench at world x~0.08, y~-0.38, a spot that was empty in looks 0001-0003. It is not any of the ten listed objects (all of which are accounte",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793048524467478800,
+      "appearance_reported": "accurate"
+    },
+    {
+      "name": "visitor_hand_6127d1",
+      "kind": "transient_visitor",
+      "t0_iso": "2026-10-26T21:05:38.549667+00:00",
+      "detectable": true,
+      "label": "forearm over the work area",
+      "expected_impact": "benign",
+      "fire_latency_s": 200.68,
+      "detected": true,
+      "observation_id": "obs-001-1dc1ec33",
+      "match": "category",
+      "category": "unlisted_object",
+      "latency_s": 234.04,
+      "identity": "unidentified small orange/red cube-shaped object, not a registered FMB part",
+      "summary": "The unlisted orange-red cube is still on the bench at world x~0.08, y~-0.38 at run end (look 0005), unmoved since it appeared (no workspace-watch fire at its location after look 0004). It never left. ",
+      "confidence": "high",
+      "first_seen_wall_ns": 1793048524467478800,
+      "appearance_reported": "off_by_-214.1s"
+    }
+  ],
+  "n_detectable": 2,
+  "n_undetectable": 0,
+  "n_detected": 2,
+  "detection_rate": 1.0,
+  "detection_latency_median_s": 131.97,
+  "detection_latency_p95_s": 234.04,
+  "appearance_reported_accurate": 1,
+  "obs_TP": 2,
+  "obs_FN": 0,
+  "obs_FP": 0,
+  "obs_TN": 0,
+  "false_scene_reports": null,
+  "unmatched_observations": null
+}

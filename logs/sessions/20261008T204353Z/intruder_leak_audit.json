@@ -1,0 +1,56 @@
+{
+  "leak": false,
+  "hits": [],
+  "checked": [
+    {
+      "source": "ground_truth",
+      "status": "external_displacement targets classified as expected_visible (TF visibility is expected for listed objects); excluded from the leak search",
+      "expected_visible": [
+        "hex_red"
+      ]
+    },
+    {
+      "source": "bag",
+      "status": "unavailable: rosbag2_py/tf2_msgs not importable (No module named 'rosbag2_py'); falling back to the file-based channels (b-d)",
+      "bag_dirs": [
+        "agents/transcripts/sessions/20261008T204353Z/bag"
+      ]
+    },
+    {
+      "source": "mcp_calls_executor.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "mcp_calls_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_gripper.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_motion.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_scene.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "events_watchdog.jsonl",
+      "status": "scanned"
+    },
+    {
+      "source": "authored_monitors/*.py",
+      "status": "no directory"
+    }
+  ],
+  "intruder_names": [
+    "foreign_b9584a"
+  ],
+  "expected_visible": [
+    "hex_red"
+  ],
+  "ground_truth_records": 5,
+  "session_dir": "agents/transcripts/sessions/20261008T204353Z"
+}

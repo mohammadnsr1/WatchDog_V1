@@ -1,0 +1,15 @@
+{
+  "role": "executor",
+  "scenario": null,
+  "assembly": "2",
+  "model": "claude-sonnet-5",
+  "effort": "low",
+  "claude_cli_version": "2.1.301 (Claude Code)",
+  "executor_registry_override": null,
+  "executor_registry_override_sha256": null,
+  "executor_variant": "r5",
+  "mcp_config": "executor_2_r5.mcp.json",
+  "executor_task_path": "~/watchdog/WatchDog_V1/agents/tasks/runs/fmb_assembly_2.r5.executor.yaml",
+  "executor_task_sha256": "4a4eaee29afdfea7baa12eef73bd0bbc2efbb5a580aa9ba31cd9a305e38d0468",
+  "launched_wall_time_iso": "2026-10-16T00:55:11.906902+00:00"
+}
