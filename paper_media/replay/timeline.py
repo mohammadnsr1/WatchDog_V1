@@ -149,6 +149,15 @@ class Prepared:
     warnings: list
     ground_truth: list = field(default_factory=list)   # ls.load_ground_truth items
 
+    @property
+    def briefing_s(self) -> float:
+        """Seconds of hand-over card before the run in the video; 0 when the story turns it off."""
+        from . import style as S
+        b = self.story.briefing or {}
+        if not b.get("show", True):
+            return 0.0
+        return float(b.get("seconds") or S.BRIEFING_VIDEO_S)
+
 
 def _pair_wakes(events: list, src_kinds: set[str], reason: str, max_gap: float = 15.0) -> list[tuple[Any, Any]]:
     """Each source event -> the first later WatchDog wake with the given reason."""

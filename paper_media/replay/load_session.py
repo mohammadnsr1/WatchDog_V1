@@ -332,10 +332,11 @@ def adapt_orchestrator(rec: dict) -> list[Draft]:
     phase = rec.get("phase") or ""
     tgt = f"{step} {phase}".strip()
     if typ == "gate_open":
-        return [(iso, "bus", "gate_open", f"gate open {tgt}", f"Gate released after {rec.get('waited_sec', 0):.2f} s", {})]
+        return [(iso, "bus", "gate_open", f"step gate released: {tgt}",
+                 f"Orchestrator released the step gate after {rec.get('waited_sec', 0):.2f} s: the WatchDog's monitors are armed, the executor may move.", {})]
     if typ == "gate_timeout":
-        return [(iso, "bus", "timeout", f"gate timeout {tgt}",
-                 f"Gate timed out after {rec.get('waited_sec', 0):.1f} s; executor proceeded unmonitored at this step.", {})]
+        return [(iso, "bus", "timeout", f"step gate timed out: {tgt}",
+                 f"Step gate timed out after {rec.get('waited_sec', 0):.1f} s; executor proceeded unmonitored at this step.", {})]
     if typ in ("abort", "gate_aborted"):
         return [(iso, "watchdog", "halt", "run aborted", short(rec.get("detail") or rec.get("abort_detail") or "", 300), {})]
     if typ in ("orchestrator_start", "run_ready", "gate_unguarded_by_config", "gate_unguarded_latched", "latch_cleared"):
@@ -702,6 +703,8 @@ STORY_DEFAULTS: dict[str, Any] = {
     "figure_frame_cameras": [], "video_camera": None,
     # ground truth overlay: [{name, label, outcome: detected|late|missed, detected_at}]
     "ground_truth": [],
+    # task hand-over card before the run: {show: bool, seconds: float}; see briefing.py
+    "briefing": {"show": True, "seconds": None},
 }
 _KNOWN_STORY_KEYS = set(STORY_DEFAULTS) | {"session_dir"}
 
@@ -728,8 +731,8 @@ def load_story(path: Path | str, warn=lambda m: print(f"warning: {m}", file=sys.
             warn(f"{p.name}: unknown story key {k!r} ignored")
     data = json.loads(json.dumps(STORY_DEFAULTS))
     for k, v in raw.items():
-        if k == "speed" and isinstance(v, dict):
-            data["speed"].update(v)
+        if k in ("speed", "briefing") and isinstance(v, dict):
+            data[k].update(v)
         else:
             data[k] = v
     sd = Path(str(raw["session_dir"])).expanduser()

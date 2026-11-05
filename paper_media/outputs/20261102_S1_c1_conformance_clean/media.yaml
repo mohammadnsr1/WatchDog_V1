@@ -3,7 +3,7 @@ media_id: 20261102_S1_c1_conformance_clean
 kind: conformance_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-03T00:16:22+00:00'
+generated_utc: '2026-11-05T20:39:20+00:00'
 tags:
 - S1
 - conformance
@@ -91,7 +91,7 @@ thresholds: []
 signals:
   effort_finger: /joint_states finger_joint.effort
 provenance:
-  git_sha: cb973bbf13fa420f02556d7cf5459d9146f3d06d
+  git_sha: 90f579ef8ea8e86c153264c8d711dfbab8b57253
   git_dirty: true
   story_sha256: 211b8e4651f167a704ca1cbf4e947dfb660466ecf507366c34c138563bb26795
   stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77

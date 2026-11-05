@@ -41,13 +41,14 @@ def check_site(site: Path) -> Path:
 
 def run_json(prep, run_id: str, meta: dict) -> dict:
     tm = prep.timemap
+    intro = prep.briefing_s      # the hand-over card precedes the run in the mp4
     events = []
     for e in prep.events:
         if e.kind in WEB_KINDS_SKIP:
             continue
         events.append({
             "t_real": round(e.t, 3),
-            "t_video": round(tm.real_to_video(e.t), 3),
+            "t_video": round(intro + tm.real_to_video(e.t), 3),
             "lane": e.lane,
             "kind": e.kind,
             "label": scrub(e.label, 90),
@@ -62,7 +63,8 @@ def run_json(prep, run_id: str, meta: dict) -> dict:
         "fault_class": meta.get("fault_class"),
         "assembly": meta.get("assembly"),
         "trial": meta.get("trial"),
-        "video_duration_s": round(tm.duration, 3),
+        "video_duration_s": round(intro + tm.duration, 3),
+        "briefing_s": round(intro, 3),
         "real_window_s": [round(tm.r_start, 3), round(tm.r_end, 3)],
         "events": events,
     }

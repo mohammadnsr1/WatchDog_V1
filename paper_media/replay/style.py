@@ -5,16 +5,28 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-# Lane order, top to bottom, and the display names used in the data flow figure.
+# Lane order, top to bottom, and the display names used in the video and the data
+# flow figure. Plain words for a manufacturing audience: the "bus" lane is the
+# event stream the two agents talk through (step announcements, monitor fires,
+# and the orchestrator's step gate); "monitors" are the sensor checks the
+# WatchDog arms. The lane keys stay as they are.
 LANES = ("executor", "bus", "monitors", "watchdog")
 LANE_TITLES = {
     "executor": "Executor Agent",
-    "bus": "ROS 2 Event Bus (/watchdog/events)",
-    "monitors": "Deterministic Monitors",
+    "bus": "Event Stream",
+    "monitors": "Armed Monitors",
     "watchdog": "WatchDog Agent",
     "truth": "Ground truth (hidden from agents)",
 }
-LANE_SHORT = {"executor": "Executor", "bus": "Bus", "monitors": "Monitor", "watchdog": "WatchDog"}
+# Second line under the lane title in the video, in the muted color.
+LANE_SUBTITLES = {
+    "executor": "commands the robot",
+    "bus": "announcements and step gate",
+    "monitors": "sensor checks, fire on a limit",
+    "watchdog": "checks, never touches the robot",
+    "truth": "",
+}
+LANE_SHORT = {"executor": "Executor", "bus": "Events", "monitors": "Monitors", "watchdog": "WatchDog"}
 
 # Palette (hex). Executor blue, WatchDog and monitors green, fire and FAIL red,
 # timeout gray, normal end of step dark green, event bus neutral gray.
@@ -152,6 +164,8 @@ LOOK_POPUP_VIDEO_S = 3.0
 FLASH_VIDEO_S = 1.2
 CAPTION_VIDEO_S = 5.0
 GT_LINGER_VIDEO_S = 4.0    # a ground truth tag stays this long after the object leaves
+BRIEFING_VIDEO_S = 16.0    # task hand-over card before the run (story `briefing: {seconds: ...}`)
+BRIEFING_FADE_S = 0.8      # cross fade from the card into the first run frame
 
 # Figure widths, inches (IEEE two column page).
 FIG_WIDTH_IN = {"double": 7.16, "single": 3.5}

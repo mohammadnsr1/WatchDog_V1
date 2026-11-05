@@ -3,7 +3,7 @@ media_id: 20261103_S4_c1_conformant_run
 kind: observation_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-03T00:31:25+00:00'
+generated_utc: '2026-11-05T20:49:43+00:00'
 tags:
 - S4
 - self_monitoring
@@ -82,7 +82,7 @@ video_camera: recorder
 thresholds: []
 signals: {}
 provenance:
-  git_sha: cb973bbf13fa420f02556d7cf5459d9146f3d06d
+  git_sha: 90f579ef8ea8e86c153264c8d711dfbab8b57253
   git_dirty: true
   story_sha256: 4c23a778b6491e2fc854cebc7031cea83a14d8670479ed69eb2d6af7bfd34aa9
   stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77

@@ -1,0 +1,39 @@
+Task specification
+Assemble the FMB board: seat u_brown,
+u_orange, line_green and inverted_u_yellow
+on the base1 fixture, in that order.
+
+Requirements: each part seated in tolerance,
+gripped securely, clamp effort within its limit,
+every other part left undisturbed.
+
+Part registry
+Per part: position and orientation tolerance,
+lift height, slip and disturbance tolerance,
+maximum clamp effort. Source of every threshold.
+
+Executor Agent
+Receives HOW: the step plan.
+12 steps: pick, approach, seat, for each part;
+grasp widths, approach offsets, placement frames.
+
+Tools: move the arm, open and close the gripper,
+read poses. Announces each step, reports its outcome.
+
+WatchDog Agent
+Receives WHAT must be true, never the executor's path.
+At each place step: part seated at its frame, grasped at
+the right width and lifted clear, base1 unmoved.
+Throughout: clamp effort in limit, no slip, bystanders still.
+Watch the work area; report anything unexpected.
+
+Tools: observe, arm monitors, record verdicts.
+Cannot move the robot.
+
+The run
+Executor announces a step
+WatchDog arms monitors
+step gate released
+robot moves, monitors watch
+fire → WatchDog judges
+verdict per fire and per run

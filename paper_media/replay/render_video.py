@@ -14,6 +14,7 @@ from typing import Optional
 from PIL import Image, ImageDraw
 
 from . import style as S
+from .briefing import render_briefing
 from .load_session import Event, agents_text
 from .timeline import Moment, Prepared
 
@@ -126,6 +127,8 @@ class Compositor:
             pad = (hi - lo) * 0.08 or 1.0
             self.sig_range[sig.name] = (lo - pad, hi + pad)
         self.static = self._static_layer()
+        self.intro_s = prep.briefing_s
+        self.briefing = render_briefing(prep.session, bool(self.gt), prep.story.title or "") if self.intro_s else None
 
     # ---- geometry ---------------------------------------------------------
     @property
@@ -147,6 +150,7 @@ class Compositor:
         d = ImageDraw.Draw(img)
         f_title = S.pil_font(26, bold=True)
         f_lane = S.pil_font(19, bold=True)
+        f_sub = S.pil_font(15)
         f_small = S.pil_font(17)
         d.rectangle(S.FRAME_BOX, fill=(32, 34, 38))
         for box, title, color in ((S.EXEC_PANEL, "Executor", S.EXECUTOR_BLUE), (S.WD_PANEL, "WatchDog", S.WATCHDOG_GREEN)):
@@ -168,10 +172,14 @@ class Compositor:
             col = _rgb(S.LANE_COLOR[lane])
             d.rectangle((self.swim_box[0], y0, self.swim_box[0] + 6, y1), fill=col)
             lines = _wrap(d, title, f_lane, S.LANE_LABEL_W - 26, 2)
-            ty = (y0 + y1) / 2 - len(lines) * 12
+            sub = _wrap(d, S.LANE_SUBTITLES.get(lane, ""), f_sub, S.LANE_LABEL_W - 26, 2) if S.LANE_SUBTITLES.get(lane) else []
+            ty = (y0 + y1) / 2 - (len(lines) * 24 + len(sub) * 18) / 2
             for ln in lines:
                 d.text((self.swim_box[0] + 16, ty), ln, font=f_lane, fill=col)
                 ty += 24
+            for ln in sub:
+                d.text((self.swim_box[0] + 16, ty), ln, font=f_sub, fill=_rgb(S.MUTED))
+                ty += 18
         d.line([(self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[1]), (self.swim_box[0] + S.LANE_LABEL_W, self.swim_box[3])],
                fill=_rgb(S.GRID), width=2)
         if self.signal_rows:
@@ -427,7 +435,23 @@ class Compositor:
             od.text((box[0] + 40, box[3] - h + 2 + 34 * k), ln, font=f, fill=(255, 255, 255, 255))
         img.paste(Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB"))
 
+    @property
+    def total_duration(self) -> float:
+        return self.intro_s + self.p.timemap.duration
+
     def frame_at(self, v: float) -> Image.Image:
+        """Frame at video time v, counted from the start of the file (card first, then the run)."""
+        if v < self.intro_s:
+            card = self.briefing
+            fade_from = self.intro_s - S.BRIEFING_FADE_S
+            if v < fade_from:
+                return card.copy()
+            a = (v - fade_from) / S.BRIEFING_FADE_S
+            return Image.blend(card, self.run_frame_at(0.0), a)
+        return self.run_frame_at(v - self.intro_s)
+
+    def run_frame_at(self, v: float) -> Image.Image:
+        """Frame at run-video time v (0 = first frame of the window)."""
         m = self.p.timemap.at_video(v)
         img = self.static.copy()
         d = ImageDraw.Draw(img)
@@ -448,7 +472,7 @@ def render_video(prep: Prepared, out: Path, progress: bool = True) -> Path:
     import imageio_ffmpeg
 
     comp = Compositor(prep)
-    n = int(math.ceil(prep.timemap.duration * S.FPS))
+    n = int(math.ceil(comp.total_duration * S.FPS))
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     writer = imageio_ffmpeg.write_frames(
@@ -464,7 +488,7 @@ def render_video(prep: Prepared, out: Path, progress: bool = True) -> Path:
                 print(f"  frame {i}/{n} ({100 * i / max(n, 1):.0f}%)", flush=True)
     finally:
         writer.close()
-    print(f"wrote {out} ({n} frames, {prep.timemap.describe()})")
+    print(f"wrote {out} ({n} frames, {comp.intro_s:.0f} s card + {prep.timemap.describe()})")
     return out
 
 
@@ -472,7 +496,7 @@ def render_preview(prep: Prepared, n_frames: int, out_dir: Path) -> list[Path]:
     comp = Compositor(prep)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    dur = prep.timemap.duration
+    dur = comp.total_duration
     times = sorted({dur * k / max(n_frames - 1, 1) for k in range(n_frames)})
     paths = []
     for i, v in enumerate(times):
@@ -489,5 +513,5 @@ def render_poster(prep: Prepared, out: Path, at_video: Optional[float] = None) -
         firsts = [comp.vt[id(e)] for e in prep.key_events]
         at_video = (min(firsts) + 0.5) if firsts else prep.timemap.duration / 2
     out = Path(out)
-    comp.frame_at(min(at_video, prep.timemap.duration)).save(out, "JPEG", quality=88)
+    comp.run_frame_at(min(at_video, prep.timemap.duration)).save(out, "JPEG", quality=88)
     return out

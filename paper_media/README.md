@@ -110,6 +110,34 @@ GROUND TRUTH tag on the camera frame while the object is present. Arrivals and
 detections hold like key events, and a transient visit plays at `speed.event`
 for its whole duration. Figures and the web JSON are unchanged.
 
+### Hand-over card (video only)
+
+Every video opens with a card (`style.BRIEFING_VIDEO_S`, 16 s, then a short
+cross fade) that shows what each agent was handed for that run: the task and
+part order read from the executor task YAML named in `agent_config_executor.json`,
+the executor's and the WatchDog's duties, how the WatchDog arms monitors in that
+scenario, the step gate, and the models. The wording lives in
+`replay/briefing.py` (`TASK_BRIEFS`, `SCENARIO_BRIEFS`) and paraphrases
+`agents/tasks/<task>.{executor,watchdog}.yaml`; keep it in step with those files.
+The story key `briefing: {show: false}` drops the card, `briefing: {seconds: N}`
+changes its length. The web JSON's `t_video` includes the card (`briefing_s`).
+
+### Lane names
+
+The swimlanes are named for a manufacturing reader (`style.LANE_TITLES`,
+`LANE_SUBTITLES`): "Executor Agent", "Event Stream" (the announcements and the
+orchestrator's step gate the agents talk through), "Armed Monitors" (the sensor
+checks the WatchDog arms) and "WatchDog Agent". The lane keys in stories and
+the web JSON are unchanged (`executor`, `bus`, `monitors`, `watchdog`).
+
+### Task hand-over figure
+
+`python -m paper_media.figures.task_handover` draws the static figure that sits
+between the architecture and the data flow figure: one task specification, the
+two different briefs, the part registry as the only source of thresholds, and
+the run cycle. Output in `paper_media/figures/out/` (SVG with editable text,
+PNG, and the box text for the caption).
+
 ### Time compression is always visible
 
 The video maps session time to video time piecewise: `speed.idle` between

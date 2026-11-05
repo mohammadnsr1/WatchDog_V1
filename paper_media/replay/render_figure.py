@@ -27,8 +27,7 @@ SHORT_WINDOW_S = 240.0
 LABEL_PRIORITY = {"fire": 0, "halt": 0, "verdict": 1, "run_verdict": 1, "observation": 2, "timeout": 3,
                   "look": 4, "step_start": 5, "end_step": 5, "step_claim": 5, "gate_open": 6, "arm": 6, "wake": 7}
 BIG_KINDS = LABEL_KINDS_SHORT_WINDOW | {"look_frame"}
-LANE_NAMES = {"executor": "Executor Agent", "bus": "ROS 2 Event Bus",
-              "monitors": "Deterministic Monitors", "watchdog": "WatchDog Agent"}
+LANE_NAMES = S.LANE_TITLES
 MAX_FRAME_GAP_S = 0.5
 GROUP_GAP_FRAC = 0.06     # events of one kind closer than this fraction of the window form one group
 MARKERS = {"begin_step": ("s", 3.2), "end_step": ("s", 3.2), "gate_open": ("^", 3.6),
