@@ -1,0 +1,98 @@
+# Paper media provenance. See paper_media/outputs/README.md.
+media_id: 20261102_S3_c1_observation_figure
+kind: observation_monitoring
+purpose: media
+purpose_note: illustration only; unscored session, never feeds a paper number
+generated_utc: '2026-11-05T22:24:12+00:00'
+tags:
+- S3
+- observation
+- transient_visitor
+- ground_truth
+- figure_only
+- unscored
+notes: 'Figure-only cut of 20261102_S3_c1_observation: pick_line_green through the visitor leaving.'
+session:
+  session_id: 20261102T195738Z
+  in_scored_batch: false
+  scenario: S3
+  fault_class: 1
+  assembly: fmb_assembly_2
+  guard_mode: guarded
+  gate_timeout_sec: 120.0
+  run_verdict: non_conformant
+  t0_wall_time_iso: '2026-11-02T19:57:38.950821+00:00'
+  t0_source: orchestrator_start
+  agents:
+    executor:
+      model: claude-sonnet-5
+      effort: low
+      claude_cli_version: 2.1.316 (Claude Code)
+      scenario: null
+    watchdog:
+      model: claude-opus-5-5
+      effort: medium
+      claude_cli_version: 2.1.314 (Claude Code)
+      scenario: s3
+  injections:
+  - name: foreign_8c55f7
+    event_kind: foreign_object
+    scenario: place_object
+    label: foreign cube on free bench area
+    expected_impact: benign
+    trigger: at_step:pick_u_orange
+    actions:
+    - action: place
+      wall_time_iso: '2026-11-02T20:03:22.335439+00:00'
+  - name: visitor_hand_74bcd5
+    event_kind: transient_visitor
+    scenario: visit
+    label: forearm over the work area
+    expected_impact: benign
+    trigger: at_step:place_line_green
+    actions:
+    - action: enter_start
+      wall_time_iso: '2026-11-02T20:08:14.490342+00:00'
+    - action: in_view
+      wall_time_iso: '2026-11-02T20:08:15.332601+00:00'
+    - action: dwell_start
+      wall_time_iso: '2026-11-02T20:08:18.731059+00:00'
+    - action: leave_start
+      wall_time_iso: '2026-11-02T20:08:22.756578+00:00'
+    - action: out_of_view
+      wall_time_iso: '2026-11-02T20:08:26.199374+00:00'
+    - action: removed
+      wall_time_iso: '2026-11-02T20:08:26.762640+00:00'
+window_s:
+- 506.0
+- 652.0
+window_wall_time_iso:
+- '2026-11-02T20:06:04.950821+00:00'
+- '2026-11-02T20:08:30.950821+00:00'
+key_frames_s:
+- 508.5
+- 583.5
+- 636.2
+- 641.0
+- 649.0
+frame_cameras:
+- recorder
+video_camera: null
+thresholds: []
+signals: {}
+provenance:
+  git_sha: 00b4a5decb6d8e37b2f8cc0391f778757bc1d425
+  git_dirty: true
+  story_sha256: 0adbe92fa4a294954f5be2a166517909a2fb8a6d64cb71e2bf944709eea505a8
+  stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77
+  replay_state_sha256: null
+files:
+- figure/20261102_S3_c1_observation_figure_double.svg
+- figure/20261102_S3_c1_observation_figure_single.svg
+- frames/frames.csv
+- frames/recorder/01_t0508.50s.jpg
+- frames/recorder/02_t0583.50s.jpg
+- frames/recorder/03_t0636.20s.jpg
+- frames/recorder/04_t0641.00s.jpg
+- frames/recorder/05_t0649.00s.jpg
+- story.yaml

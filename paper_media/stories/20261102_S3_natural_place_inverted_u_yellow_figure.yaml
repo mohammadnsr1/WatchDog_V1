@@ -1,0 +1,40 @@
+# Paper figure variant of 20261102_S3_natural_place_inverted_u_yellow, tightened around the
+# fires. Figure only (package with --no-video); the website video keeps the parent story's
+# window. Session seconds:
+#   770.7  begin_step place_inverted_u_yellow
+#   787.4-789.0 fires: still_u_orange_post2 (21.7 mm), still_line_green_post (41.4 mm),
+#          still_u_brown_post3 (35.0 mm), slip_inverted_u_yellow (20.9 mm), still_base1 (20.7 mm); bound 20 mm
+#   825.0  end_step, executor claims failure
+#   844.3  first non_conformant verdict on the step
+
+session_dir: ../../agents/transcripts/sessions/20261102T195738Z
+
+media_id: 20261102_S3_natural_place_inverted_u_yellow_figure
+kind: conformance_monitoring
+tags: [S3, conformance, inverted_u_yellow, collision, natural_fault, figure_only, unscored]
+notes: "Figure-only cut of 20261102_S3_natural_place_inverted_u_yellow around the five fires."
+
+run_id: s3_natural_place_inverted_u_yellow_figure
+scenario: S3
+fault_class: "Natural failure"
+assembly: fmb_assembly_2
+trial: 1
+
+title: "A placement that disturbs the assembly"
+subtitle: "Five monitors fire on impact; the WatchDog returns non_conformant on the step"
+
+camera: recorder
+window: [765.0, 850.0]
+
+speed: {idle: 6.0, event: 1.0, event_pad_s: 1.0, hold_s: 1.0}
+key_events: [step_start, end_step, look_frame, fire, verdict]
+executor_tools_hide: [get_object_pose, get_object_spec]
+briefing: {show: false}
+
+prompt_excerpts: []
+captions: []
+
+signals: []
+
+figure_frames_at: [772.0, 787.5, 795.0, 825.0, 845.0]
+figure_frame_cameras: [recorder]

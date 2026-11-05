@@ -76,12 +76,20 @@ def group_labels(events, r0: float, r1: float, gap_s: float) -> list[dict]:
         text = f"{n} monitors {verb}" if n > 1 else f"{verb} {grp[0].label.split()[1] if len(grp[0].label.split()) > 1 else ''}"
         out.append({"kind": kind, "lane": "monitors", "t0": grp[0].t, "t1": grp[-1].t, "text": _short(text),
                     "priority": 3 if kind == "arm" else 6, "color": S.event_color("monitors", kind, "")})
-    for e in ev:
-        if e.lane == "monitors" and e.kind == "fire":
-            parts = e.label.split()
-            out.append({"kind": "fire", "lane": "monitors", "t0": e.t, "t1": e.t,
-                        "text": _short(" ".join(parts[:2])), "priority": 0,
-                        "color": S.event_color("monitors", "fire", e.label)})
+    for grp in runs({"fire"}, "monitors"):
+        ids = [e.label.split()[1] if len(e.label.split()) > 1 else e.label for e in grp]
+        if len(grp) == 1:
+            out.append({"kind": "fire", "lane": "monitors", "t0": grp[0].t, "t1": grp[0].t,
+                        "text": _short(f"FIRE {ids[0]}"), "priority": 0,
+                        "color": S.event_color("monitors", "fire", grp[0].label)})
+        else:
+            # a burst of fires: name every monitor, on two lines, so none is lost to grouping
+            out.append({"kind": "fire", "lane": "monitors", "t0": grp[0].t, "t1": grp[-1].t,
+                        "text": f"{len(grp)} FIRES: " + ", ".join(ids), "priority": 0,
+                        "lines": [f"{len(grp)} FIRES in {grp[-1].t - grp[0].t:.1f} s: " + ", ".join(ids[:2]) + ",",
+                                  ", ".join(ids[2:])] if len(ids) > 2 else
+                                 [f"{len(grp)} FIRES in {grp[-1].t - grp[0].t:.1f} s: " + ", ".join(ids)],
+                        "color": S.event_color("monitors", "fire", grp[0].label)})
     names = {"look": "look()", "observation": "observation", "run_verdict": "verdict", "verdict": "verdict"}
     for grp in runs(set(names), "watchdog"):
         e = grp[0]
@@ -167,7 +175,7 @@ def render_figure(prep: Prepared, out: Path, width: str = "double", formats: tup
     pad = 0.8 * s_per_char
     for g in sorted((g for g in groups if g["kind"] != "band"),
                     key=lambda g: (g["priority"], g["t0"])):
-        w = len(g["text"]) * s_per_char
+        w = max(len(ln) for ln in g.get("lines", [g["text"]])) * s_per_char
         if g["t1"] > g["t0"]:
             # a group: a thin bracket under the markers, text starting at the group
             ax_sw.plot([g["t0"], g["t1"]], [ypos[g["lane"]] - 0.12] * 2, color=g["color"], lw=0.6, zorder=2,
@@ -180,9 +188,12 @@ def render_figure(prep: Prepared, out: Path, width: str = "double", formats: tup
             taken = rows.setdefault((g["lane"], row), [])
             if all(a1 + pad < b0 or a0 - pad > b1 for b0, b1 in taken):
                 taken.append((a0, a1))
-                ax_sw.text(g["t1"] if right_aligned else g["t0"], ypos[g["lane"]] + dy, g["text"], fontsize=MIN_PT,
-                           ha="right" if right_aligned else "left", va="center", clip_on=True, color=g["color"],
-                           zorder=4)
+                lines = g.get("lines", [g["text"]])
+                step = 0.30 if dy > 0 else -0.30     # extra lines stack away from the lane (7 pt needs ~0.28)
+                for k, ln in enumerate(lines):
+                    ax_sw.text(g["t1"] if right_aligned else g["t0"], ypos[g["lane"]] + dy + step * (len(lines) - 1 - k if dy > 0 else k),
+                               ln, fontsize=MIN_PT, ha="right" if right_aligned else "left", va="center",
+                               clip_on=True, color=g["color"], zorder=4)
                 break
 
     # ---- legend for marker shapes, one line under the axes --------------------

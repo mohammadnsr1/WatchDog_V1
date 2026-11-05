@@ -1,0 +1,44 @@
+# Paper figure variant of 20261102_S3_c1_observation: from the start of pick_line_green to the
+# visitor box leaving. Figure only (package with --no-video); the website video keeps the wider
+# window of the parent story. Session seconds (t0 = orchestrator_start 2026-11-02T19:57:38.95Z):
+#   508.5  begin_step pick_line_green; 583.5 end_step (part lifted)
+#   610.5  begin_step place_line_green
+#   635.5  visitor_hand_74bcd5 enters (a rectangular box); 636.2 obs_workspace_border_v2 fires
+#   639.8-643.8 dwell at (0.45, -0.1, 0.16); 647.8 removed
+#   648.6  end_step place_line_green
+#   677.8  WatchDog observation obs-002 (outside this window; see the parent story)
+
+session_dir: ../../agents/transcripts/sessions/20261102T195738Z
+
+media_id: 20261102_S3_c1_observation_figure
+kind: observation_monitoring
+tags: [S3, observation, transient_visitor, ground_truth, figure_only, unscored]
+notes: "Figure-only cut of 20261102_S3_c1_observation: pick_line_green through the visitor leaving."
+
+run_id: s3_c1_observation_figure
+scenario: S3
+fault_class: 1
+assembly: fmb_assembly_2
+trial: 1
+
+title: "Unexpected objects in the cell"
+subtitle: "A passing visitor during line_green; the border monitor fires and the WatchDog records it"
+
+camera: recorder
+window: [506.0, 652.0]
+
+speed: {idle: 8.0, event: 1.0, event_pad_s: 1.5, hold_s: 2.0}
+key_events: [fire, observation, verdict, halt, look_frame]
+executor_tools_hide: [get_object_pose, get_object_spec]
+briefing: {show: false}
+
+prompt_excerpts: []
+captions: []
+
+ground_truth:
+  - {name: visitor_hand_74bcd5, label: "Box passing over the work area", outcome: detected, detected_at: 677.8}
+
+signals: []
+
+figure_frames_at: [508.5, 583.5, 636.2, 641.0, 649.0]
+figure_frame_cameras: [recorder]
