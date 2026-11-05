@@ -95,7 +95,7 @@ def enrich_all(loaded: Loaded, sessions_root: Path, batches_root: Path, index: l
         run.derived["is_oracle"] = run.is_oracle
         if not sd.exists():
             run.flags["session_dir_missing"] = "1"
-            for col in ("run_wall_s", "gate_wait_total_s", "fire_delivery_median_s", "frac_fires_during_motion"):
+            for col in ("run_wall_s", "gate_wait_total_s", "fire_to_agent_median_s", "frac_fires_during_motion"):
                 run.set_na(col, "session_dir_missing")
             continue
         s = load_session(sd, run.scenario)

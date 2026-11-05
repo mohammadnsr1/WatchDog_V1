@@ -1,6 +1,6 @@
 # Analysis audit
 
-Generated 2026-10-28T19:52:33.113109+00:00
+Generated 2026-11-05T19:13:43.419910+00:00
 
 ## Sessions attempted / scored / voided (A1)
 
@@ -230,7 +230,7 @@ Runs where adjusted fault_* and scorer_raw_fault_* disagree, with the logged cor
 
 ## Transcript mapping (2e)
 
-Transcript dir: `/home/mohammad/.claude/projects/-home-mohammad-watchdog-WatchDog-V1` (351 transcripts indexed).
+Transcript dir: `/home/mohammad/.claude/projects/-home-mohammad-watchdog-WatchDog-V1` (336 transcripts indexed).
 Rule: role from MCP server names; session = the one transcript whose first record is within [-60, +300] s of agent_config_<role>.json launched_wall_time_iso.
 
 | role | status | n |
@@ -263,7 +263,7 @@ MCP call logs are filtered to the role's own servers AND, per server, that serve
 
 Clock domains: orchestrator wall_ns (epoch), waited_sec (monotonic delta, same process); MCP wall_time_iso = call start, return = start + elapsed_sec; event envelopes wall_time_iso; fire payload trigger_wall_ns (epoch ns). All on one host. The monotonic envelope timestamp_ns is never used. Gate request time = grant wall_ns - waited_sec.
 
-Delivery asymmetry (D4): S1-S3 delivery is the return of a BLOCKING wait_for_event; S4 delivery is the return of a get_monitor_fires POLL, so S4 latency is set by when the executor next chose to poll. `delivery_mechanism` carries this per row.
+Fire latencies: fire_publish_ms is trigger_wall_ns -> the fire's envelope on the events topic (the monitor's own delay). fire_to_agent_s is trigger_wall_ns -> return of the agent call that carried the fire, i.e. when the agent RECEIVED it, not transport. Receipt asymmetry (D4): in S1-S3 that call is a BLOCKING wait_for_event; in S4 it is a get_monitor_fires POLL, so S4 fire_to_agent is set by when the executor next chose to poll. `fire_receipt_mechanism` carries this per row.
 
 Non-comparable columns carried through unchanged: fire_to_next_verdict_* (S1-S3) and fire_to_adjudication_* (S4) are different quantities; interleaved_monitor_blocks / monitor_calls_in_run / monitor_tool_wall_sec are S4-only by construction.
 
@@ -275,9 +275,11 @@ watchdog_postrun_tail_s (run_ended -> last watchdog MCP return) overlaps time_to
 |---|---|---|---|
 | cache_creation_tokens_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
 | cache_read_tokens_watchdog | no_watchdog_role | 28 | S4/fmb2_s4c2_run01, S4/fmb2_s4c1_run01, S4/fmb2_s4c2_run02, S4/fmb2_s4c2_run03, S4/fmb2_s4c2_run04, S4/fmb2_s4c1_run02, S4/fmb2_s4c1_run03, S4/fmb2_s4c1_run04 (+20) |
-| fire_delivery_max_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
-| fire_delivery_median_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
-| fire_delivery_p95_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
+| fire_publish_ms_max | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
+| fire_publish_ms_median | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
+| fire_to_agent_max_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
+| fire_to_agent_median_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
+| fire_to_agent_p95_s | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
 | frac_fires_during_gripper_server | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
 | frac_fires_during_motion | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
 | frac_fires_during_motion_server | no_fires_in_run | 28 | S1/fmb2_s1c1_run01, S1/fmb2_s1c1_run02, S1/fmb2_s1c1_run03, S1/fmb2_s1c1_run04, S1/fmb2_s1c1_run05, S1/fmb2_s1c3_run01, S1/fmb2_s1c3_run03, S2/fmb2_s2c2_run01 (+20) |
@@ -473,7 +475,8 @@ Numerator / denominator behind every pooled cell:
 | S3 | obs_detection_wholebatch | 0/22 = sum obs n_detected / sum obs n_detectable |
 | S3 | obs_false_fire_fraction_wholebatch | 142/144 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3 | frac_fires_during_motion | 84/92 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3 | fire_delivery_median_s | median over 92 delivered fires pooled across runs |
+| S3 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 92 stamped fires pooled across runs |
+| S3 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 92 received fires pooled across runs |
 | S3 | tokens_executor | summed over 15/15 runs with a uniquely mapped executor transcript |
 | S3 | tokens_watchdog | summed over 15/15 runs with a uniquely mapped watchdog transcript |
 | S3_opus_low | arming_coverage | 641/667 from arming_coverage over 6 runs |
@@ -496,7 +499,8 @@ Numerator / denominator behind every pooled cell:
 | S3_opus_low | obs_detection_wholebatch | 5/9 = sum obs n_detected / sum obs n_detectable |
 | S3_opus_low | obs_false_fire_fraction_wholebatch | 2/2 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3_opus_low | frac_fires_during_motion | 5/5 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3_opus_low | fire_delivery_median_s | median over 5 delivered fires pooled across runs |
+| S3_opus_low | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 5 stamped fires pooled across runs |
+| S3_opus_low | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 5 received fires pooled across runs |
 | S3_opus_low | tokens_executor | summed over 6/6 runs with a uniquely mapped executor transcript |
 | S3_opus_low | tokens_watchdog | summed over 6/6 runs with a uniquely mapped watchdog transcript |
 | S3_opus_medium | arming_coverage | 613/616 from arming_coverage over 5 runs |
@@ -519,7 +523,8 @@ Numerator / denominator behind every pooled cell:
 | S3_opus_medium | obs_detection_wholebatch | 9/10 = sum obs n_detected / sum obs n_detectable |
 | S3_opus_medium | obs_false_fire_fraction_wholebatch | 5/10 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S3_opus_medium | frac_fires_during_motion | 11/16 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3_opus_medium | fire_delivery_median_s | median over 16 delivered fires pooled across runs |
+| S3_opus_medium | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 16 stamped fires pooled across runs |
+| S3_opus_medium | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 16 received fires pooled across runs |
 | S3_opus_medium | tokens_executor | summed over 5/5 runs with a uniquely mapped executor transcript |
 | S3_opus_medium | tokens_watchdog | summed over 5/5 runs with a uniquely mapped watchdog transcript |
 | S4 | arming_coverage | 1191/1740 from arming_coverage over 15 runs |
@@ -539,7 +544,8 @@ Numerator / denominator behind every pooled cell:
 | S4 | obs_detection_wholebatch | 0/22 = sum obs n_detected / sum obs n_detectable |
 | S4 | obs_false_fire_fraction_wholebatch | 10/10 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S4 | frac_fires_during_motion | 19/24 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S4 | fire_delivery_median_s | median over 24 delivered fires pooled across runs |
+| S4 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 24 stamped fires pooled across runs |
+| S4 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 24 received fires pooled across runs |
 | S4 | tokens_executor | summed over 15/15 runs with a uniquely mapped executor transcript |
 | S4 | tokens_watchdog | summed over 0/15 runs with a uniquely mapped watchdog transcript |
 | S4_opus_medium | arming_coverage | 503/504 from arming_coverage over 5 runs |
@@ -559,7 +565,8 @@ Numerator / denominator behind every pooled cell:
 | S4_opus_medium | obs_detection_wholebatch | 9/9 = sum obs n_detected / sum obs n_detectable |
 | S4_opus_medium | obs_false_fire_fraction_wholebatch | 15/19 = sum obs_monitor_false_fires / sum obs n_observation_fires |
 | S4_opus_medium | frac_fires_during_motion | 24/29 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S4_opus_medium | fire_delivery_median_s | median over 29 delivered fires pooled across runs |
+| S4_opus_medium | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 29 stamped fires pooled across runs |
+| S4_opus_medium | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 29 received fires pooled across runs |
 | S4_opus_medium | tokens_executor | summed over 5/5 runs with a uniquely mapped executor transcript |
 | S4_opus_medium | tokens_watchdog | summed over 0/5 runs with a uniquely mapped watchdog transcript |
 
@@ -597,31 +604,38 @@ Numerator / denominator behind every pooled cell:
 | S1 | gate_overhead_fraction_ex_timeout | sum gate_wait_total_ex_timeout_s 3617.6 / sum run_wall_s 12708.8 |
 | S1 | gate_wait_median_s | median over 379 non-timeout gate waits pooled across runs |
 | S1 | frac_fires_during_motion | 27/37 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S1 | fire_delivery_median_s | median over 37 delivered fires pooled across runs |
+| S1 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 37 stamped fires pooled across runs |
+| S1 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 37 received fires pooled across runs |
 | S2 | gate_overhead_fraction | sum gate_wait_total_s 3141.2 / sum run_wall_s 13206.4 over 23 runs |
 | S2 | gate_overhead_fraction_ex_timeout | sum gate_wait_total_ex_timeout_s 3141.2 / sum run_wall_s 13206.4 |
 | S2 | gate_wait_median_s | median over 364 non-timeout gate waits pooled across runs |
 | S2 | frac_fires_during_motion | 32/46 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S2 | fire_delivery_median_s | median over 44 delivered fires pooled across runs |
+| S2 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 46 stamped fires pooled across runs |
+| S2 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 44 received fires pooled across runs |
 | S3 | gate_overhead_fraction | sum gate_wait_total_s 5084.7 / sum run_wall_s 14996.8 over 23 runs |
 | S3 | gate_overhead_fraction_ex_timeout | sum gate_wait_total_ex_timeout_s 4844.7 / sum run_wall_s 14996.8 |
 | S3 | gate_wait_median_s | median over 390 non-timeout gate waits pooled across runs |
 | S3 | frac_fires_during_motion | 162/178 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3 | fire_delivery_median_s | median over 178 delivered fires pooled across runs |
+| S3 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 178 stamped fires pooled across runs |
+| S3 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 178 received fires pooled across runs |
 | S4 | frac_fires_during_motion | 25/31 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S4 | fire_delivery_median_s | median over 31 delivered fires pooled across runs |
+| S4 | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 31 stamped fires pooled across runs |
+| S4 | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 31 received fires pooled across runs |
 | S3_opus_low | gate_overhead_fraction | sum gate_wait_total_s 844.6 / sum run_wall_s 3224.1 over 6 runs |
 | S3_opus_low | gate_overhead_fraction_ex_timeout | sum gate_wait_total_ex_timeout_s 844.6 / sum run_wall_s 3224.1 |
 | S3_opus_low | gate_wait_median_s | median over 97 non-timeout gate waits pooled across runs |
 | S3_opus_low | frac_fires_during_motion | 5/5 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3_opus_low | fire_delivery_median_s | median over 5 delivered fires pooled across runs |
+| S3_opus_low | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 5 stamped fires pooled across runs |
+| S3_opus_low | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 5 received fires pooled across runs |
 | S3_opus_medium | gate_overhead_fraction | sum gate_wait_total_s 1728.1 / sum run_wall_s 3699.7 over 5 runs |
 | S3_opus_medium | gate_overhead_fraction_ex_timeout | sum gate_wait_total_ex_timeout_s 1728.1 / sum run_wall_s 3699.7 |
 | S3_opus_medium | gate_wait_median_s | median over 92 non-timeout gate waits pooled across runs |
 | S3_opus_medium | frac_fires_during_motion | 11/16 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S3_opus_medium | fire_delivery_median_s | median over 16 delivered fires pooled across runs |
+| S3_opus_medium | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 16 stamped fires pooled across runs |
+| S3_opus_medium | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 16 received fires pooled across runs |
 | S4_opus_medium | frac_fires_during_motion | 24/29 fires inside a motion-or-gripper call interval (pooled over runs) |
-| S4_opus_medium | fire_delivery_median_s | median over 29 delivered fires pooled across runs |
+| S4_opus_medium | fire_publish_ms_median | trigger_wall_ns -> events-topic envelope, median over 29 stamped fires pooled across runs |
+| S4_opus_medium | fire_to_agent_median_s | trigger_wall_ns -> return of the agent call that carried the fire, median over 29 received fires pooled across runs |
 
 - watchdog_blocking_cost_s is the executor's blocked time at gates only; the WatchDog's concurrent work costs no task time and is not represented. watchdog_postrun_adjudication_s is time_to_verdict_s (S1-S3). The two are separate costs and are never summed. For S4 blocking is 0 by construction.
 

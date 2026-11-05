@@ -205,8 +205,10 @@ def hygiene_section(loaded: Loaded) -> list[str]:
     L += ["", "Clock domains: orchestrator wall_ns (epoch), waited_sec (monotonic delta, same process); MCP wall_time_iso = call start, "
           "return = start + elapsed_sec; event envelopes wall_time_iso; fire payload trigger_wall_ns (epoch ns). All on one host. "
           "The monotonic envelope timestamp_ns is never used. Gate request time = grant wall_ns - waited_sec.",
-          "", "Delivery asymmetry (D4): S1-S3 delivery is the return of a BLOCKING wait_for_event; S4 delivery is the return of a "
-          "get_monitor_fires POLL, so S4 latency is set by when the executor next chose to poll. `delivery_mechanism` carries this per row.",
+          "", "Fire latencies: fire_publish_ms is trigger_wall_ns -> the fire's envelope on the events topic (the monitor's own delay). "
+          "fire_to_agent_s is trigger_wall_ns -> return of the agent call that carried the fire, i.e. when the agent RECEIVED it, not transport. "
+          "Receipt asymmetry (D4): in S1-S3 that call is a BLOCKING wait_for_event; in S4 it is a get_monitor_fires POLL, so S4 fire_to_agent "
+          "is set by when the executor next chose to poll. `fire_receipt_mechanism` carries this per row.",
           "", "Non-comparable columns carried through unchanged: fire_to_next_verdict_* (S1-S3) and fire_to_adjudication_* (S4) are different "
           "quantities; interleaved_monitor_blocks / monitor_calls_in_run / monitor_tool_wall_sec are S4-only by construction.",
           "", "watchdog_postrun_tail_s (run_ended -> last watchdog MCP return) overlaps time_to_verdict_s (= watchdog_adjudication_s); "
@@ -250,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
         "table3": ["n", "arming_coverage", "grip_coverage", "param_accuracy", "verdict_correct", "fault_recall", "fault_precision",
                    "obs_engagement_wholebatch", "obs_detection_wholebatch", "obs_false_fire_fraction_wholebatch", "false_alarm_rate",
                    "gate_overhead_fraction", "run_wall_median_s", "frac_fires_during_motion", "frac_fires_during_gripper_server",
-                   "fire_delivery_median_s", "tokens_in_executor_sum", "tokens_out_executor_sum", "tokens_in_watchdog_sum", "tokens_out_watchdog_sum"],
+                   "fire_publish_ms_median", "fire_to_agent_median_s", "tokens_in_executor_sum", "tokens_out_executor_sum", "tokens_in_watchdog_sum", "tokens_out_watchdog_sum"],
         "table_cost": ["n", "total_task_time_s_median", "executor_working_s_median", "watchdog_blocking_cost_s_median",
                        "watchdog_postrun_adjudication_s_median", "gate_overhead_fraction", "gate_overhead_fraction_ex_timeout", "n_gate_timeouts"],
         "table_observation": ["is_oracle", "n_runs", "n_obs_rows_wholebatch", "obs_engagement_wholebatch", "obs_detection_wholebatch", "obs_false_fire_fraction_wholebatch"],

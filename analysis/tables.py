@@ -180,24 +180,30 @@ def serialization_cells(t: Table, label: str, runs: list[Run]) -> dict[str, Any]
     in_m = sum(int(r.derived.get("n_fires_during_motion_server") or 0) for r in runs)
     in_g = sum(int(r.derived.get("n_fires_during_gripper_server") or 0) for r in runs)
     lat = [x for r in runs for x in (r.derived.get("_fire_latencies") or [])]
+    pub = [x for r in runs for x in (r.derived.get("_fire_publish_ms") or [])]
     cells = {
         "n_fires_log": sum(int(r.derived.get("log_n_fires") or 0) for r in runs),
-        "n_fires_delivered": sum(int(r.derived.get("n_fires_delivered") or 0) for r in runs),
-        "n_fires_undelivered": sum(int(r.derived.get("n_fires_undelivered") or 0) for r in runs),
+        "n_fires_received": sum(int(r.derived.get("n_fires_received") or 0) for r in runs),
+        "n_fires_unreceived": sum(int(r.derived.get("n_fires_unreceived") or 0) for r in runs),
         "frac_fires_during_motion": Frac(in_any, stamped),
         "frac_fires_during_motion_server": Frac(in_m, stamped),
         "frac_fires_during_gripper_server": Frac(in_g, stamped),
-        "fire_delivery_median_s": median(lat), "fire_delivery_p95_s": p95(lat),
-        "delivery_mechanism": ";".join(sorted({str(r.derived.get("delivery_mechanism")) for r in runs})),
+        "fire_publish_ms_median": median(pub), "fire_publish_ms_max": max(pub) if pub else None,
+        "fire_to_agent_median_s": median(lat), "fire_to_agent_p95_s": p95(lat),
+        "fire_receipt_mechanism": ";".join(sorted({str(r.derived.get("fire_receipt_mechanism")) for r in runs})),
     }
     t.provenance.append((label, "frac_fires_during_motion", f"{in_any}/{stamped} fires inside a motion-or-gripper call interval (pooled over runs)"))
-    t.provenance.append((label, "fire_delivery_median_s", f"median over {len(lat)} delivered fires pooled across runs"))
+    t.provenance.append((label, "fire_publish_ms_median", f"trigger_wall_ns -> events-topic envelope, median over {len(pub)} stamped fires pooled across runs"))
+    t.provenance.append((label, "fire_to_agent_median_s", f"trigger_wall_ns -> return of the agent call that carried the fire, median over {len(lat)} received fires pooled across runs"))
+    if not pub:
+        for c in ("fire_publish_ms_median", "fire_publish_ms_max"):
+            t.set_na(label, c, "no_fires")
     if stamped == 0:
         for c in ("frac_fires_during_motion", "frac_fires_during_motion_server", "frac_fires_during_gripper_server"):
             t.set_na(label, c, "no_fires")
     if not lat:
-        for c in ("fire_delivery_median_s", "fire_delivery_p95_s"):
-            t.set_na(label, c, "no_delivered_fires")
+        for c in ("fire_to_agent_median_s", "fire_to_agent_p95_s"):
+            t.set_na(label, c, "no_received_fires")
     return cells
 
 

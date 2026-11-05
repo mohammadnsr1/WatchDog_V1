@@ -54,7 +54,7 @@ WATCHDOG_SERVERS: frozenset[str] = frozenset({"watchdog"})
 # Motion/skill interval definition (D5): motion plus gripper servers.
 MOTION_INTERVAL_SERVERS: frozenset[str] = frozenset({"motion", "gripper"})
 # Tools whose return can carry a fire.
-DELIVERY_TOOLS: frozenset[str] = frozenset({"wait_for_event", "get_monitor_fires"})
+FIRE_RECEIPT_TOOLS: frozenset[str] = frozenset({"wait_for_event", "get_monitor_fires"})
 
 # Committed task: 12 steps + 4 grasped phases.
 COMMITTED_TASK_GATES: int = 16

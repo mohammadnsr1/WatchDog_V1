@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from .config import DELIVERY_TOOLS, EXECUTOR_SERVERS, WATCHDOG_SERVERS
+from .config import FIRE_RECEIPT_TOOLS, EXECUTOR_SERVERS, WATCHDOG_SERVERS
 
 
 def iso_to_s(iso: str) -> float:
@@ -52,7 +52,7 @@ class Call:
 
     def carried_fires(self) -> list[dict]:
         """Fire payloads carried in this call's return (wait_for_event / get_monitor_fires)."""
-        if self.tool not in DELIVERY_TOOLS or not isinstance(self.result, dict):
+        if self.tool not in FIRE_RECEIPT_TOOLS or not isinstance(self.result, dict):
             return []
         r = self.result
         fires: list[dict] = []
