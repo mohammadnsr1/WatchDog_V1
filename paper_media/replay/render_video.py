@@ -82,6 +82,12 @@ def _dashed_hline(draw, x0: int, x1: int, y: int, color, dash: int = 10, gap: in
         x += dash + gap
 
 
+def _threshold_active(th: dict, real: float) -> bool:
+    """A threshold tied to an armed monitor is drawn only while that monitor is armed."""
+    t0, t1 = th.get("t_start"), th.get("t_end")
+    return (t0 is None or real >= t0) and (t1 is None or real <= t1)
+
+
 def _arrow(draw, p0, p1, color, width: int = 2, head: int = 9) -> None:
     draw.line([p0, p1], fill=color, width=width)
     ang = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
@@ -406,7 +412,7 @@ class Compositor:
             vlo, vhi = self.sig_range[sig.name]
             ymap = lambda val: y1 - (val - vlo) / (vhi - vlo) * (y1 - y0)  # noqa: E731
             for th in self.p.thresholds:
-                if th["signal"] == sig.name:
+                if th["signal"] == sig.name and _threshold_active(th, real):
                     yy = ymap(th["value"])
                     _dashed_hline(d, x_left, x_right, int(yy), _rgb(S.FAIL_RED))
                     lab = f"{th['label']} ({th['value']:g})"

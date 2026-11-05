@@ -225,8 +225,13 @@ def render_figure(prep: Prepared, out: Path, width: str = "double", formats: tup
             ax.tick_params(axis="y", colors=colors[i], labelsize=MIN_PT)
             for th in prep.thresholds:
                 if th["signal"] == sig.name:
-                    ax.axhline(th["value"], color=S.FAIL_RED, lw=0.6, ls="--")
-                    ax.text(r0 + 0.005 * span, th["value"], th["label"], fontsize=MIN_PT, color=S.FAIL_RED,
+                    # a monitor-bound threshold spans only the time its monitor was armed
+                    a = max(r0, th["t_start"]) if th.get("t_start") is not None else r0
+                    b = min(r1, th["t_end"]) if th.get("t_end") is not None else r1
+                    if b <= a:
+                        continue
+                    ax.hlines(th["value"], a, b, color=S.FAIL_RED, lw=0.6, ls="--")
+                    ax.text(a + 0.005 * span, th["value"], th["label"], fontsize=MIN_PT, color=S.FAIL_RED,
                             ha="left", va="bottom")
         ax_sig.set_xlabel("session time [s]", fontsize=MIN_PT)
         ax_sig.set_xlim(r0, r1)

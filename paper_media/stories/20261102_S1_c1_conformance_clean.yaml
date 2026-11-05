@@ -50,6 +50,12 @@ captions:
   - {at_t: 391.9, text: "line_green is picked and brought to its approach pose; its placement is the next clip."}
 
 signals: [effort_finger]
+# Library clamp-effort monitors the WatchDog armed, one per pick; each line shows only
+# while its monitor is armed. Thresholds are raw_spec.limits.max_clamp_effort per part.
+thresholds:
+  - {signal: effort_finger, value_from: armed_monitor, monitor_id: mon_7d535f69c929, label: "u_brown clamp limit"}
+  - {signal: effort_finger, value_from: armed_monitor, monitor_id: mon_cd46c5ee4a98, label: "u_orange clamp limit"}
+  - {signal: effort_finger, value_from: armed_monitor, monitor_id: mon_fc015216b6d4, label: "line_green clamp limit"}
 
 figure_frames_at: [60.0, 72.0, 130.0, 200.5, 260.0, 323.5, 391.5]
 figure_frame_cameras: [recorder]

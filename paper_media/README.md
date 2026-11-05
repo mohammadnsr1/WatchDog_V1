@@ -110,6 +110,15 @@ GROUND TRUTH tag on the camera frame while the object is present. Arrivals and
 detections hold like key events, and a transient visit plays at `speed.event`
 for its whole duration. Figures and the web JSON are unchanged.
 
+### Thresholds on the signal strip
+
+A signal without its limit says nothing, so every story with `signals` should
+carry `thresholds`. `value_from: armed_monitor` with a `monitor_id` takes the
+threshold the WatchDog bound when it armed that monitor and shows the line
+only while the monitor was armed (`t_start` .. `t_end` from the
+`monitor_armed` / `monitor_disarmed` records), so a clip that spans several
+picks shows each part's clamp limit in turn.
+
 ### Hand-over card (video only)
 
 Every video opens with a card (`style.BRIEFING_VIDEO_S`, 16 s, then a short

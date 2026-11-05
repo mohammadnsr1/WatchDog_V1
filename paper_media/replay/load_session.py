@@ -881,18 +881,24 @@ def resolve_thresholds(session: Session, story: Story,
         role = {"watchdog_registry": "watchdog", "executor_registry": "executor"}.get(str(vf))
         value = None
         if vf == "armed_monitor":
-            # the threshold the WatchDog bound when it armed this monitor (first arming)
+            # the threshold the WatchDog bound when it armed this monitor (first arming);
+            # the line is shown only while the monitor is armed (t_start .. t_end)
             mid = th.get("monitor_id")
+            t_start = t_end = None
             for env in read_jsonl(Path(session.dir) / "events_watchdog.jsonl", []):
                 p = env[1].get("payload") or {}
-                if env[1].get("event_type") == "monitor_armed" and p.get("monitor_id") == mid \
-                        and isinstance(p.get("threshold"), (int, float)):
+                if p.get("monitor_id") != mid:
+                    continue
+                et = env[1].get("event_type")
+                if et == "monitor_armed" and value is None and isinstance(p.get("threshold"), (int, float)):
                     value = float(p["threshold"])
                     src = p.get("threshold_source") or "?"
-                    break
+                    t_start = session.t(iso_to_epoch(env[1]["wall_time_iso"]))
+                elif et == "monitor_disarmed" and value is not None and t_end is None:
+                    t_end = session.t(iso_to_epoch(env[1]["wall_time_iso"]))
             if value is not None:
-                out.append({"signal": sig, "value": value, "label": label,
-                            "source": f"monitor_armed {mid} threshold ({src})"})
+                out.append({"signal": sig, "value": value, "label": label, "t_start": t_start, "t_end": t_end,
+                            "source": f"monitor_armed {mid} threshold ({src}), shown while armed"})
                 continue
             warn(f"threshold {label!r}: no monitor_armed record for {mid!r}")
         elif role:

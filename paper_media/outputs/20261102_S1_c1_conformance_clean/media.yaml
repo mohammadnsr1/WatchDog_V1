@@ -3,7 +3,7 @@ media_id: 20261102_S1_c1_conformance_clean
 kind: conformance_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-05T20:39:20+00:00'
+generated_utc: '2026-11-05T21:28:38+00:00'
 tags:
 - S1
 - conformance
@@ -87,13 +87,31 @@ key_frames_s:
 frame_cameras:
 - recorder
 video_camera: recorder
-thresholds: []
+thresholds:
+- signal: effort_finger
+  value: 100.0
+  label: u_brown clamp limit
+  t_start: 85.5571300983429
+  t_end: 227.00398993492126
+  source: monitor_armed mon_7d535f69c929 threshold (raw_spec.limits.max_clamp_effort), shown while armed
+- signal: effort_finger
+  value: 200.0
+  label: u_orange clamp limit
+  t_start: 233.920156955719
+  t_end: 331.01719403266907
+  source: monitor_armed mon_cd46c5ee4a98 threshold (raw_spec.limits.max_clamp_effort), shown while armed
+- signal: effort_finger
+  value: 170.0
+  label: line_green clamp limit
+  t_start: 341.9852969646454
+  t_end: null
+  source: monitor_armed mon_fc015216b6d4 threshold (raw_spec.limits.max_clamp_effort), shown while armed
 signals:
   effort_finger: /joint_states finger_joint.effort
 provenance:
-  git_sha: 90f579ef8ea8e86c153264c8d711dfbab8b57253
+  git_sha: c005f003f630741ef94d4084b53f09078f62fdba
   git_dirty: true
-  story_sha256: 211b8e4651f167a704ca1cbf4e947dfb660466ecf507366c34c138563bb26795
+  story_sha256: 9c389eeaf30fa12b8ba496e6f68da5bdc66cfe6378a782c8ff5ff481cd66370a
   stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77
   replay_state_sha256: null
 files:
