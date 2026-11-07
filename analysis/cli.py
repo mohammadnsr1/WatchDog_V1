@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         "table1": ("Baseline architecture, Sonnet-low, all runs per scenario.", "tab:baseline"),
         "table2": ("Independence: Class 4 (corrupted executor registry).", "tab:independence"),
         "table3": ("Capability: Class 1-2 runs; observation columns suffixed wholebatch cover every class in the batch.", "tab:capability"),
-        "table_cost": ("Task-time decomposition, Class 1-2 runs. WatchDog blocking cost and post-run adjudication are separate costs.", "tab:cost"),
+        "table_cost": ("Task-time decomposition. WatchDog blocking cost and post-run adjudication are separate costs.", "tab:cost"),
         "table_observation": ("Observation metrics, whole batch, including the scripted oracle (REF).", "tab:observation"),
     }
     tex_cols = {
