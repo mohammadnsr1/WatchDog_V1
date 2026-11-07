@@ -41,7 +41,17 @@ def _ts(s: str) -> float:
 
 
 def read_transcript(path: Path) -> Transcript:
+    """Token usage is counted once per API message.
+
+    Claude Code writes one ``assistant`` record per content block (thinking, text, each
+    tool_use) of a single API response, and every one of those records repeats that
+    response's full ``usage``. Summing per record overcounts by the number of blocks, so
+    usage is keyed by ``message.id`` (last record wins; within a message the values are
+    identical) and summed once per message. Records without an id count individually.
+    """
     t = Transcript(path=path, first_ts_s=None, last_ts_s=None, role=None)
+    usage_by_msg: dict[str, dict] = {}
+    n_anon = 0
     with path.open(encoding="utf-8") as fh:
         for line in fh:
             try:
@@ -58,11 +68,11 @@ def read_transcript(path: Path) -> Transcript:
                 continue
             m = d.get("message") or {}
             u = m.get("usage") or {}
-            t.n_assistant += 1
-            t.tokens_in += int(u.get("input_tokens") or 0)
-            t.tokens_out += int(u.get("output_tokens") or 0)
-            t.cache_read_tokens += int(u.get("cache_read_input_tokens") or 0)
-            t.cache_creation_tokens += int(u.get("cache_creation_input_tokens") or 0)
+            mid = m.get("id")
+            if mid is None:
+                mid = f"_anon_{n_anon}"
+                n_anon += 1
+            usage_by_msg[mid] = u
             if m.get("model"):
                 t.models[m["model"]] += 1
             for c in m.get("content") or []:
@@ -70,7 +80,13 @@ def read_transcript(path: Path) -> Transcript:
                     name = str(c.get("name", ""))
                     if name.startswith("mcp__"):
                         t.servers[name.split("__")[1]] += 1
-    roles = {TRANSCRIPT_ROLE_BY_SERVER[s] for s in t.servers if s in TRANSCRIPT_ROLE_BY_SERVER}
+    t.n_assistant = len(usage_by_msg)
+    for u in usage_by_msg.values():
+        t.tokens_in += int(u.get("input_tokens") or 0)
+        t.tokens_out += int(u.get("output_tokens") or 0)
+        t.cache_read_tokens += int(u.get("cache_read_input_tokens") or 0)
+        t.cache_creation_tokens += int(u.get("cache_creation_input_tokens") or 0)
+    roles ={TRANSCRIPT_ROLE_BY_SERVER[s] for s in t.servers if s in TRANSCRIPT_ROLE_BY_SERVER}
     if roles == {"watchdog"}:
         t.role = "watchdog"
     elif roles == {"executor"}:

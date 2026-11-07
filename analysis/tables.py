@@ -377,14 +377,18 @@ def build_table3(loaded: Loaded) -> Table:
 
 
 def build_table_cost(loaded: Loaded) -> Table:
+    """Class 1-2 runs only, in every row: the capability batches ran Classes 1 and 2 only,
+    so the baseline rows are restricted to the same classes for a like-for-like comparison."""
     t = Table("table_cost")
     for b in CAMPAIGN_BATCHES:
         runs = loaded.by_batch(b)
         assert_no_oracle(runs, "table_cost")
-        inc, exc = split_included(runs)
+        all_inc, _ = split_included(runs)
+        inc = [r for r in all_inc if r.cls in (1, 2)]
+        exc = [(r.run_id, r.exclude_reason or "exclude_flag") for r in runs if r.excluded and r.cls in (1, 2)]
         t.included[b] = [r.run_id for r in inc]
         t.excluded.setdefault(b, []).extend(exc)
-        cells: dict[str, Any] = {"n": len(inc), "scenario": inc[0].scenario if inc else None}
+        cells: dict[str, Any] = {"n": len(inc), "scenario": inc[0].scenario if inc else None, "classes": "1,2"}
         for col, name in (("total_task_time_s", "total_task_time_s"), ("executor_working_s", "executor_working_s"),
                           ("watchdog_blocking_s", "watchdog_blocking_cost_s"), ("watchdog_adjudication_s", "watchdog_postrun_adjudication_s"),
                           ("run_wall_stepping_s", "run_wall_stepping_s"), ("watchdog_postrun_tail_s", "watchdog_postrun_tail_s")):
