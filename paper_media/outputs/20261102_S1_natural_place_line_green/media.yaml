@@ -3,7 +3,7 @@ media_id: 20261102_S1_natural_place_line_green
 kind: conformance_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-16T20:16:27+00:00'
+generated_utc: '2026-11-16T21:06:51+00:00'
 tags:
 - S1
 - conformance
@@ -88,7 +88,7 @@ video_camera: recorder
 thresholds: []
 signals: {}
 provenance:
-  git_sha: 54f963494d2072b8669761993a5bc0ffea314d4a
+  git_sha: baebd6b7fc9c16a5f98a67e0f948980cdc2fc48b
   git_dirty: true
   story_sha256: ddeb1eff552b454a6cc3e456eae8c1a443a17a60504478054f04f0d39b370c51
   stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77

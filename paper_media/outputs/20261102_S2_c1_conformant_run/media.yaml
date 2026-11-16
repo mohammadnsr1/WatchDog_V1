@@ -3,7 +3,7 @@ media_id: 20261102_S2_c1_conformant_run
 kind: observation_monitoring
 purpose: media
 purpose_note: illustration only; unscored session, never feeds a paper number
-generated_utc: '2026-11-16T20:17:57+00:00'
+generated_utc: '2026-11-16T21:08:20+00:00'
 tags:
 - S2
 - conformance
@@ -85,7 +85,7 @@ video_camera: recorder
 thresholds: []
 signals: {}
 provenance:
-  git_sha: 54f963494d2072b8669761993a5bc0ffea314d4a
+  git_sha: baebd6b7fc9c16a5f98a67e0f948980cdc2fc48b
   git_dirty: true
   story_sha256: c75d690b069b2e64902d7cbf0977d284f56d8234766133bc7e1f5e5191735d25
   stage_sha256: a0720e2b4215bedb5295f4988041118c5edffcde045c2cc06302a5f06d83ee77
