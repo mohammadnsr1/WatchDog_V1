@@ -252,9 +252,11 @@ def main(argv: list[str] | None = None) -> int:
         "table3": ["n", "arming_coverage", "grip_coverage", "param_accuracy", "verdict_correct", "fault_recall", "fault_precision",
                    "obs_engagement_wholebatch", "obs_detection_wholebatch", "obs_false_fire_fraction_wholebatch", "false_alarm_rate",
                    "gate_overhead_fraction", "run_wall_median_s", "frac_fires_during_motion", "frac_fires_during_gripper_server",
-                   "fire_publish_ms_median", "fire_to_agent_median_s", "tokens_in_executor_sum", "tokens_out_executor_sum", "tokens_in_watchdog_sum", "tokens_out_watchdog_sum"],
+                   "fire_publish_ms_median", "fire_to_agent_median_s", "tokens_in_executor_sum", "tokens_out_executor_sum", "tokens_in_watchdog_sum", "tokens_out_watchdog_sum",
+                   "tokens_out_executor_median_per_run", "tokens_out_watchdog_median_per_run"],
         "table_cost": ["n", "total_task_time_s_median", "executor_working_s_median", "watchdog_blocking_cost_s_median",
-                       "watchdog_postrun_adjudication_s_median", "gate_overhead_fraction", "gate_overhead_fraction_ex_timeout", "n_gate_timeouts"],
+                       "watchdog_postrun_adjudication_s_median", "gate_overhead_fraction", "gate_overhead_fraction_ex_timeout", "n_gate_timeouts",
+                       "fire_to_agent_median_s"],
         "table_observation": ["is_oracle", "n_runs", "n_obs_rows_wholebatch", "obs_engagement_wholebatch", "obs_detection_wholebatch", "obs_false_fire_fraction_wholebatch"],
     }
     for name, t in tables.items():

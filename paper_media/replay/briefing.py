@@ -30,10 +30,10 @@ TASK_BRIEFS = {
             "Reports success or failure for every step.",
         ],
         "watchdog": [
-            "Gets the requirements and the expected step order (which steps, in sequence), not the executor's motion plan: no offsets, grasp parameters or paths.",
+            "Gets what must hold during the process plus the expected step plan, but never the executor's grasp or placement details or its reports; records any step outside that plan.",
             "At each place step: the part sits at its placement frame within tolerance, was gripped at the right width and lifted clear, and a grasp reported as holding the part really held that part; base1 did not move.",
             "Throughout: clamp effort within each part's limit, no slip in the gripper, untouched parts stay put.",
-            "Watches the work area for the whole run and reports anything unexpected: an unlisted object, an object that moved by itself, someone or something entering and leaving.",
+            "Watches the work area for the whole run and reports anything unexpected, such as an unlisted object or something entering and leaving.",
         ],
     },
 }
