@@ -41,7 +41,8 @@ EXECUTOR = ("Executor Agent", "does the work",
              "Tools: move the arm, open and close the gripper,",
              "read poses. Announces each step, reports its outcome."])
 WATCHDOG = ("WatchDog Agent", "checks the work",
-            ["Receives WHAT must be true, never the executor's path.",
+            ["Receives WHAT must be true and the expected step order,",
+             "not the executor's motions (offsets, grasps, paths).",
              "At each place step: part seated at its frame, grasped at",
              "the right width and lifted clear, base1 unmoved.",
              "Throughout: clamp effort in limit, no slip, bystanders still.",
@@ -146,7 +147,7 @@ def render(out_dir: Path) -> list[Path]:
     _box(ax, x2, 1.66, w2, top - 1.66, S.EXECUTOR_BLUE, TINT["blue"], lw=1.1)
     y = _header(ax, x2, top, w2, S.EXECUTOR_BLUE, EXECUTOR[0], EXECUTOR[1], icon="arm")
     _text(ax, x2 + 0.10, y, EXECUTOR[2], 5.9)
-    _box(ax, x2, 0.14, w2, 1.38, S.WATCHDOG_GREEN, TINT["green"], lw=1.1)
+    _box(ax, x2, 0.06, w2, 1.46, S.WATCHDOG_GREEN, TINT["green"], lw=1.1)
     y = _header(ax, x2, 1.52, w2, S.WATCHDOG_GREEN, WATCHDOG[0], WATCHDOG[1], icon="eye")
     _text(ax, x2 + 0.10, y, WATCHDOG[2], 5.9)
 

@@ -21,7 +21,8 @@ Tools: move the arm, open and close the gripper,
 read poses. Announces each step, reports its outcome.
 
 WatchDog Agent
-Receives WHAT must be true, never the executor's path.
+Receives WHAT must be true and the expected step order,
+not the executor's motions (offsets, grasps, paths).
 At each place step: part seated at its frame, grasped at
 the right width and lifted clear, base1 unmoved.
 Throughout: clamp effort in limit, no slip, bystanders still.

@@ -30,7 +30,7 @@ TASK_BRIEFS = {
             "Reports success or failure for every step.",
         ],
         "watchdog": [
-            "Gets only what must be true at the end of each step, never how the executor gets there.",
+            "Gets the requirements and the expected step order (which steps, in sequence), not the executor's motion plan: no offsets, grasp parameters or paths.",
             "At each place step: the part sits at its placement frame within tolerance, was gripped at the right width and lifted clear, and a grasp reported as holding the part really held that part; base1 did not move.",
             "Throughout: clamp effort within each part's limit, no slip in the gripper, untouched parts stay put.",
             "Watches the work area for the whole run and reports anything unexpected: an unlisted object, an object that moved by itself, someone or something entering and leaving.",
@@ -60,7 +60,7 @@ CYCLE_S4 = [
     ("Executor arms its own monitors", S.EXECUTOR_BLUE, "shield"),
     ("The robot moves", S.BUS_GRAY, "arm"),
     ("A monitor fires on a limit", S.FAIL_RED, "bolt"),
-    ("Executor polls its monitors when it chooses", S.EXECUTOR_BLUE, "eye"),
+    ("Executor polls when it chooses", S.EXECUTOR_BLUE, "eye"),
     ("Executor judges its own work", S.EXECUTOR_BLUE, "gavel"),
 ]
 HIDDEN_LINE = "Hidden from both agents: the operator adds objects to the scene during the run (shown as ground truth)."
