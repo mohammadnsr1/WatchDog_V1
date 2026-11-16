@@ -41,12 +41,12 @@ EXECUTOR = ("Executor Agent", "does the work",
              "Tools: move the arm, open and close the gripper,",
              "read poses. Announces each step, reports its outcome."])
 WATCHDOG = ("WatchDog Agent", "checks the work",
-            ["Receives WHAT must be true, never the executor's path.",
+            ["Receives WHAT must hold during the process plus the",
+             "expected process plan; records any step outside it.",
              "At each place step: part seated at its frame, grasped at",
              "the right width and lifted clear, base1 unmoved.",
              "Throughout: clamp effort in limit, no slip, bystanders still.",
              "Watch the work area; report anything unexpected.",
-             "",
              "Tools: observe, arm monitors, record verdicts.",
              "Cannot move the robot."])
 RUN_ICONS = ["megaphone", "shield", "gate", "arm", "bolt", "gavel"]
