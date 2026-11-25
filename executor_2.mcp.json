@@ -3,7 +3,7 @@
     "EXECUTOR session MCP config for fmb_assembly_2. Command servers ONLY -- motion, gripper, scene.",
     "The watchdog server is absent by design: an executor holding monitoring tools",
     "could arm, disarm, or record its own verdicts, and the study's independence",
-    "claim would be gone. See RUN.md.",
+    "claim would be gone.",
     "",
     "MUST be launched with --strict-mcp-config. Without it, --mcp-config MERGES",
     "with the project .mcp.json and this session silently regains the watchdog",

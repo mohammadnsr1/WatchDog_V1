@@ -1,4 +1,4 @@
-"""The RENDERED per-scenario surface (PREBATCH_FIXES items 3 and 5-7).
+"""The RENDERED per-scenario surface (pre-batch fixes 3 and 5-7, 2026-10).
 
 Renders every scenario's system prompt + task through the real
 role_context.build_rendered_task -- the exact path a live session takes -- and

@@ -364,7 +364,7 @@ def test_threshold_is_json_safe_for_every_family(ctx):
         assert "NaN" not in text
 
 
-# --- declared object_id on arm_monitor (PREBATCH_FIXES item 8) -----------------
+# --- declared object_id on arm_monitor (pre-batch fix 8, 2026-10) -----------------
 #
 # These go through the REAL tool (ws.arm_monitor, _ensure_watchdog patched)
 # because the feature is the tool's: a declared object_id that resolves

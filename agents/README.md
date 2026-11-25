@@ -6,7 +6,8 @@
 > through the Claude Code CLI with `run_watchdog.sh` / `run_executor.sh`,
 > which load the same prompts, task files and MCP servers but take model and
 > effort from `watchdog.settings.json` / `executor.settings.json`. That path
-> is documented in `docs/dev/RUN.md`; the isolation rules, the gate, the
+> is described in the top-level `README.md` ("Running one scored run") and
+> in the launchers' header comments; the isolation rules, the gate, the
 > transcripts and the verification sections below apply to both.
 
 Two independent agents study the same assembly task from opposite sides:

@@ -14,7 +14,7 @@
     "verdicts, and both sets append to the same mcp_calls_*.jsonl in the session",
     "dir, so a scored run's action trace interleaves two sessions.",
     "",
-    "RUN.md already forbids scored runs from editor sessions for this reason. The",
+    "The run procedure (top-level README.md) already forbids scored runs from editor sessions for this reason. The",
     "sanctioned entry points are the per-role configs, launched explicitly:",
     "  claude --mcp-config watchdog.mcp.json --strict-mcp-config",
     "  claude --mcp-config executor.mcp.json --strict-mcp-config",

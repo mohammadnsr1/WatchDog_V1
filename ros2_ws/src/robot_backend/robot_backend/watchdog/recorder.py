@@ -412,7 +412,7 @@ class EvidenceRecorder:
             # 18-26 mm during ordinary approach/lift moves on the 2026-10-02
             # S3 bag, against <= 1.1 mm for a time-consistent lookup, which
             # fired two slip monitors on a grasp that never slipped (see
-            # docs/dev/PREBATCH_FIXES.md item 1). So: pass 1 finds each
+            # pre-batch fix item 1, 2026-10). So: pass 1 finds each
             # chain's latest TF time, the tick's common time is the LATEST
             # TIME AVAILABLE TO EVERY healthy chain (the minimum of those),
             # and pass 2 samples every chain at that one time. tf_stamp_ns on

@@ -12,7 +12,7 @@
     "",
     "MUST be launched with --strict-mcp-config, and the cell bringup must run",
     "guard_mode:=unguarded (s4_scorer refuses anything else). Everything else",
-    "matches executor.mcp.json -- see its _comment and RUN.md."
+    "matches executor.mcp.json -- see its _comment."
   ],
   "mcpServers": {
     "robot-backend-motion": {

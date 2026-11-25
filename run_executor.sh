@@ -7,11 +7,11 @@
 # Default: 1
 #
 # Model and effort are NOT arguments: they live in executor.settings.json as
-# "model" and "effortLevel", edited there before a run (see RUN.md step 4).
+# "model" and "effortLevel", edited there before a run (see that file's _run_params_comment).
 # Both are echoed below so the launch line records what the run used.
 #
 # The executor's config is the same in S1-S3; scenario selection lives
-# entirely on the watchdog side (see run_watchdog.sh and RUN.md). Launch the
+# entirely on the watchdog side (see run_watchdog.sh). Launch the
 # watchdog first and wait for it to arm before running this.
 #
 # S4 is the one exception: there is NO watchdog session at all. "s4" selects

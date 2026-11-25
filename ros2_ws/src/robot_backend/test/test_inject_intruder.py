@@ -121,7 +121,7 @@ def test_ground_truth_record_shape():
         "position_xyz_world", "yaw_deg", "color_rgb", "physics", "label",
         "expected_impact", "notes", "trigger", "wall_ns", "wall_time_iso",
         "session_dir", "script_sha256",
-        # camera-visibility triple (PREBATCH_FIXES item 9)
+        # camera-visibility triple (pre-batch fix 9, 2026-10)
         "pixel_uv", "in_camera_view", "edge_margin_px",
     }
     assert set(record) == expected_keys
@@ -191,7 +191,7 @@ def test_module_imports_without_isaac():
     assert ii.INTRUDER_ROOT == "/World/WatchdogIntruders"
 
 
-# --- camera projection in ground truth (PREBATCH_FIXES item 9) ------------------
+# --- camera projection in ground truth (pre-batch fix 9, 2026-10) ------------------
 
 
 def test_projection_matches_reference_pixels():

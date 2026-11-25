@@ -8,7 +8,7 @@ two columns into corrected/results.csv. raw/ is never touched.
     python3 scripts/backfill_tp_mode.py paper_results/batches/S2 [--init]
 
 --init  creates corrected/results.csv and corrected/observation_results.csv
-        as copies of raw/ first (BATCH_RUNBOOK Phase 6 step 1) when absent.
+        as copies of raw/ first (see paper_results/README.md) when absent.
 
 Safety: a row is filled only when the recomputed fault_TP equals the CSV's
 fault_TP. A row whose fault_TP was hand-corrected (or whose session is

@@ -6,7 +6,7 @@ agents' claims. The scorers read it (`watchdog_scorer.py` and `s4_scorer.py`
 need it; `observation_scorer.py` reads the injection ground truth instead).
 
 Copy the closest template into the session directory and fill in every
-per-run field, as described in `docs/dev/BATCH_RUNBOOK.md` Phase 3:
+per-run field (step 8 of "Running one scored run" in the top-level `README.md`):
 
 | Template | Assembly | Scenario | Class |
 |---|---|---|---|

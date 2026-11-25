@@ -8,7 +8,7 @@ sim_moveit_bringup/config/cameras.yaml. The scene is rendered by ray/plane
 intersection so ctx.deproject() and the monitor's bench-plane model are
 checked against one another, not against themselves.
 
-Run with the workspace recipe (see docs/dev or memory reference_test_recipe):
+Run with the workspace recipe (the pytest invocation in the top-level README.md, Setup step 3):
   cd ros2_ws && unset VIRTUAL_ENV && source /opt/ros/jazzy/setup.bash \
     && source install/setup.bash && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
     PYTHONPATH="$PWD/src/robot_backend:$PYTHONPATH" \

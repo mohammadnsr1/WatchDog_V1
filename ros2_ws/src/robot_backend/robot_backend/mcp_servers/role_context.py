@@ -84,7 +84,7 @@ def detect_role() -> str:
             "neither WATCHDOG_TASK_PATH nor EXECUTOR_TASK_PATH is set, so this "
             "server cannot tell which role's session it is serving. Launch via "
             "`claude --mcp-config <role>.mcp.json --strict-mcp-config`, whose "
-            "env block sets exactly one of them (see RUN.md)."
+            "env block sets exactly one of them (see the top-level README.md)."
         )
     raise RuntimeError(
         f"both {_TASK_PATH_ENV[WATCHDOG_ROLE]} and {_TASK_PATH_ENV[EXECUTOR_ROLE]} "

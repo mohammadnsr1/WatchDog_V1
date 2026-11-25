@@ -96,7 +96,7 @@ To confirm, run `grep -rn '"rollup"' ros2_ws/src/robot_backend/test agents/tests
 
 - Each server's `main()` wraps `mcp.run()` in `try/finally` shutdown and registers `atexit` (watchdog `:3121-3124`, `:807`; per code read).
 - The orchestrator closes its log in `destroy_node` (`node.py:607-626`, per code read).
-- The bag stops on Ctrl-C of the bringup (`docs/dev/BATCH_RUNBOOK.md:105`).
+- The bag stops on Ctrl-C of the bringup (run procedure, step 7 of "Running one scored run" in the top-level `README.md`; the runbook this audit cited has since been removed).
 
 Nothing kills MCP servers. There is no `pkill`, no process or PID check, and no "already running" check in the files read. The only start guard is `assert_session_dir_unused`, which looks only for `manifest.json` in the target directory (`session.py:279-287`, verified). The manifest is never written (Q4) and every bringup mints a fresh directory, so this guard can never trip.
 
@@ -121,7 +121,7 @@ Per-session metadata files that are actually written:
 | `registry_provenance_executor.json` | `rb/registry/loader.py:87-103`, only when `EXECUTOR_REGISTRY_PATH` is set (per code read) |
 | `ground_truth_injections.jsonl` | `isaac/script_editor/inject_intruder.py:552-558` (per code read) |
 | `intruder_leak_audit.json` | `scripts/audit_intruder_leak.py:348`, run by hand after the session |
-| `claude_cli_version.txt`, `*.settings.json` copies | No code. These are manual steps in `docs/dev/RUN.md:189-191`. |
+| `claude_cli_version.txt`, `*.settings.json` copies | No code. These were manual operator steps in the run procedure (the run document this audit cited has since been removed). |
 | `authored_monitors/*.py`, `frames/...` | WatchDog and executor_monitor servers, scene server |
 
 ### Q5. Registry provenance

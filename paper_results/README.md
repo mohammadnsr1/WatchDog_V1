@@ -122,7 +122,7 @@ the batch.
 
 Class 4 runs hand the EXECUTOR a corrupted registry via the
 `EXECUTOR_REGISTRY_PATH` override (built with
-`scripts/make_corrupt_registry.py`; see RUN.md's Class 4 section). The cell
+`scripts/make_corrupt_registry.py`; see that script's docstring). The cell
 and, in S1–S3, the WatchDog keep loading the clean install-space registry —
 so the session's `manifest.json` records the CLEAN hash on a Class 4 run.
 The hash of what the executor actually loaded is written by its servers to

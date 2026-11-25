@@ -7,7 +7,7 @@
 # Defaults: s1 1
 #
 # Model and effort are NOT arguments: they live in watchdog.settings.json as
-# "model" and "effortLevel", edited there before a run (see RUN.md step 4).
+# "model" and "effortLevel", edited there before a run (see that file's _run_params_comment).
 # Both are echoed below so the launch line records what the run used.
 #
 # Picks the matching watchdog*.mcp.json, always passes --strict-mcp-config and
@@ -15,7 +15,7 @@
 # the session's first message so the operator does not type it by hand. The
 # task is fetched in two parts because the combined get_rendered_task result
 # (~50 KB) exceeds the CLI's MCP result-size cap and would arrive as a preview
-# this Read-denied session cannot open -- see RUN.md.
+# this Read-denied session cannot open.
 set -euo pipefail
 cd "$(dirname "$0")"
 

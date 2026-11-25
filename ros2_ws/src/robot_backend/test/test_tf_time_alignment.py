@@ -1,4 +1,4 @@
-"""Common-TF-time tick sampling (PREBATCH_FIXES item 2).
+"""Common-TF-time tick sampling (pre-batch fix 2, 2026-10).
 
 The failure this guards against, measured live on the 2026-10-02 S3 bag: the
 robot chain republishes slower than the object chains, so two latest-time

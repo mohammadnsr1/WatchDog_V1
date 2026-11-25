@@ -65,7 +65,8 @@ writes into a real session.
 
 ## Oracle run (one live session)
 
-Follow docs/dev/BATCH_RUNBOOK.md Phase 1 exactly, with the watchdog step
+Follow the scored-run procedure in the top-level `README.md` exactly, with
+the watchdog step
 replaced by the script:
 
 1. Isaac up, scene loaded, sim time reset and playing.

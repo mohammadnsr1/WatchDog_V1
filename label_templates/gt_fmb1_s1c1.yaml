@@ -1,5 +1,5 @@
 # Label template — fmb_assembly (assembly 1), S1, Class 1. Copy into the session dir and
-# fill every "per-run" field while the run is fresh (BATCH_RUNBOOK.md Phase 3).
+# fill every "per-run" field while the run is fresh (top-level README.md, step 8).
 #
 # WHICH KEYS THE SCORER READS (watchdog_scorer.py, verified 2026-10-06):
 #   run_id, task, scenario, class
